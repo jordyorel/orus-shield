@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jordyorel/orus-shield/engine/internal/asset"
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
 	"github.com/jordyorel/orus-shield/engine/internal/gate"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
@@ -60,6 +61,8 @@ const (
 	// maxFindingsPerModule bounds one module's output (rule 7): a bug or a
 	// hostile target must not flood the database.
 	maxFindingsPerModule = 1000
+	// maxAssetsPerModule does the same for the asset inventory.
+	maxAssetsPerModule = 1000
 
 	// finishTimeout bounds the final database writes. They run even if the
 	// worker is shutting down, so a completed scan is not lost.
@@ -181,13 +184,14 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 	result := store.ScanResult{
 		ScanID: sc.ID, Attempt: sc.Attempt, WorkerID: w.cfg.ID,
 		Failed: make(map[string]string),
+		Assets: make(map[string][]asset.Asset),
 	}
 	for _, id := range sc.Modules {
 		if scanCtx.Err() != nil {
 			break
 		}
 		start := time.Now()
-		findings, err := w.runModule(scanCtx, id, mt, gateFor(id))
+		res, err := w.runModule(scanCtx, id, mt, gateFor(id))
 		var refused *refusedError
 		switch {
 		case errors.As(err, &refused):
@@ -203,10 +207,15 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 			log.Warn("module failed", "module", id, "err", err, "duration_ms", time.Since(start).Milliseconds())
 			result.Failed[id] = err.Error()
 		default:
-			// Log counts only: findings are customer data and never logged.
-			log.Info("module done", "module", id, "findings", len(findings), "duration_ms", time.Since(start).Milliseconds())
+			// Log counts only: findings and assets are customer data and
+			// never logged.
+			log.Info("module done", "module", id, "findings", len(res.Findings), "assets", len(res.Assets),
+				"duration_ms", time.Since(start).Milliseconds())
 			result.Succeeded = append(result.Succeeded, id)
-			result.Findings = append(result.Findings, findings...)
+			result.Findings = append(result.Findings, res.Findings...)
+			if len(res.Assets) > 0 {
+				result.Assets[id] = res.Assets
+			}
 		}
 	}
 	// Lease lost or shutdown: drop the partial result. Recording it could
@@ -286,32 +295,36 @@ type refusedError struct{ err error }
 func (e *refusedError) Error() string { return "refused: " + e.err.Error() }
 
 // runModule runs one module with its own timeout and checks its output.
-func (w *Worker) runModule(ctx context.Context, id string, t module.Target, g module.Gate) (findings []finding.Finding, err error) {
+func (w *Worker) runModule(ctx context.Context, id string, t module.Target, g module.Gate) (res module.Result, err error) {
 	m, ok := w.modules.Get(id)
 	if !ok {
-		return nil, &refusedError{fmt.Errorf("unknown module %q", id)}
+		return module.Result{}, &refusedError{fmt.Errorf("unknown module %q", id)}
 	}
 	// Security rule 1, checked right before every run.
 	if err := module.CheckAllowed(m.Info(), t); err != nil {
-		return nil, &refusedError{err}
+		return module.Result{}, &refusedError{err}
 	}
 
 	// Modules parse untrusted data. A panic in one must fail that module,
 	// not crash the worker and every scan after it.
 	defer func() {
 		if r := recover(); r != nil {
-			findings, err = nil, fmt.Errorf("module %s panicked: %v", id, r)
+			res, err = module.Result{}, fmt.Errorf("module %s panicked: %v", id, r)
 		}
 	}()
 
 	mctx, cancel := context.WithTimeout(ctx, w.cfg.ModuleTimeout)
 	defer cancel()
-	findings, err = m.Run(mctx, module.Request{Target: t, Gate: g})
+	res, err = m.Run(mctx, module.Request{Target: t, Gate: g})
 	if err != nil {
-		return nil, err
+		return module.Result{}, err
 	}
+	findings := res.Findings
 	if len(findings) > maxFindingsPerModule {
-		return nil, fmt.Errorf("module %s returned %d findings, limit is %d", id, len(findings), maxFindingsPerModule)
+		return module.Result{}, fmt.Errorf("module %s returned %d findings, limit is %d", id, len(findings), maxFindingsPerModule)
+	}
+	if len(res.Assets) > maxAssetsPerModule {
+		return module.Result{}, fmt.Errorf("module %s returned %d assets, limit is %d", id, len(res.Assets), maxAssetsPerModule)
 	}
 
 	// Reject the whole output if one finding is wrong: storing part of it
@@ -319,15 +332,24 @@ func (w *Worker) runModule(ctx context.Context, id string, t module.Target, g mo
 	now := w.now()
 	for _, f := range findings {
 		if f.ModuleID != id || f.Target != t.Domain {
-			return nil, fmt.Errorf("module %s returned a finding for module %q, target %q", id, f.ModuleID, f.Target)
+			return module.Result{}, fmt.Errorf("module %s returned a finding for module %q, target %q", id, f.ModuleID, f.Target)
 		}
 		stamped := f
 		stamped.FirstSeen, stamped.LastSeen, stamped.Status = now, now, finding.StatusOpen
 		if err := stamped.Validate(); err != nil {
-			return nil, fmt.Errorf("module %s returned an invalid finding %s: %w", id, f.CheckID, err)
+			return module.Result{}, fmt.Errorf("module %s returned an invalid finding %s: %w", id, f.CheckID, err)
 		}
 	}
-	return findings, nil
+	// Same for assets: a missing asset would be marked gone. Duplicates
+	// are merged so each asset is stored once.
+	var assets asset.Set
+	for _, a := range res.Assets {
+		if err := a.Validate(t.Domain); err != nil {
+			return module.Result{}, fmt.Errorf("module %s returned an invalid asset: %w", id, err)
+		}
+		assets.Add(a)
+	}
+	return module.Result{Findings: findings, Assets: assets.List()}, nil
 }
 
 // heartbeat extends the lease every Lease/3 until stopped. If the lease is

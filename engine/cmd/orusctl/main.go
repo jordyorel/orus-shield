@@ -21,6 +21,7 @@
 //	orusctl scan [-org ORG] [-as NAME] <domain> [module ...]
 //	orusctl status [-org ORG] <scan-id>
 //	orusctl findings [-org ORG] [-v] <domain>
+//	orusctl assets [-org ORG] [-all] <domain>
 //	orusctl audit [-org ORG] <domain>
 //
 // It reads ORUS_DATABASE_URL (and optionally ORUS_ORG) from the environment.
@@ -34,6 +35,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/signal"
 	"slices"
@@ -59,6 +61,7 @@ const usage = `usage:
   orusctl scan [-org ORG] [-as NAME] <domain> [module ...]   (default: every module)
   orusctl status [-org ORG] <scan-id>
   orusctl findings [-org ORG] [-v] <domain>
+  orusctl assets [-org ORG] [-all] <domain>          (inventory; -all: include gone assets)
   orusctl audit [-org ORG] <domain>
 
 ORG is an organization name or ID; default: $ORUS_ORG, else "Default".
@@ -86,6 +89,7 @@ type OrgStore interface {
 	GetScan(ctx context.Context, id string) (store.Scan, error)
 	ListFindings(ctx context.Context, targetID string) ([]finding.Finding, error)
 	FindingHistory(ctx context.Context, targetID, findingID string) ([]store.FindingEvent, error)
+	ListAssets(ctx context.Context, targetID string, includeGone bool) ([]store.Asset, error)
 	AuditLog(ctx context.Context, target string) ([]store.AuditEntry, error)
 }
 
@@ -218,6 +222,8 @@ func (c cli) run(ctx context.Context, args []string) error {
 		return c.status(ctx, rest)
 	case "findings":
 		return c.findings(ctx, rest)
+	case "assets":
+		return c.assets(ctx, rest)
 	case "audit":
 		return c.audit(ctx, rest)
 	}
@@ -507,6 +513,47 @@ func (c cli) findings(ctx context.Context, args []string) error {
 			status += " " + f.FixedAt.Format(time.DateOnly)
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", f.Severity, status, f.CheckID, f.Asset, f.Title)
+	}
+	return w.Flush()
+}
+
+func (c cli) assets(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("assets", flag.ContinueOnError)
+	orgRef := c.orgFlag(fs)
+	all := fs.Bool("all", false, "include assets no module sees any more")
+	pos, err := parse(fs, args, 1)
+	if err != nil {
+		return err
+	}
+	_, st, _, err := c.openOrg(ctx, *orgRef)
+	if err != nil {
+		return err
+	}
+	t, err := st.TargetByDomain(ctx, pos[0])
+	if err != nil {
+		return err
+	}
+	assets, err := st.ListAssets(ctx, t.ID, *all)
+	if err != nil {
+		return err
+	}
+	if len(assets) == 0 {
+		fmt.Fprintln(c.out, "no assets (run a scan first)")
+		return nil
+	}
+	w := tabwriter.NewWriter(c.out, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "KIND\tVALUE\tSEEN BY\tFIRST SEEN\tLAST SEEN\tDETAILS")
+	for _, a := range assets {
+		seenBy := strings.Join(a.Sources, ",")
+		if a.GoneAt != nil {
+			seenBy = "gone " + a.GoneAt.Format(time.DateOnly)
+		}
+		var details []string
+		for _, k := range slices.Sorted(maps.Keys(a.Details)) {
+			details = append(details, k+"="+a.Details[k])
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", a.Kind, a.Value, seenBy,
+			a.FirstSeen.Format(time.DateOnly), a.LastSeen.Format(time.DateOnly), strings.Join(details, " "))
 	}
 	return w.Flush()
 }

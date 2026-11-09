@@ -7,6 +7,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -22,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jordyorel/orus-shield/engine/internal/asset"
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
@@ -269,6 +271,12 @@ func (e *env) route(ip netip.Addr, serverAddr string) {
 }
 
 func (e *env) run(ctx context.Context, domain string) ([]finding.Finding, error) {
+	res, err := e.runAll(ctx, domain)
+	return res.Findings, err
+}
+
+// runAll returns findings and assets.
+func (e *env) runAll(ctx context.Context, domain string) (module.Result, error) {
 	m := New(e.dns, e.dial)
 	m.roots = e.ca.pool
 	return m.Run(ctx, module.Request{
@@ -688,4 +696,86 @@ func TestIPCapIsRespected(t *testing.T) {
 	if len(distinct) != maxIPsPerHost {
 		t.Errorf("connected to %d addresses %v, want %d", len(distinct), e.dial.dialed, maxIPsPerHost)
 	}
+}
+
+func assetKeys(assets []asset.Asset) []string {
+	keys := make([]string, 0, len(assets))
+	for _, a := range assets {
+		keys = append(keys, a.Key())
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+func TestAssets(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, e *env)
+		want  []string // asset keys; certificates as "certificate *"
+	}{
+		{"valid certificate", func(t *testing.T, e *env) {
+			e.route(apexIP, serveTLS(t, e.ca.leaf(t, leafOpts{}), tls.VersionTLS12))
+		}, []string{"certificate *", "hostname example.com", "ip 192.0.2.10", "service 192.0.2.10:443/tcp"}},
+		{"not TLS on port 443: the port is still open", func(t *testing.T, e *env) {
+			e.route(apexIP, servePlain(t))
+		}, []string{"hostname example.com", "ip 192.0.2.10", "service 192.0.2.10:443/tcp"}},
+		{"port 443 closed: name and address only", func(t *testing.T, e *env) {},
+			[]string{"hostname example.com", "ip 192.0.2.10"}},
+		{"domain does not resolve: nothing", func(t *testing.T, e *env) {
+			delete(e.dns.ips, "example.com")
+		}, []string{}},
+		{"www on its own address", func(t *testing.T, e *env) {
+			e.dns.ips["www.example.com"] = []netip.Addr{wwwIP}
+			e.route(wwwIP, servePlain(t))
+		}, []string{"hostname example.com", "hostname www.example.com", "ip 192.0.2.10", "ip 192.0.2.11", "service 192.0.2.11:443/tcp"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := newEnv(t)
+			tt.setup(t, e)
+			res, err := e.runAll(context.Background(), "example.com")
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			got := assetKeys(res.Assets)
+			for i, k := range got {
+				if strings.HasPrefix(k, "certificate ") {
+					got[i] = "certificate *"
+				}
+			}
+			slices.Sort(got)
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("assets = %v, want %v", got, tt.want)
+			}
+			for _, a := range res.Assets {
+				if err := a.Validate("example.com"); err != nil {
+					t.Errorf("invalid asset %+v: %v", a, err)
+				}
+			}
+		})
+	}
+}
+
+func TestCertificateAsset(t *testing.T) {
+	e := newEnv(t)
+	cert := e.ca.leaf(t, leafOpts{})
+	e.route(apexIP, serveTLS(t, cert, tls.VersionTLS12))
+	res, err := e.runAll(context.Background(), "example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := fmt.Sprintf("%x", sha256.Sum256(cert.Certificate[0]))
+	for _, a := range res.Assets {
+		if a.Kind != asset.KindCertificate {
+			continue
+		}
+		if a.Value != want {
+			t.Errorf("certificate value = %s, want the SHA-256 of the leaf %s", a.Value, want)
+		}
+		if a.Details["subject"] != "example.com" || a.Details["names"] != "example.com www.example.com" || a.Details["not_after"] == "" {
+			t.Errorf("certificate details = %v", a.Details)
+		}
+		return
+	}
+	t.Errorf("no certificate asset in %v", assetKeys(res.Assets))
 }

@@ -10,8 +10,9 @@ resolver and dialer, email and TLS modules, PostgreSQL storage and queue, gate, 
 orusctl, ownership verification, per-IP ownership and the ports module). The ports module
 still needs a real-world test on a server Jordy owns. Step 7 follows the order in
 `docs/ui-adaptation.md`: organizations (multi-tenant scoping, `store.Org` + PostgreSQL
-row-level security) and the findings lifecycle (`fixed_at`, `finding_events` history) are
-done; next is the asset inventory (it changes the Module contract).
+row-level security), the findings lifecycle (`fixed_at`, `finding_events` history) and the
+asset inventory (`module.Result` with findings and assets, `assets` table) are done; next
+is the check catalog and evaluated checks (posture score).
 
 ## How to work on this repo
 
@@ -55,6 +56,8 @@ engine/
   internal/module/   the Module interface and the registry
   internal/modules/  one package per check (email, tls, ports, ...)
   internal/finding/  finding schema and validation
+  internal/asset/    asset schema (hostname, ip, service, certificate) and validation
+  internal/dnsname/  DNS name normalization, shared by module and asset
   internal/resolver/ DNS lookups for modules, gated (exclusions + rate limit) per scan
   internal/dialer/   TCP connections for modules, to gate-approved IPs only
   internal/gate/     per-scan module.Gate: customer exclusions + rate limiter
@@ -76,8 +79,9 @@ Every module:
   certificates, HTTP responses) or **active** (sends probes: port scans, app tests);
 - receives a `context.Context` and must respect its cancellation and deadline;
 - receives the target and its configuration; never reads global state;
-- returns findings in the standard schema, or an error; it never prints or logs findings
-  itself;
+- returns a `module.Result`: findings in the standard schema and the assets it observed
+  (package `asset`: hostnames under the target, IPs, services, certificates), or an error;
+  it never prints or logs findings itself;
 - goes through the shared rate limiter for every network call.
 
 ### Finding schema (fields to include)

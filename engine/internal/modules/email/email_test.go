@@ -121,10 +121,14 @@ func goodDNS(t *testing.T) *fakeDNS {
 func run(t *testing.T, dns *fakeDNS, domain string) ([]finding.Finding, error) {
 	t.Helper()
 	m := New(dns)
-	return m.Run(context.Background(), module.Request{
+	res, err := m.Run(context.Background(), module.Request{
 		Target: module.Target{Domain: domain},
 		Gate:   &countingGate{},
 	})
+	if len(res.Assets) != 0 {
+		t.Errorf("email reported assets %v, want none", res.Assets)
+	}
+	return res.Findings, err
 }
 
 func checkIDs(findings []finding.Finding) []string {

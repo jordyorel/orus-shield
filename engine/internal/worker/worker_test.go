@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jordyorel/orus-shield/engine/internal/asset"
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/ownership"
@@ -86,21 +87,24 @@ func (f *fakeStore) AppendAudit(ctx context.Context, e store.AuditEntry) error {
 	return nil
 }
 
-// fakeModule returns what run returns and counts its runs.
+// fakeModule returns the findings run returns, plus assets, and counts its
+// runs.
 type fakeModule struct {
-	info module.Info
-	runs atomic.Int32
-	run  func(ctx context.Context, req module.Request) ([]finding.Finding, error)
+	info   module.Info
+	runs   atomic.Int32
+	run    func(ctx context.Context, req module.Request) ([]finding.Finding, error)
+	assets []asset.Asset
 }
 
 func (m *fakeModule) Info() module.Info { return m.info }
 
-func (m *fakeModule) Run(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+func (m *fakeModule) Run(ctx context.Context, req module.Request) (module.Result, error) {
 	m.runs.Add(1)
 	if m.run == nil {
-		return nil, nil
+		return module.Result{Assets: m.assets}, nil
 	}
-	return m.run(ctx, req)
+	findings, err := m.run(ctx, req)
+	return module.Result{Findings: findings, Assets: m.assets}, err
 }
 
 func newModule(id string, kind module.Kind, run func(context.Context, module.Request) ([]finding.Finding, error)) *fakeModule {
@@ -545,5 +549,56 @@ func TestActiveModulesGetIPGate(t *testing.T) {
 	}
 	if !audited {
 		t.Errorf("audit = %+v, want an ip.not_verified entry", st.audit)
+	}
+}
+
+func TestAssetsAreForwarded(t *testing.T) {
+	ip := netip.MustParseAddr("192.0.2.10")
+	m := newModule("tls", module.KindPassive, nil)
+	m.assets = []asset.Asset{
+		asset.Hostname("example.com"), asset.IP(ip),
+		asset.Service(ip, 443, map[string]string{"expected": "https"}),
+		asset.Service(ip, 443, map[string]string{"tls_version": "TLS 1.3"}), // duplicate: merged
+	}
+	w, st := setup(t, false, "", m)
+	if err := runOnce(t, w); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	got := st.finished[0].Assets["tls"]
+	if len(got) != 3 {
+		t.Fatalf("assets = %+v, want 3 (duplicate merged)", got)
+	}
+	if d := got[2].Details; d["expected"] != "https" || d["tls_version"] != "TLS 1.3" {
+		t.Errorf("merged details = %v", d)
+	}
+}
+
+func TestBadAssetsFailThatModule(t *testing.T) {
+	many := make([]asset.Asset, maxAssetsPerModule+1)
+	for i := range many {
+		many[i] = asset.IP(netip.AddrFrom4([4]byte{192, 0, 2, byte(i)}))
+	}
+	tests := []struct {
+		name   string
+		assets []asset.Asset
+		want   string
+	}{
+		{"name outside the target", []asset.Asset{asset.Hostname("mx.provider.net")}, "invalid asset"},
+		{"unknown kind", []asset.Asset{{Kind: "printer", Value: "x"}}, "invalid asset"},
+		{"too many", many, "limit"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newModule("tls", module.KindPassive, nil)
+			m.assets = tt.assets
+			w, st := setup(t, false, "", m)
+			if err := runOnce(t, w); err != nil {
+				t.Fatalf("RunOnce: %v", err)
+			}
+			r := st.finished[0]
+			if !strings.Contains(r.Failed["tls"], tt.want) || len(r.Assets) != 0 || len(r.Succeeded) != 0 {
+				t.Errorf("result = %+v, want tls failed with %q and no assets", r, tt.want)
+			}
+		})
 	}
 }

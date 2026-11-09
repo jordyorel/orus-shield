@@ -9,19 +9,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jordyorel/orus-shield/engine/internal/asset"
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
 	"github.com/jordyorel/orus-shield/engine/internal/ownership"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
 type fakeStore struct {
-	targets  map[string]store.Target // by domain
-	created  []store.NewTarget
-	enqueued []string // "targetID modules requester"
-	findings []finding.Finding
-	audit    []store.AuditEntry
-	verifier *fakeVerifier                   // the verifier opened with this organization
-	history  map[string][]store.FindingEvent // by finding ID
+	targets   map[string]store.Target // by domain
+	created   []store.NewTarget
+	enqueued  []string // "targetID modules requester"
+	findings  []finding.Finding
+	audit     []store.AuditEntry
+	verifier  *fakeVerifier                   // the verifier opened with this organization
+	history   map[string][]store.FindingEvent // by finding ID
+	assets    []store.Asset
+	assetsAll bool // includeGone of the last ListAssets call
 }
 
 func (f *fakeStore) CreateTarget(ctx context.Context, nt store.NewTarget) (store.Target, error) {
@@ -57,6 +60,11 @@ func (f *fakeStore) ListFindings(ctx context.Context, targetID string) ([]findin
 
 func (f *fakeStore) FindingHistory(ctx context.Context, targetID, findingID string) ([]store.FindingEvent, error) {
 	return f.history[findingID], nil
+}
+
+func (f *fakeStore) ListAssets(ctx context.Context, targetID string, includeGone bool) ([]store.Asset, error) {
+	f.assetsAll = includeGone
+	return f.assets, nil
 }
 
 func (f *fakeStore) AuditLog(ctx context.Context, target string) ([]store.AuditEntry, error) {
@@ -373,7 +381,7 @@ func TestOrgFlag(t *testing.T) {
 	ctx := context.Background()
 	commands := [][]string{
 		{"target", "show"}, {"target", "verify-token"}, {"target", "verify"},
-		{"scan"}, {"findings"},
+		{"scan"}, {"findings"}, {"assets"},
 	}
 	for _, cmd := range commands {
 		name := strings.Join(cmd, " ")
@@ -433,5 +441,34 @@ func TestFindingsShowFixDateAndHistory(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "history: opened 2026-11-01, fixed 2026-11-03") {
 		t.Errorf("verbose output does not show the history:\n%s", out.String())
+	}
+}
+
+func TestAssets(t *testing.T) {
+	c, st, out := newCLI()
+	if err := c.run(context.Background(), []string{"assets", "example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "no assets") {
+		t.Errorf("empty output = %q", out.String())
+	}
+	day := time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)
+	gone := day.Add(48 * time.Hour)
+	st.assets = []store.Asset{
+		{Kind: asset.KindIP, Value: "192.0.2.10", Sources: []string{"tls", "ports"}, FirstSeen: day, LastSeen: day},
+		{Kind: asset.KindService, Value: "192.0.2.10:22/tcp", Details: map[string]string{"expected": "SSH"},
+			FirstSeen: day, LastSeen: day, GoneAt: &gone},
+	}
+	out.Reset()
+	if err := c.run(context.Background(), []string{"assets", "-all", "example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	if !st.assetsAll {
+		t.Error("-all did not ask for gone assets")
+	}
+	for _, want := range []string{"tls,ports", "gone 2026-11-03", "expected=SSH", "192.0.2.10:22/tcp"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("output does not contain %q:\n%s", want, out.String())
+		}
 	}
 }

@@ -62,21 +62,23 @@ func (m *Module) Info() module.Info {
 }
 
 // Run implements module.Module. It has no configuration yet; req.Config is
-// ignored.
+// ignored. It reports no assets: the DNS records it reads (SPF, DMARC, DKIM
+// TXT records, MX hosts often run by a mail provider) are configuration,
+// not exposed systems.
 //
 // Any DNS failure other than "not found" (timeout, SERVFAIL, gate refusal)
 // fails the whole run: reporting "no DMARC record" because a server timed out
 // would be a false positive, and false positives destroy customer trust.
-func (m *Module) Run(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, error) {
 	domain, err := module.NormalizeDomain(req.Target.Domain)
 	if err != nil {
-		return nil, fmt.Errorf("email: %w", err)
+		return module.Result{}, fmt.Errorf("email: %w", err)
 	}
 	dns := resolver.Gated{Gate: req.Gate, Inner: m.dns}
 
 	receivesMail, err := receivesMail(ctx, dns, domain)
 	if err != nil {
-		return nil, fmt.Errorf("email: %w", err)
+		return module.Result{}, fmt.Errorf("email: %w", err)
 	}
 
 	checks := []func(context.Context, resolver.Resolver, string, bool) ([]issue, error){
@@ -86,13 +88,13 @@ func (m *Module) Run(ctx context.Context, req module.Request) ([]finding.Finding
 	for _, check := range checks {
 		issues, err := check(ctx, dns, domain, receivesMail)
 		if err != nil {
-			return nil, fmt.Errorf("email: %w", err)
+			return module.Result{}, fmt.Errorf("email: %w", err)
 		}
 		for _, i := range issues {
 			findings = append(findings, i.finding(domain))
 		}
 	}
-	return findings, nil
+	return module.Result{Findings: findings}, nil
 }
 
 // receivesMail reports whether domain has at least one usable MX record.

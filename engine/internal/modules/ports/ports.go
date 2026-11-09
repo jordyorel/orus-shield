@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jordyorel/orus-shield/engine/internal/asset"
 	"github.com/jordyorel/orus-shield/engine/internal/dialer"
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
@@ -81,42 +82,60 @@ func (m *Module) Info() module.Info {
 
 // Run implements module.Module. It scans the addresses of the domain and of
 // its www. subdomain. req.Config is ignored for now.
-func (m *Module) Run(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+//
+// Assets: each address actually scanned and its host name, and every open
+// port of the catalog. Addresses the gate refused are not reported: we did
+// not look at them.
+func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, error) {
 	domain, err := module.NormalizeDomain(req.Target.Domain)
 	if err != nil {
-		return nil, fmt.Errorf("ports: %w", err)
+		return module.Result{}, fmt.Errorf("ports: %w", err)
 	}
 	dns := resolver.Gated{Gate: req.Gate, Inner: m.dns}
 	dial := dialer.Gated{Gate: req.Gate, Inner: connectTimeoutDialer{m.dial, m.connectTimeout}}
 
 	targets, err := m.addresses(ctx, dns, domain)
 	if err != nil {
-		return nil, fmt.Errorf("ports: %w", err)
+		return module.Result{}, fmt.Errorf("ports: %w", err)
 	}
 	if len(targets) == 0 {
-		return nil, nil // nothing resolves: no server to scan
+		return module.Result{}, nil // nothing resolves: no server to scan
 	}
 
 	var findings []finding.Finding
+	var assets asset.Set
 	scanned := 0
 	for _, t := range targets {
 		open, refused, err := m.scanIP(ctx, dial, t)
 		if err != nil {
-			return nil, fmt.Errorf("ports: %w", err)
+			return module.Result{}, fmt.Errorf("ports: %w", err)
 		}
 		if refused {
 			continue // not ours to scan; the refusal is audited by the worker
 		}
 		scanned++
+		assets.Add(asset.Hostname(t.host))
+		assets.Add(asset.IP(t.ip))
 		for _, o := range open {
 			findings = append(findings, o.finding(domain, t))
+			assets.Add(o.asset(t))
 		}
 	}
 	if scanned == 0 {
-		return nil, fmt.Errorf("ports: %w: none of %d addresses has verified ownership or all are excluded (see the audit log)",
+		return module.Result{}, fmt.Errorf("ports: %w: none of %d addresses has verified ownership or all are excluded (see the audit log)",
 			ErrNoVerifiedIP, len(targets))
 	}
-	return findings, nil
+	return module.Result{Findings: findings, Assets: assets.List()}, nil
+}
+
+// asset describes the open port for the inventory. The banner is already
+// sanitized and bounded by probe.
+func (o openPort) asset(a address) asset.Asset {
+	details := map[string]string{"expected": o.svc.name}
+	if o.banner != "" {
+		details["banner"] = asset.TruncateDetail(o.banner)
+	}
+	return asset.Service(a.ip, uint16(o.svc.port), details) //nolint:gosec // G115: catalog ports are constants in 1..65535
 }
 
 // address is one IP to scan and the host name it came from.

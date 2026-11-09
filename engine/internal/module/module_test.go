@@ -5,8 +5,6 @@ import (
 	"errors"
 	"strings"
 	"testing"
-
-	"github.com/jordyorel/orus-shield/engine/internal/finding"
 )
 
 // fakeModule is a minimal Module used to test the registry and the rules.
@@ -14,8 +12,8 @@ type fakeModule struct{ info Info }
 
 func (m fakeModule) Info() Info { return m.info }
 
-func (m fakeModule) Run(ctx context.Context, req Request) ([]finding.Finding, error) {
-	return nil, nil
+func (m fakeModule) Run(ctx context.Context, req Request) (Result, error) {
+	return Result{}, nil
 }
 
 func TestKindValid(t *testing.T) {

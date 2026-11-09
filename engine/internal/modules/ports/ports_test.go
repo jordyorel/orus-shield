@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jordyorel/orus-shield/engine/internal/asset"
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/ownership"
@@ -142,6 +143,11 @@ func newTest() (*Module, *fakeDNS, *fakeDialer, *fakeGate) {
 }
 
 func run(ctx context.Context, m *Module, g module.Gate) ([]finding.Finding, error) {
+	res, err := runAll(ctx, m, g)
+	return res.Findings, err
+}
+
+func runAll(ctx context.Context, m *Module, g module.Gate) (module.Result, error) {
 	return m.Run(ctx, module.Request{Target: module.Target{Domain: "example.com", Verified: true}, Gate: g})
 }
 
@@ -495,5 +501,35 @@ func TestOnlyOwnedServersAreScanned(t *testing.T) {
 	}
 	if len(refused) != 1 || refused[0] != shared {
 		t.Errorf("refused = %v, want the shared hosting IP once", refused)
+	}
+}
+
+func TestAssets(t *testing.T) {
+	m, dns, dial, g := newTest()
+	dns.ips["example.com"] = []netip.Addr{ip1, ip2}
+	dial.routes[route(ip1, 22)] = "SSH-2.0-OpenSSH_9.6\r\n"
+	dial.routes[route(ip2, 3389)] = ""
+	g.excludeIPs = map[netip.Addr]bool{ip2: true} // not verified: not scanned
+
+	res, err := runAll(context.Background(), m, g)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	var keys []string
+	for _, a := range res.Assets {
+		keys = append(keys, a.Key())
+		if err := a.Validate("example.com"); err != nil {
+			t.Errorf("invalid asset %+v: %v", a, err)
+		}
+	}
+	slices.Sort(keys)
+	want := []string{"hostname example.com", "ip 192.0.2.10", "service 192.0.2.10:22/tcp"}
+	if !slices.Equal(keys, want) {
+		t.Errorf("assets = %v, want %v (nothing about the address that was not scanned)", keys, want)
+	}
+	for _, a := range res.Assets {
+		if a.Kind == asset.KindService && (a.Details["expected"] != "SSH" || a.Details["banner"] != "SSH-2.0-OpenSSH_9.6") {
+			t.Errorf("service details = %v", a.Details)
+		}
 	}
 }

@@ -8,6 +8,7 @@ package tlscheck
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -19,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jordyorel/orus-shield/engine/internal/asset"
 	"github.com/jordyorel/orus-shield/engine/internal/dialer"
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
@@ -73,15 +75,19 @@ func (m *Module) Info() module.Info {
 // A host that does not resolve, or does not accept connections, produces no
 // finding: we only report what we could observe. DNS failures other than
 // "not found", gate failures and cancellation stop the run.
-func (m *Module) Run(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+//
+// Assets: each name that resolved, the addresses tested, port 443 on each
+// address that accepted a connection, and each certificate served.
+func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, error) {
 	domain, err := module.NormalizeDomain(req.Target.Domain)
 	if err != nil {
-		return nil, fmt.Errorf("tls: %w", err)
+		return module.Result{}, fmt.Errorf("tls: %w", err)
 	}
 	p := prober{
-		dns:   resolver.Gated{Gate: req.Gate, Inner: m.dns},
-		dial:  dialer.Gated{Gate: req.Gate, Inner: m.dial},
-		roots: m.roots,
+		dns:    resolver.Gated{Gate: req.Gate, Inner: m.dns},
+		dial:   dialer.Gated{Gate: req.Gate, Inner: m.dial},
+		roots:  m.roots,
+		assets: &asset.Set{},
 	}
 
 	hosts := []string{domain}
@@ -93,20 +99,23 @@ func (m *Module) Run(ctx context.Context, req module.Request) ([]finding.Finding
 	for _, host := range hosts {
 		issues, err := p.checkHost(ctx, host)
 		if err != nil {
-			return nil, fmt.Errorf("tls: %w", err)
+			return module.Result{}, fmt.Errorf("tls: %w", err)
 		}
 		for _, i := range issues {
 			findings = append(findings, i.finding(domain))
 		}
 	}
-	return findings, nil
+	return module.Result{Findings: findings, Assets: p.assets.List()}, nil
 }
 
-// prober holds the gated network tools for one run.
+// prober holds the gated network tools for one run, and collects the
+// assets observed. Hosts and addresses are checked one at a time, so the set
+// needs no lock.
 type prober struct {
-	dns   resolver.Gated
-	dial  dialer.Gated
-	roots *x509.CertPool
+	dns    resolver.Gated
+	dial   dialer.Gated
+	roots  *x509.CertPool
+	assets *asset.Set
 }
 
 // maxIPsPerHost bounds how many addresses of one host we test. Each address
@@ -127,11 +136,15 @@ func (p prober) checkHost(ctx context.Context, host string) ([]issue, error) {
 		return nil, err
 	}
 	ips := selectIPs(addrs, maxIPsPerHost)
-	asset := net.JoinHostPort(host, fmt.Sprint(httpsPort))
+	if len(ips) > 0 {
+		p.assets.Add(asset.Hostname(host))
+	}
+	findingAsset := net.JoinHostPort(host, fmt.Sprint(httpsPort))
 
 	var all []issue
 	for _, ip := range ips {
-		issues, err := p.checkIP(ctx, module.Destination{Host: host, IP: ip, Port: httpsPort}, asset)
+		p.assets.Add(asset.IP(ip))
+		issues, err := p.checkIP(ctx, module.Destination{Host: host, IP: ip, Port: httpsPort}, findingAsset)
 		if err != nil {
 			return nil, err
 		}
@@ -141,15 +154,15 @@ func (p prober) checkHost(ctx context.Context, host string) ([]issue, error) {
 }
 
 // checkIP runs both probes against one address.
-func (p prober) checkIP(ctx context.Context, dest module.Destination, asset string) ([]issue, error) {
-	issues, err := p.probe(ctx, dest, asset)
+func (p prober) checkIP(ctx context.Context, dest module.Destination, findingAsset string) ([]issue, error) {
+	issues, err := p.probe(ctx, dest, findingAsset)
 	for i := range issues {
 		issues[i].ip = dest.IP
 	}
 	return issues, err
 }
 
-func (p prober) probe(ctx context.Context, dest module.Destination, asset string) ([]issue, error) {
+func (p prober) probe(ctx context.Context, dest module.Destination, findingAsset string) ([]issue, error) {
 	// 1. Normal handshake, offering every version up to TLS 1.3, to read the
 	// certificate the way a browser would.
 	state, err := p.handshake(ctx, dest, probeConfig(dest.Host, 0))
@@ -158,11 +171,14 @@ func (p prober) probe(ctx context.Context, dest module.Destination, asset string
 			return nil, stop
 		}
 		if isTLSFailure(err) {
-			return []issue{handshakeFailed(asset, dest, err)}, nil
+			// The port is open, even though TLS failed.
+			p.assets.Add(asset.Service(dest.IP, httpsPort, map[string]string{"expected": "https"}))
+			return []issue{handshakeFailed(findingAsset, dest, err)}, nil
 		}
 		return nil, nil // excluded, closed or silent: nothing to assert
 	}
-	issues := certIssues(asset, dest, state, p.roots, time.Now())
+	p.observe(dest, state)
+	issues := certIssues(findingAsset, dest, state, p.roots, time.Now())
 
 	// 2. Legacy handshake, offering only TLS 1.0 and 1.1. If the server
 	// accepts it, it still supports deprecated versions.
@@ -173,7 +189,26 @@ func (p prober) probe(ctx context.Context, dest module.Destination, asset string
 		}
 		return issues, nil // refused: good
 	}
-	return append(issues, legacyVersion(asset, dest, legacy)), nil
+	return append(issues, legacyVersion(findingAsset, dest, legacy)), nil
+}
+
+// observe records the service and the certificate of a completed handshake.
+func (p prober) observe(dest module.Destination, state tls.ConnectionState) {
+	p.assets.Add(asset.Service(dest.IP, httpsPort, map[string]string{
+		"expected": "https", "tls_version": tls.VersionName(state.Version),
+	}))
+	if len(state.PeerCertificates) == 0 {
+		return
+	}
+	leaf := state.PeerCertificates[0]
+	p.assets.Add(asset.Certificate(sha256.Sum256(leaf.Raw), map[string]string{
+		// Certificate fields are chosen by whoever controls the server:
+		// untrusted, so bounded (rule 7).
+		"subject":   asset.TruncateDetail(leaf.Subject.CommonName),
+		"issuer":    asset.TruncateDetail(leaf.Issuer.CommonName),
+		"not_after": leaf.NotAfter.UTC().Format(time.RFC3339),
+		"names":     asset.TruncateDetail(strings.Join(leaf.DNSNames, " ")),
+	}))
 }
 
 // errHandshake marks errors that happened after the TCP connection was open.

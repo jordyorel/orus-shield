@@ -16,6 +16,13 @@ CLAUDE.md (one step at a time, design first, tests first, stop for review).
 - `finding_events` (step 7.2): every status change (opened, fixed, reopened, risk
   accepted or withdrawn) with its time, actor and scan. Mean time to remediate and
   "opened vs fixed per month" are computed from it.
+- `assets` (step 7.3): the inventory per target. Modules return a `module.Result` with
+  findings and assets. Kinds: hostname (only the target domain and its subdomains), ip,
+  service (`ip:port/tcp`), certificate (SHA-256). `sources` lists the modules that saw the
+  asset in their last successful run; an asset no module sees any more gets `gone_at`.
+  `tls` reports names, addresses, port 443 and certificates; `ports` reports scanned
+  addresses and open ports; `email` reports none. There is no "discovered" state yet: it
+  comes with the discovery module.
 - `audit_log`: append-only record of actions.
 - `organizations` (step 7.1): every target, scan, finding and audit entry has an `org_id`.
   API code works through `store.Org` (every query filtered by organization), backed by
@@ -25,9 +32,9 @@ CLAUDE.md (one step at a time, design first, tests first, stop for review).
   both passive; `ports` (exposed network services), active, which only reaches IPs whose
   ownership is proven by forward-confirmed reverse DNS (`ownership.IPGate`). Check IDs such as `dmarc-policy-none`, `tls-cert-expiring-soon`.
 - `orusctl`: org add/list; target add/show/verify-token/verify, scan, status, findings,
-  audit, each in one organization (`-org`, `ORUS_ORG`, default `Default`).
+  assets, audit, each in one organization (`-org`, `ORUS_ORG`, default `Default`).
 
-What does not exist yet: users and authentication, an asset inventory, a record of checks
+What does not exist yet: users and authentication, a record of checks
 that passed, a security score, CVE or exploit data, context factors,
 an HTTP API, a web dashboard.
 
@@ -55,7 +62,7 @@ an HTTP API, a web dashboard.
 | Priority actions | Queries: unverified targets, targets with no scan for N days, open critical findings | Yes, with these three actions. "Admins without MFA" waits for the identity connector |
 | Coverage: scan modules | Module registry (`modules/all`) + last scan result per module + `CheckAllowed` (active module on unverified target = "Blocked") | Yes |
 | Coverage: DNS, identities, cloud, alerts | Connectors | No: show "Coming soon" |
-| External assets (domains, IPs, certificates, services) | Asset inventory | No: needs the asset model below |
+| External assets (domains, IPs, certificates, services) | Asset inventory (`assets`, step 7.3) | Yes |
 | Recent changes | `audit_log`, findings opened or fixed, new assets | Partly: audit log and findings now |
 
 Backend work needed:
@@ -137,7 +144,8 @@ findings), `controls`, `policies`. The heat map and risk register read from it.
    authentication come with the API endpoints)
 2. Findings lifecycle: `fixed_at` / status history. (done: `findings.fixed_at` and
    `finding_events`)
-3. Asset inventory and the Module contract change for observed assets.
+3. Asset inventory and the Module contract change for observed assets. (done:
+   `module.Result`, package `asset`, `assets` table, `orusctl assets`)
 4. Check catalog and evaluated checks; posture score and snapshots.
 5. CDN and hosting detection (for the "Protections" column).
 6. API endpoints for screens 1 to 3, scoped by organization, with tests.

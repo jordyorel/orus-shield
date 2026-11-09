@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/jordyorel/orus-shield/engine/internal/asset"
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
 )
 
@@ -32,6 +33,9 @@ type ScanResult struct {
 	// Findings come from the succeeded modules. The store sets FirstSeen,
 	// LastSeen and Status, then validates them.
 	Findings []finding.Finding
+	// Assets observed, by module ID. Only succeeded modules may report
+	// assets; a succeeded module absent from the map reported none.
+	Assets map[string][]asset.Asset
 }
 
 // FinishScan records a scan's results in one transaction: the scan is marked
@@ -48,7 +52,8 @@ type ScanResult struct {
 //   - accepted_risk is the customer's decision and is never changed here.
 //
 // Every status change (opened, fixed, reopened) is also recorded in
-// finding_events, in the same transaction, for remediation history.
+// finding_events, in the same transaction, for remediation history. The
+// asset inventory is updated in the same transaction too (see saveAssets).
 func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 	// PostgreSQL stores microseconds. Rounding here keeps the columns and
 	// the JSON copy identical.
@@ -147,6 +152,11 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 		fixed = tag.RowsAffected()
 	}
 
+	assets, err := saveAssets(ctx, tx, orgID, targetID, domain, at, r)
+	if err != nil {
+		return fmt.Errorf("finish scan %s: %w", r.ScanID, err)
+	}
+
 	// Empty lists, not null, so the audit JSON has one shape.
 	succeeded := append([]string{}, r.Succeeded...)
 	failed := append([]string{}, slices.Sorted(maps.Keys(r.Failed))...)
@@ -156,6 +166,7 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 			"scan_id": r.ScanID, "attempt": r.Attempt,
 			"succeeded": succeeded, "failed": failed,
 			"findings": len(r.Findings), "new": created, "fixed": fixed, "reopened": reopened,
+			"assets": assets.reported, "assets_new": assets.created, "assets_back": assets.back, "assets_gone": assets.gone,
 		},
 	}); err != nil {
 		return err

@@ -11,8 +11,9 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
-	"strings"
 
+	"github.com/jordyorel/orus-shield/engine/internal/asset"
+	"github.com/jordyorel/orus-shield/engine/internal/dnsname"
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
 )
 
@@ -79,13 +80,25 @@ type Request struct {
 	Gate   Gate
 }
 
+// Result is what a module observed in one run.
+type Result struct {
+	// Findings are the problems found, in the standard schema.
+	Findings []finding.Finding
+	// Assets are what the module saw exist (names that resolve, addresses,
+	// open services, certificates), problem or not. They feed the asset
+	// inventory. A module reports only what it actually observed: an asset
+	// it did not report in a successful run is considered gone, as far as
+	// this module knows.
+	Assets []asset.Asset
+}
+
 // Module is one independent security check.
 type Module interface {
 	Info() Info
-	// Run checks the target and returns findings in the standard schema, or
-	// an error. It must respect ctx cancellation and deadline, and must never
-	// print or log findings itself.
-	Run(ctx context.Context, req Request) ([]finding.Finding, error)
+	// Run checks the target and returns what it observed, or an error. It
+	// must respect ctx cancellation and deadline, and must never print or
+	// log findings itself.
+	Run(ctx context.Context, req Request) (Result, error)
 }
 
 var (
@@ -122,23 +135,5 @@ func CheckAllowed(info Info, t Target) error {
 // NormalizeDomain lowercases d, removes a trailing dot, and rejects anything
 // that is not a plausible DNS name. The domain is customer input that ends up
 // in DNS queries and connections, so modules check it rather than trust it.
-func NormalizeDomain(d string) (string, error) {
-	d = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(d)), ".")
-	if d == "" {
-		return "", errors.New("empty domain")
-	}
-	if len(d) > 253 {
-		return "", fmt.Errorf("domain %q: longer than 253 characters", d)
-	}
-	for _, label := range strings.Split(d, ".") {
-		if label == "" || len(label) > 63 {
-			return "", fmt.Errorf("domain %q: invalid label %q", d, label)
-		}
-		for _, r := range label {
-			if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
-				return "", fmt.Errorf("domain %q: invalid character %q", d, r)
-			}
-		}
-	}
-	return d, nil
-}
+// It is dnsname.Normalize, kept here because every module already uses it.
+func NormalizeDomain(d string) (string, error) { return dnsname.Normalize(d) }
