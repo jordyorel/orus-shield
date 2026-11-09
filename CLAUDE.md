@@ -5,9 +5,10 @@ company exposes on the internet, checks it, scores it, and turns each finding in
 prioritized, plain-language action plan. The market is international, with particular
 attention to French-speaking Africa (local payment methods, French-first reports).
 
-Status: roadmap steps 1 to 4 are done (finding schema, Module interface, gated DNS
+Status: roadmap steps 1 to 5 are done (finding schema, Module interface, gated DNS
 resolver and dialer, email and TLS modules, PostgreSQL storage and queue, gate, worker,
-orusctl). Next: step 5, ownership verification.
+orusctl, ownership verification). Next: step 6, the ports module, which first requires
+closing the rule 1 gap described below.
 
 ## How to work on this repo
 
@@ -54,6 +55,7 @@ engine/
   internal/resolver/ DNS lookups for modules, gated (exclusions + rate limit) per scan
   internal/dialer/   TCP connections for modules, to gate-approved IPs only
   internal/gate/     per-scan module.Gate: customer exclusions + rate limiter
+  internal/ownership/ DNS TXT ownership verification and re-checks (rule 1)
   internal/store/    PostgreSQL: targets, scan queue, findings lifecycle, audit log
   internal/worker/   claims scans, runs modules, records results
   internal/modules/all/  the list of shipped modules
@@ -85,13 +87,17 @@ first seen, last seen, status (open, fixed, accepted risk).
 These are the product. A breach of them is a bug, never a trade-off.
 
 1. **No active scan without verified ownership.** A target must be verified (DNS TXT record
-   `_orus-verify.<domain>`) before any active module runs on it. Passive modules may run on
-   unverified domains, but only public, read-only checks.
+   `_orus-verify.<domain>` = `orus-verify=<token>`, see `internal/ownership`) before any
+   active module runs on it. The record must stay published: it is re-checked before active
+   scans when the last check is over 24 hours old, and verification is revoked if it is gone.
+   Passive modules may run on unverified domains, but only public, read-only checks.
    **Known gap, to solve before step 6:** a DNS TXT record proves control of the domain,
-   not ownership of the IPs it points to. A customer on shared hosting or behind a CDN
-   (Cloudflare proxy, GitHub Pages...) passes verification, and an active scan would then
-   hit the provider's infrastructure. Active modules must not run against such IPs (for
-   example: exclude known CDN/hosting ranges, or require server-level verification).
+   not ownership of the IPs it points to. A customer on shared hosting, a parking page or
+   behind a CDN (Cloudflare proxy, GitHub Pages...) passes verification, and an active scan
+   would then hit the provider's infrastructure. Real case seen on the lab domain: a fresh
+   Porkbun domain points to Porkbun's parking servers until those records are deleted.
+   Active modules must not run against such IPs (for example: exclude known CDN/hosting
+   ranges, or require server-level verification).
 2. **Respect exclusions.** Customer exclusions (paths, IPs, ports) are checked before every
    request, not only at job start.
 3. **Rate limiting is mandatory.** Every outbound request goes through the limiter, using the
@@ -127,7 +133,8 @@ go run ./cmd/worker                 # in one terminal
 go run ./cmd/orusctl target add <domain> && go run ./cmd/orusctl scan <domain>
 ```
 
-Only scan domains you own, even passively. For TLS test cases, badssl.com subdomains are
+Only scan domains you own, even passively. The lab domain is `orushield.xyz` (verified;
+the product domain will be a .io or .com). For TLS test cases, badssl.com subdomains are
 built for that purpose. The test lab domain is deliberately misconfigured: never reuse the
 product's own domain for it.
 
@@ -137,7 +144,7 @@ product's own domain for it.
 2. Email module: SPF, DKIM, DMARC (passive). (done)
 3. TLS/certificate module (passive). (done)
 4. Worker, queue and storage. (done)
-5. Ownership verification (DNS TXT).
+5. Ownership verification (DNS TXT). (done)
 6. Ports module (active, verified targets only).
 7. API, then dashboard (design mockups exist on the project canvas).
 
