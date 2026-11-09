@@ -1,0 +1,30 @@
+# Local development environment. Not for production.
+#
+#   cp .env.example .env    # then set a password
+#   docker-compose up -d
+#
+# PostgreSQL listens on 127.0.0.1 only, never on the local network. Host port
+# 55432 by default (override with ORUS_PG_PORT), so it does not clash with
+# PostgreSQL servers installed locally on 5432/5433.
+services:
+  postgres:
+    # PostgreSQL 18 is required: the schema uses the built-in uuidv7().
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: orus
+      POSTGRES_DB: orus
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${ORUS_PG_PORT:-55432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      # Creates the orus_test database used by integration tests.
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orus -d orus"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  postgres-data:
