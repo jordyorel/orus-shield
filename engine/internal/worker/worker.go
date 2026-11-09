@@ -1,0 +1,296 @@
+// Package worker runs scans: it claims a job from the queue, runs the
+// requested modules against the target, and records the results.
+//
+// Workers are stateless: everything they need comes from the job and the
+// database, and nothing is kept between jobs. Scaling means starting more
+// workers.
+package worker
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"sync"
+	"time"
+
+	"github.com/jordyorel/orus-shield/engine/internal/finding"
+	"github.com/jordyorel/orus-shield/engine/internal/gate"
+	"github.com/jordyorel/orus-shield/engine/internal/module"
+	"github.com/jordyorel/orus-shield/engine/internal/store"
+)
+
+// Store is the part of store.Store the worker uses. Tests replace it with an
+// in-memory fake.
+type Store interface {
+	ClaimScan(ctx context.Context, workerID string, lease time.Duration, maxAttempts int) (store.Scan, bool, error)
+	GetTarget(ctx context.Context, id string) (store.Target, error)
+	ExtendLease(ctx context.Context, scanID string, attempt int, lease time.Duration) error
+	FinishScan(ctx context.Context, r store.ScanResult) error
+	FailScan(ctx context.Context, scanID string, attempt int, workerID, reason string) error
+	AppendAudit(ctx context.Context, e store.AuditEntry) error
+}
+
+// Config tunes a worker. Zero values get the defaults below.
+type Config struct {
+	ID            string        // identity in the audit log, e.g. "worker:host-1234"
+	Lease         time.Duration // how long a claim is valid without heartbeat
+	ModuleTimeout time.Duration // maximum duration of one module run
+	PollInterval  time.Duration // wait between polls when the queue is empty
+	MaxAttempts   int           // claims before a crashing scan is abandoned
+}
+
+const (
+	defaultLease         = 5 * time.Minute
+	defaultModuleTimeout = 2 * time.Minute
+	defaultPollInterval  = 2 * time.Second
+	defaultMaxAttempts   = 3
+
+	// maxFindingsPerModule bounds one module's output (rule 7): a bug or a
+	// hostile target must not flood the database.
+	maxFindingsPerModule = 1000
+
+	// finishTimeout bounds the final database writes. They run even if the
+	// worker is shutting down, so a completed scan is not lost.
+	finishTimeout = 30 * time.Second
+)
+
+// Worker processes scans one at a time. Run several workers to scan in
+// parallel.
+type Worker struct {
+	store   Store
+	modules *module.Registry
+	cfg     Config
+	log     *slog.Logger
+	now     func() time.Time
+}
+
+// New returns a worker. modules is the set of checks it can run.
+func New(st Store, modules *module.Registry, cfg Config, log *slog.Logger) *Worker {
+	if cfg.ID == "" {
+		cfg.ID = "worker"
+	}
+	if cfg.Lease <= 0 {
+		cfg.Lease = defaultLease
+	}
+	if cfg.ModuleTimeout <= 0 {
+		cfg.ModuleTimeout = defaultModuleTimeout
+	}
+	if cfg.PollInterval <= 0 {
+		cfg.PollInterval = defaultPollInterval
+	}
+	if cfg.MaxAttempts <= 0 {
+		cfg.MaxAttempts = defaultMaxAttempts
+	}
+	return &Worker{store: st, modules: modules, cfg: cfg, log: log.With("worker", cfg.ID), now: time.Now}
+}
+
+// Run processes scans until ctx is cancelled, then returns nil. A scan in
+// progress at shutdown is abandoned; its lease expires and another worker
+// picks it up.
+func (w *Worker) Run(ctx context.Context) error {
+	w.log.Info("worker started")
+	for {
+		worked, err := w.RunOnce(ctx)
+		if ctx.Err() != nil {
+			w.log.Info("worker stopped")
+			return nil
+		}
+		if err != nil {
+			w.log.Error("scan failed", "err", err)
+		}
+		if worked && err == nil {
+			continue // there may be more work: poll again right away
+		}
+		select {
+		case <-ctx.Done():
+			w.log.Info("worker stopped")
+			return nil
+		case <-time.After(w.cfg.PollInterval):
+		}
+	}
+}
+
+// RunOnce claims and processes at most one scan. worked is false when the
+// queue was empty.
+func (w *Worker) RunOnce(ctx context.Context) (worked bool, err error) {
+	sc, ok, err := w.store.ClaimScan(ctx, w.cfg.ID, w.cfg.Lease, w.cfg.MaxAttempts)
+	if err != nil {
+		return false, fmt.Errorf("claim scan: %w", err)
+	}
+	if !ok {
+		return false, nil
+	}
+	log := w.log.With("scan_id", sc.ID, "domain", sc.Domain, "attempt", sc.Attempt)
+	start := time.Now()
+	log.Info("scan started", "modules", sc.Modules)
+	if err := w.process(ctx, sc, log); err != nil {
+		return true, fmt.Errorf("scan %s: %w", sc.ID, err)
+	}
+	log.Info("scan finished", "duration_ms", time.Since(start).Milliseconds())
+	return true, nil
+}
+
+func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) error {
+	// scanCtx is cancelled if the lease is lost: another worker owns the
+	// scan, so this one must stop sending requests at once.
+	scanCtx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	stopHeartbeat := w.heartbeat(scanCtx, cancel, sc, log)
+	defer stopHeartbeat()
+
+	target, err := w.store.GetTarget(scanCtx, sc.TargetID)
+	if err != nil {
+		return w.fail(ctx, sc, fmt.Sprintf("load target: %v", err))
+	}
+	// Fail closed: never scan with exclusions we cannot read.
+	rules, err := gate.ParseExclusions(target.Exclusions)
+	if err != nil {
+		return w.fail(ctx, sc, fmt.Sprintf("invalid exclusions: %v", err))
+	}
+	g, err := gate.New(rules, target.RatePerSec)
+	if err != nil {
+		return w.fail(ctx, sc, fmt.Sprintf("invalid rate: %v", err))
+	}
+	mt := module.Target{Domain: target.Domain, Verified: target.Verified()}
+
+	result := store.ScanResult{
+		ScanID: sc.ID, Attempt: sc.Attempt, WorkerID: w.cfg.ID,
+		Failed: make(map[string]string),
+	}
+	for _, id := range sc.Modules {
+		if scanCtx.Err() != nil {
+			break
+		}
+		start := time.Now()
+		findings, err := w.runModule(scanCtx, id, mt, g)
+		var refused *refusedError
+		switch {
+		case errors.As(err, &refused):
+			log.Warn("module refused", "module", id, "reason", refused.err)
+			result.Failed[id] = "refused: " + refused.err.Error()
+			if err := w.store.AppendAudit(scanCtx, store.AuditEntry{
+				Actor: w.cfg.ID, Action: store.ActionModuleRefused, Target: target.Domain,
+				Details: map[string]any{"scan_id": sc.ID, "module": id, "reason": refused.err.Error()},
+			}); err != nil {
+				return fmt.Errorf("audit refusal: %w", err)
+			}
+		case err != nil:
+			log.Warn("module failed", "module", id, "err", err, "duration_ms", time.Since(start).Milliseconds())
+			result.Failed[id] = err.Error()
+		default:
+			// Log counts only: findings are customer data and never logged.
+			log.Info("module done", "module", id, "findings", len(findings), "duration_ms", time.Since(start).Milliseconds())
+			result.Succeeded = append(result.Succeeded, id)
+			result.Findings = append(result.Findings, findings...)
+		}
+	}
+	// Lease lost or shutdown: drop the partial result. Recording it could
+	// mark findings fixed only because their module was interrupted.
+	if cause := context.Cause(scanCtx); cause != nil {
+		return fmt.Errorf("scan interrupted: %w", cause)
+	}
+
+	result.At = w.now()
+	finishCtx, cancelFinish := context.WithTimeout(context.WithoutCancel(ctx), finishTimeout)
+	defer cancelFinish()
+	if err := w.store.FinishScan(finishCtx, result); err != nil {
+		return fmt.Errorf("record results: %w", err)
+	}
+	return nil
+}
+
+// refusedError means a module was not allowed to run (rule 1 or unknown ID).
+type refusedError struct{ err error }
+
+func (e *refusedError) Error() string { return "refused: " + e.err.Error() }
+
+// runModule runs one module with its own timeout and checks its output.
+func (w *Worker) runModule(ctx context.Context, id string, t module.Target, g module.Gate) (findings []finding.Finding, err error) {
+	m, ok := w.modules.Get(id)
+	if !ok {
+		return nil, &refusedError{fmt.Errorf("unknown module %q", id)}
+	}
+	// Security rule 1, checked right before every run.
+	if err := module.CheckAllowed(m.Info(), t); err != nil {
+		return nil, &refusedError{err}
+	}
+
+	// Modules parse untrusted data. A panic in one must fail that module,
+	// not crash the worker and every scan after it.
+	defer func() {
+		if r := recover(); r != nil {
+			findings, err = nil, fmt.Errorf("module %s panicked: %v", id, r)
+		}
+	}()
+
+	mctx, cancel := context.WithTimeout(ctx, w.cfg.ModuleTimeout)
+	defer cancel()
+	findings, err = m.Run(mctx, module.Request{Target: t, Gate: g})
+	if err != nil {
+		return nil, err
+	}
+	if len(findings) > maxFindingsPerModule {
+		return nil, fmt.Errorf("module %s returned %d findings, limit is %d", id, len(findings), maxFindingsPerModule)
+	}
+
+	// Reject the whole output if one finding is wrong: storing part of it
+	// would mark the missing findings fixed.
+	now := w.now()
+	for _, f := range findings {
+		if f.ModuleID != id || f.Target != t.Domain {
+			return nil, fmt.Errorf("module %s returned a finding for module %q, target %q", id, f.ModuleID, f.Target)
+		}
+		stamped := f
+		stamped.FirstSeen, stamped.LastSeen, stamped.Status = now, now, finding.StatusOpen
+		if err := stamped.Validate(); err != nil {
+			return nil, fmt.Errorf("module %s returned an invalid finding %s: %w", id, f.CheckID, err)
+		}
+	}
+	return findings, nil
+}
+
+// heartbeat extends the lease every Lease/3 until stopped. If the lease is
+// lost, it cancels the scan.
+func (w *Worker) heartbeat(ctx context.Context, cancel context.CancelCauseFunc, sc store.Scan, log *slog.Logger) (stop func()) {
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		ticker := time.NewTicker(w.cfg.Lease / 3)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				err := w.store.ExtendLease(ctx, sc.ID, sc.Attempt, w.cfg.Lease)
+				if errors.Is(err, store.ErrLeaseLost) {
+					log.Warn("lease lost, stopping scan")
+					cancel(err)
+					return
+				}
+				if err != nil {
+					// Transient database error: try again at the next tick.
+					// The lease is three ticks long.
+					log.Warn("extend lease", "err", err)
+				}
+			}
+		}
+	})
+	return func() {
+		close(done)
+		wg.Wait()
+	}
+}
+
+// fail records a scan failure and returns it as an error.
+func (w *Worker) fail(ctx context.Context, sc store.Scan, reason string) error {
+	failCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), finishTimeout)
+	defer cancel()
+	if err := w.store.FailScan(failCtx, sc.ID, sc.Attempt, w.cfg.ID, reason); err != nil {
+		return fmt.Errorf("%s (and recording the failure failed: %w)", reason, err)
+	}
+	return errors.New(reason)
+}
