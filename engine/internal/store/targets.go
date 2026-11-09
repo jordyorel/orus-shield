@@ -25,6 +25,12 @@ type Target struct {
 	Exclusions json.RawMessage
 	RatePerSec float64
 	CreatedAt  time.Time
+
+	// Ownership verification (see package ownership). VerifyToken is empty
+	// until one is issued.
+	VerifyToken          string
+	VerifyTokenExpiresAt *time.Time // deadline to publish it; nil once verified
+	VerifyCheckedAt      *time.Time // last successful check of the record
 }
 
 // Verified reports whether ownership of the target has been proven.
@@ -37,11 +43,13 @@ type NewTarget struct {
 	RatePerSec float64         // 0: DefaultRatePerSec
 }
 
-const targetColumns = "id::text, domain, verified_at, exclusions, rate_per_sec, created_at"
+const targetColumns = `id::text, domain, verified_at, exclusions, rate_per_sec, created_at,
+	coalesce(verify_token, ''), verify_token_expires_at, verify_checked_at`
 
 func scanTarget(row pgx.Row) (Target, error) {
 	var t Target
-	err := row.Scan(&t.ID, &t.Domain, &t.VerifiedAt, &t.Exclusions, &t.RatePerSec, &t.CreatedAt)
+	err := row.Scan(&t.ID, &t.Domain, &t.VerifiedAt, &t.Exclusions, &t.RatePerSec, &t.CreatedAt,
+		&t.VerifyToken, &t.VerifyTokenExpiresAt, &t.VerifyCheckedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Target{}, ErrNotFound
 	}
@@ -93,18 +101,4 @@ func (s *Store) TargetByDomain(ctx context.Context, domain string) (Target, erro
 		return Target{}, fmt.Errorf("get target %s: %w", normalized, err)
 	}
 	return t, nil
-}
-
-// SetVerified records that ownership of the target was proven at the given
-// time. Only the ownership verification (roadmap step 5) may call it: it is
-// what allows active modules to run (security rule 1).
-func (s *Store) SetVerified(ctx context.Context, id string, at time.Time) error {
-	tag, err := s.pool.Exec(ctx, "UPDATE targets SET verified_at = $2 WHERE id = $1", id, at)
-	if err != nil {
-		return fmt.Errorf("verify target %s: %w", id, err)
-	}
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("verify target %s: %w", id, ErrNotFound)
-	}
-	return nil
 }

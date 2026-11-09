@@ -6,12 +6,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net/url"
 	"os"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -87,8 +87,12 @@ func TestMigrateIsIdempotent(t *testing.T) {
 	if err := s.pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&n); err != nil {
 		t.Fatal(err)
 	}
-	if n != 1 {
-		t.Errorf("schema_migrations has %d rows, want 1", n)
+	files, err := fs.Glob(migrationFS, "migrations/*.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != len(files) {
+		t.Errorf("schema_migrations has %d rows, want %d (one per migration file)", n, len(files))
 	}
 }
 
@@ -169,29 +173,6 @@ func TestGetTargetNotFound(t *testing.T) {
 	_, err := s.GetTarget(context.Background(), "0190a000-0000-7000-8000-000000000000")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("GetTarget error = %v, want ErrNotFound", err)
-	}
-}
-
-func TestSetVerified(t *testing.T) {
-	s := newTestStore(t)
-	ctx := context.Background()
-	target, err := s.CreateTarget(ctx, NewTarget{Domain: "example.com"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	at := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
-	if err := s.SetVerified(ctx, target.ID, at); err != nil {
-		t.Fatalf("SetVerified: %v", err)
-	}
-	got, err := s.GetTarget(ctx, target.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !got.Verified() || !got.VerifiedAt.Equal(at) {
-		t.Errorf("VerifiedAt = %v, want %v", got.VerifiedAt, at)
-	}
-	if err := s.SetVerified(ctx, "0190a000-0000-7000-8000-000000000000", at); !errors.Is(err, ErrNotFound) {
-		t.Errorf("SetVerified(unknown) = %v, want ErrNotFound", err)
 	}
 }
 
