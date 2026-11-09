@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // validFinding returns a complete finding that passes Validate.
@@ -213,5 +214,19 @@ func TestJSONRoundTrip(t *testing.T) {
 	}
 	if !reflect.DeepEqual(in, out) {
 		t.Errorf("round trip mismatch:\n in: %+v\nout: %+v", in, out)
+	}
+}
+
+func TestTruncateEvidence(t *testing.T) {
+	long := strings.Repeat("é", MaxEvidenceBytes) // 2 bytes per rune
+	got := TruncateEvidence(long)
+	if len(got) > MaxEvidenceBytes {
+		t.Errorf("len(truncate) = %d, want <= %d", len(got), MaxEvidenceBytes)
+	}
+	if !strings.HasPrefix(long, got) || !utf8.ValidString(got) {
+		t.Error("truncate cut a multi-byte character")
+	}
+	if TruncateEvidence("short") != "short" {
+		t.Error("truncate changed a short string")
 	}
 }

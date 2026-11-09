@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
@@ -69,7 +68,7 @@ func (m *Module) Info() module.Info {
 // fails the whole run: reporting "no DMARC record" because a server timed out
 // would be a false positive, and false positives destroy customer trust.
 func (m *Module) Run(ctx context.Context, req module.Request) ([]finding.Finding, error) {
-	domain, err := normalizeDomain(req.Target.Domain)
+	domain, err := module.NormalizeDomain(req.Target.Domain)
 	if err != nil {
 		return nil, fmt.Errorf("email: %w", err)
 	}
@@ -151,47 +150,10 @@ func (i issue) finding(target string) finding.Finding {
 		Severity:      i.severity,
 		Title:         i.title,
 		Description:   i.description,
-		Evidence:      truncate(i.evidence),
+		Evidence:      finding.TruncateEvidence(i.evidence),
 		Remediation:   i.remediation,
 		References:    i.references,
 	}
-}
-
-// truncate bounds evidence to finding.MaxEvidenceBytes without cutting a
-// multi-byte UTF-8 character in half.
-func truncate(s string) string {
-	if len(s) <= finding.MaxEvidenceBytes {
-		return s
-	}
-	cut := finding.MaxEvidenceBytes
-	for cut > 0 && !utf8.RuneStart(s[cut]) {
-		cut--
-	}
-	return s[:cut]
-}
-
-// normalizeDomain lowercases d, removes a trailing dot, and rejects anything
-// that is not a plausible DNS name. The domain is customer input that ends up
-// in DNS queries, so it is checked rather than trusted.
-func normalizeDomain(d string) (string, error) {
-	d = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(d)), ".")
-	if d == "" {
-		return "", errors.New("empty domain")
-	}
-	if len(d) > 253 {
-		return "", fmt.Errorf("domain %q: longer than 253 characters", d)
-	}
-	for _, label := range strings.Split(d, ".") {
-		if label == "" || len(label) > 63 {
-			return "", fmt.Errorf("domain %q: invalid label %q", d, label)
-		}
-		for _, r := range label {
-			if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
-				return "", fmt.Errorf("domain %q: invalid character %q", d, r)
-			}
-		}
-	}
-	return d, nil
 }
 
 // parseTags parses "name=value; name=value" lists, the syntax shared by

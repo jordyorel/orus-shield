@@ -3,6 +3,7 @@ package module
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
@@ -122,6 +123,32 @@ func TestRegistryGetAndAll(t *testing.T) {
 	for i, m := range all {
 		if m.Info().ID != want[i] {
 			t.Errorf("All()[%d] = %q, want %q (sorted by ID)", i, m.Info().ID, want[i])
+		}
+	}
+}
+
+func TestNormalizeDomain(t *testing.T) {
+	tests := []struct {
+		in      string
+		want    string
+		wantErr bool
+	}{
+		{"example.com", "example.com", false},
+		{" Example.COM. ", "example.com", false},
+		{"", "", true},
+		{"example..com", "", true},
+		{"exa mple.com", "", true},
+		{"https://example.com", "", true},
+		{strings.Repeat("a.", 127) + "com", "", true},
+	}
+	for _, tt := range tests {
+		got, err := NormalizeDomain(tt.in)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("NormalizeDomain(%q) error = %v, wantErr %v", tt.in, err, tt.wantErr)
+			continue
+		}
+		if got != tt.want {
+			t.Errorf("NormalizeDomain(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"testing"
 
 	"github.com/jordyorel/orus-shield/engine/internal/module"
@@ -23,6 +24,11 @@ func (s *stubResolver) LookupTXT(ctx context.Context, name string) ([]string, er
 func (s *stubResolver) LookupMX(ctx context.Context, name string) ([]*net.MX, error) {
 	s.calls = append(s.calls, "MX "+name)
 	return []*net.MX{{Host: "mx.example.com.", Pref: 10}}, nil
+}
+
+func (s *stubResolver) LookupIP(ctx context.Context, host string) ([]netip.Addr, error) {
+	s.calls = append(s.calls, "IP "+host)
+	return []netip.Addr{netip.MustParseAddr("192.0.2.1")}, nil
 }
 
 // stubGate records destinations and can refuse every request.
@@ -50,8 +56,11 @@ func TestGatedCallsGateBeforeEveryLookup(t *testing.T) {
 	if _, err := g.LookupMX(context.Background(), "example.org"); err != nil {
 		t.Fatalf("LookupMX: %v", err)
 	}
+	if _, err := g.LookupIP(context.Background(), "www.example.net"); err != nil {
+		t.Fatalf("LookupIP: %v", err)
+	}
 
-	want := []module.Destination{{Host: "example.com"}, {Host: "example.org"}}
+	want := []module.Destination{{Host: "example.com"}, {Host: "example.org"}, {Host: "www.example.net"}}
 	if len(gate.allowed) != len(want) {
 		t.Fatalf("gate saw %d requests, want %d", len(gate.allowed), len(want))
 	}
@@ -60,8 +69,8 @@ func TestGatedCallsGateBeforeEveryLookup(t *testing.T) {
 			t.Errorf("gate request %d = %+v, want %+v", i, gate.allowed[i], want[i])
 		}
 	}
-	if len(inner.calls) != 2 {
-		t.Errorf("inner resolver saw %d lookups, want 2", len(inner.calls))
+	if len(inner.calls) != 3 {
+		t.Errorf("inner resolver saw %d lookups, want 3", len(inner.calls))
 	}
 }
 
@@ -72,8 +81,9 @@ func TestGatedRefusalBlocksLookup(t *testing.T) {
 
 	_, errTXT := g.LookupTXT(context.Background(), "example.com")
 	_, errMX := g.LookupMX(context.Background(), "example.com")
+	_, errIP := g.LookupIP(context.Background(), "example.com")
 
-	for _, err := range []error{errTXT, errMX} {
+	for _, err := range []error{errTXT, errMX, errIP} {
 		if !errors.Is(err, errExcluded) {
 			t.Errorf("lookup error = %v, want it to wrap the gate error", err)
 		}

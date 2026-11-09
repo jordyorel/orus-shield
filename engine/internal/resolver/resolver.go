@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/module"
@@ -20,6 +21,7 @@ import (
 type Resolver interface {
 	LookupTXT(ctx context.Context, name string) ([]string, error)
 	LookupMX(ctx context.Context, name string) ([]*net.MX, error)
+	LookupIP(ctx context.Context, host string) ([]netip.Addr, error)
 }
 
 var (
@@ -75,6 +77,21 @@ func (s *System) LookupMX(ctx context.Context, name string) ([]*net.MX, error) {
 	return limit(records), nil
 }
 
+// LookupIP returns the IPv4 and IPv6 addresses of host. IPv4 addresses are
+// returned in their 4-byte form, never as IPv4-mapped IPv6.
+func (s *System) LookupIP(ctx context.Context, host string) ([]netip.Addr, error) {
+	ctx, cancel := context.WithTimeout(ctx, s.timeout)
+	defer cancel()
+	addrs, err := s.r.LookupNetIP(ctx, "ip", host)
+	if err != nil {
+		return nil, wrapError(host, err)
+	}
+	for i := range addrs {
+		addrs[i] = addrs[i].Unmap()
+	}
+	return limit(addrs), nil
+}
+
 // Gated wraps a Resolver and calls Gate before every lookup.
 type Gated struct {
 	Gate  module.Gate
@@ -95,6 +112,14 @@ func (g Gated) LookupMX(ctx context.Context, name string) ([]*net.MX, error) {
 		return nil, err
 	}
 	return g.Inner.LookupMX(ctx, name)
+}
+
+// LookupIP asks the gate, then looks up the addresses of host.
+func (g Gated) LookupIP(ctx context.Context, host string) ([]netip.Addr, error) {
+	if err := g.allow(ctx, host); err != nil {
+		return nil, err
+	}
+	return g.Inner.LookupIP(ctx, host)
 }
 
 func (g Gated) allow(ctx context.Context, name string) error {

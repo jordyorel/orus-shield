@@ -10,11 +10,11 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"net/netip"
 	"slices"
 	"strings"
 	"testing"
 	"time"
-	"unicode/utf8"
 
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
@@ -52,6 +52,12 @@ func (f *fakeDNS) LookupMX(ctx context.Context, name string) ([]*net.MX, error) 
 		return nil, fmt.Errorf("lookup %s: %w", name, resolver.ErrNotFound)
 	}
 	return records, nil
+}
+
+// LookupIP is part of resolver.Resolver; the email module never calls it.
+func (f *fakeDNS) LookupIP(ctx context.Context, host string) ([]netip.Addr, error) {
+	f.calls = append(f.calls, host)
+	return nil, fmt.Errorf("lookup %s: %w", host, resolver.ErrNotFound)
 }
 
 // countingGate allows everything (or nothing) and counts requests.
@@ -433,45 +439,5 @@ func TestFindingsAreValid(t *testing.T) {
 		if f.ModuleID != ID || f.Target != "example.com" {
 			t.Errorf("finding %s: module %q, target %q", f.CheckID, f.ModuleID, f.Target)
 		}
-	}
-}
-
-func TestNormalizeDomain(t *testing.T) {
-	tests := []struct {
-		in      string
-		want    string
-		wantErr bool
-	}{
-		{"example.com", "example.com", false},
-		{" Example.COM. ", "example.com", false},
-		{"", "", true},
-		{"example..com", "", true},
-		{"exa mple.com", "", true},
-		{"https://example.com", "", true},
-		{strings.Repeat("a.", 127) + "com", "", true},
-	}
-	for _, tt := range tests {
-		got, err := normalizeDomain(tt.in)
-		if (err != nil) != tt.wantErr {
-			t.Errorf("normalizeDomain(%q) error = %v, wantErr %v", tt.in, err, tt.wantErr)
-			continue
-		}
-		if got != tt.want {
-			t.Errorf("normalizeDomain(%q) = %q, want %q", tt.in, got, tt.want)
-		}
-	}
-}
-
-func TestTruncate(t *testing.T) {
-	long := strings.Repeat("é", finding.MaxEvidenceBytes) // 2 bytes per rune
-	got := truncate(long)
-	if len(got) > finding.MaxEvidenceBytes {
-		t.Errorf("len(truncate) = %d, want <= %d", len(got), finding.MaxEvidenceBytes)
-	}
-	if !strings.HasPrefix(long, got) || !utf8.ValidString(got) {
-		t.Error("truncate cut a multi-byte character")
-	}
-	if truncate("short") != "short" {
-		t.Error("truncate changed a short string")
 	}
 }

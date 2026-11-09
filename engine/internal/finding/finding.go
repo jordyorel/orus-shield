@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // SchemaVersion is the version of the JSON shape produced by this package.
@@ -180,6 +181,19 @@ func (f Finding) Validate() error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// TruncateEvidence bounds s to MaxEvidenceBytes without cutting a multi-byte
+// UTF-8 character in half. Modules call it on raw data from the target.
+func TruncateEvidence(s string) string {
+	if len(s) <= MaxEvidenceBytes {
+		return s
+	}
+	cut := MaxEvidenceBytes
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut]
 }
 
 // isSlug reports whether s is a non-empty string of a-z, 0-9 and '-'.

@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
+	"strings"
 
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
 )
@@ -46,10 +48,16 @@ type Target struct {
 }
 
 // Destination is one network endpoint a module is about to contact.
+//
+// For connections, IP is the exact address that will be contacted: the name
+// is resolved first, the gate approves that IP (so IP exclusions work), and
+// the connection goes to that IP. The name cannot point somewhere else between
+// the check and the connection (DNS rebinding).
 type Destination struct {
 	Host string
-	Port int    // 0 when not relevant (e.g. a DNS lookup through the resolver)
-	Path string // empty when not an HTTP request
+	IP   netip.Addr // zero for name-only requests (e.g. DNS lookups)
+	Port int        // 0 when not relevant (e.g. a DNS lookup through the resolver)
+	Path string     // empty when not an HTTP request
 }
 
 // Gate must be called before every network request a module makes.
@@ -86,6 +94,10 @@ var (
 	ErrNotVerified = errors.New("active module requires a verified target")
 	// ErrInvalidKind is returned for a module that declares an unknown kind.
 	ErrInvalidKind = errors.New("unknown module kind")
+	// ErrExcluded must be wrapped by Gate implementations when a destination
+	// matches a customer exclusion. Modules skip that destination and carry
+	// on; any other gate error (rate limiter cancelled...) stops the run.
+	ErrExcluded = errors.New("destination excluded by customer")
 )
 
 // CheckAllowed enforces security rule 1: no active scan without verified
@@ -105,4 +117,28 @@ func CheckAllowed(info Info, t Target) error {
 	default:
 		return fmt.Errorf("module %q: kind %q: %w", info.ID, info.Kind, ErrInvalidKind)
 	}
+}
+
+// NormalizeDomain lowercases d, removes a trailing dot, and rejects anything
+// that is not a plausible DNS name. The domain is customer input that ends up
+// in DNS queries and connections, so modules check it rather than trust it.
+func NormalizeDomain(d string) (string, error) {
+	d = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(d)), ".")
+	if d == "" {
+		return "", errors.New("empty domain")
+	}
+	if len(d) > 253 {
+		return "", fmt.Errorf("domain %q: longer than 253 characters", d)
+	}
+	for _, label := range strings.Split(d, ".") {
+		if label == "" || len(label) > 63 {
+			return "", fmt.Errorf("domain %q: invalid label %q", d, label)
+		}
+		for _, r := range label {
+			if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
+				return "", fmt.Errorf("domain %q: invalid character %q", d, r)
+			}
+		}
+	}
+	return d, nil
 }
