@@ -20,6 +20,7 @@ type fakeStore struct {
 	enqueued []string // "targetID modules requester"
 	findings []finding.Finding
 	audit    []store.AuditEntry
+	verifier *fakeVerifier // the verifier opened with this organization
 }
 
 func (f *fakeStore) CreateTarget(ctx context.Context, nt store.NewTarget) (store.Target, error) {
@@ -74,7 +75,31 @@ func (f *fakeVerifier) Verify(ctx context.Context, targetID, actor string) error
 	return f.verifyErr
 }
 
+// fakeAdmin manages organizations in memory.
+type fakeAdmin struct {
+	created []string // "name actor"
+}
+
+func (f *fakeAdmin) CreateOrganization(ctx context.Context, name, actor string) (store.Organization, error) {
+	f.created = append(f.created, name+" "+actor)
+	return store.Organization{ID: "o-2", Name: name}, nil
+}
+
+func (f *fakeAdmin) ListOrganizations(ctx context.Context) ([]store.Organization, error) {
+	return []store.Organization{{ID: "o-1", Name: "Default", CreatedAt: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC)}}, nil
+}
+
+// opened records which organizations commands asked for.
+type opened struct{ refs []string }
+
 func newCLI() (cli, *fakeStore, *bytes.Buffer) {
+	c, st, _, out := newCLIWithOrgs()
+	return c, st, out
+}
+
+// newCLIWithOrgs knows two organizations: "Default" (o-1) and "Acme" (o-2).
+// Only Default has the example.com target.
+func newCLIWithOrgs() (cli, *fakeStore, *opened, *bytes.Buffer) {
 	st := &fakeStore{targets: map[string]store.Target{
 		"example.com": {ID: "t-1", Domain: "example.com", RatePerSec: 5, Exclusions: json.RawMessage("{}")},
 	}}
@@ -84,7 +109,23 @@ func newCLI() (cli, *fakeStore, *bytes.Buffer) {
 		Domain: "example.com", RecordName: "_orus-verify.example.com",
 		RecordValue: "orus-verify=abc123", ExpiresAt: &expires,
 	}}
-	return cli{st: st, verifier: v, out: out, modules: []string{"email", "tls"}, defaultActor: "cli:jordy"}, st, out
+	st.verifier = v
+	op := &opened{}
+	open := func(ctx context.Context, ref string) (store.Organization, OrgStore, Verifier, error) {
+		op.refs = append(op.refs, ref)
+		switch ref {
+		case "Default", "o-1":
+			return store.Organization{ID: "o-1", Name: "Default"}, st, v, nil
+		case "Acme", "o-2":
+			return store.Organization{ID: "o-2", Name: "Acme"}, &fakeStore{}, v, nil
+		}
+		return store.Organization{}, nil, nil, store.ErrNotFound
+	}
+	c := cli{
+		admin: &fakeAdmin{}, openOrg: open, out: out, modules: []string{"email", "tls"},
+		defaultActor: "cli:jordy", defaultOrg: "Default",
+	}
+	return c, st, op, out
 }
 
 func TestUsageErrors(t *testing.T) {
@@ -243,7 +284,7 @@ func TestDefaultActor(t *testing.T) {
 }
 
 func TestVerifyToken(t *testing.T) {
-	c, _, out := newCLI()
+	c, st, out := newCLI()
 	if err := c.run(context.Background(), []string{"target", "verify-token", "example.com"}); err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -252,25 +293,25 @@ func TestVerifyToken(t *testing.T) {
 			t.Errorf("output does not contain %q:\n%s", want, out.String())
 		}
 	}
-	if calls := c.verifier.(*fakeVerifier).calls; len(calls) != 1 || calls[0] != "instructions t-1 cli:jordy" {
+	if calls := st.verifier.calls; len(calls) != 1 || calls[0] != "instructions t-1 cli:jordy" {
 		t.Errorf("verifier calls = %v", calls)
 	}
 }
 
 func TestVerify(t *testing.T) {
-	c, _, out := newCLI()
+	c, st, out := newCLI()
 	if err := c.run(context.Background(), []string{"target", "verify", "-as", "alice", "example.com"}); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if !strings.Contains(out.String(), "is verified") {
 		t.Errorf("output = %q", out.String())
 	}
-	if calls := c.verifier.(*fakeVerifier).calls; len(calls) != 1 || calls[0] != "verify t-1 alice" {
+	if calls := st.verifier.calls; len(calls) != 1 || calls[0] != "verify t-1 alice" {
 		t.Errorf("verifier calls = %v", calls)
 	}
 
-	c, _, out = newCLI()
-	c.verifier.(*fakeVerifier).verifyErr = ownership.ErrRecordMissing
+	c, st, out = newCLI()
+	st.verifier.verifyErr = ownership.ErrRecordMissing
 	if err := c.run(context.Background(), []string{"target", "verify", "example.com"}); !errors.Is(err, ownership.ErrRecordMissing) {
 		t.Errorf("run = %v, want ErrRecordMissing", err)
 	}
@@ -289,6 +330,76 @@ func TestTargetShowVerification(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "token pending until 2026-11-16") {
+		t.Errorf("output = %q", out.String())
+	}
+}
+
+func TestOrgAdd(t *testing.T) {
+	c, _, _, out := newCLIWithOrgs()
+	if err := c.run(context.Background(), []string{"org", "add", "-as", "alice", "Acme", "SARL"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.admin.(*fakeAdmin).created; len(got) != 1 || got[0] != "Acme SARL alice" {
+		t.Errorf("created = %v", got)
+	}
+	if !strings.Contains(out.String(), `"Acme SARL" created (id o-2)`) {
+		t.Errorf("output = %q", out.String())
+	}
+	for _, args := range [][]string{{"org"}, {"org", "add"}, {"org", "remove", "x"}} {
+		if err := c.run(context.Background(), args); !errors.Is(err, errUsage) {
+			t.Errorf("run(%v) = %v, want errUsage", args, err)
+		}
+	}
+}
+
+func TestOrgList(t *testing.T) {
+	c, _, _, out := newCLIWithOrgs()
+	if err := c.run(context.Background(), []string{"org", "list"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "o-1") || !strings.Contains(out.String(), "Default") {
+		t.Errorf("output = %q", out.String())
+	}
+}
+
+// Every target command works in the organization given by -org, else the
+// default one, and never sees another organization's targets.
+func TestOrgFlag(t *testing.T) {
+	ctx := context.Background()
+	commands := [][]string{
+		{"target", "show"}, {"target", "verify-token"}, {"target", "verify"},
+		{"scan"}, {"findings"},
+	}
+	for _, cmd := range commands {
+		name := strings.Join(cmd, " ")
+		t.Run(name, func(t *testing.T) {
+			c, _, op, _ := newCLIWithOrgs()
+			args := append(append([]string{}, cmd...), "example.com")
+			if err := c.run(ctx, args); err != nil {
+				t.Fatalf("in the default organization: %v", err)
+			}
+			args = append(append(append([]string{}, cmd...), "-org", "Acme"), "example.com")
+			if err := c.run(ctx, args); !errors.Is(err, store.ErrNotFound) {
+				t.Errorf("in Acme, which has no such target: %v, want ErrNotFound", err)
+			}
+			args = append(append(append([]string{}, cmd...), "-org", "Nobody"), "example.com")
+			if err := c.run(ctx, args); !errors.Is(err, store.ErrNotFound) {
+				t.Errorf("in an unknown organization: %v, want ErrNotFound", err)
+			}
+			if want := []string{"Default", "Acme", "Nobody"}; strings.Join(op.refs, ",") != strings.Join(want, ",") {
+				t.Errorf("organizations opened = %v, want %v", op.refs, want)
+			}
+		})
+	}
+}
+
+func TestVerifyTokenHintNamesNonDefaultOrg(t *testing.T) {
+	c, _, _, out := newCLIWithOrgs()
+	c.defaultOrg = "Acme" // as if ORUS_ORG=Acme; example.com is in Default
+	if err := c.run(context.Background(), []string{"target", "verify-token", "-org", "Default", "example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "orusctl target verify -org Default example.com") {
 		t.Errorf("output = %q", out.String())
 	}
 }

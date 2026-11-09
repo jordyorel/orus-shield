@@ -25,9 +25,12 @@ import (
 // ErrNotFound is returned when a requested row does not exist.
 var ErrNotFound = errors.New("not found")
 
-// Store is the PostgreSQL storage. It is safe for concurrent use.
+// Store is the PostgreSQL storage across every organization. Only the
+// worker (and administration commands) should hold one: API code works with
+// an *Org from Store.Org instead (see "Tenant isolation" in org.go). It is
+// safe for concurrent use.
 type Store struct {
-	pool *pgxpool.Pool
+	scope // orgID empty: every organization
 }
 
 // querier is what pgxpool.Pool and pgx.Tx have in common, so helpers can run
@@ -56,7 +59,7 @@ func Open(ctx context.Context, url string) (*Store, error) {
 		pool.Close()
 		return nil, fmt.Errorf("connect to database: %w", err)
 	}
-	return &Store{pool: pool}, nil
+	return &Store{scope{pool: pool}}, nil
 }
 
 // Close releases all connections.
@@ -76,6 +79,12 @@ const migrationLockID = 0x6f727573
 // file name order, in a single transaction. PostgreSQL DDL is transactional:
 // if one migration fails, none is applied.
 func (s *Store) Migrate(ctx context.Context) error {
+	return s.migrate(ctx, "")
+}
+
+// migrate applies migrations up to and including version last ("": all).
+// Tests use last to build a database as it was before a migration.
+func (s *Store) migrate(ctx context.Context, last string) error {
 	files, err := fs.Glob(migrationFS, "migrations/*.sql")
 	if err != nil {
 		return fmt.Errorf("list migrations: %w", err)
@@ -113,6 +122,9 @@ func (s *Store) Migrate(ctx context.Context) error {
 
 	for _, file := range files {
 		version := strings.TrimSuffix(path.Base(file), ".sql")
+		if last != "" && version > last {
+			break
+		}
 		if applied[version] {
 			continue
 		}

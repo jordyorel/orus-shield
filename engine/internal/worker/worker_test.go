@@ -142,14 +142,14 @@ func setup(t *testing.T, verified bool, exclusions string, mods ...*fakeModule) 
 
 func setupWithModules(t *testing.T, verified bool, exclusions string, reg *module.Registry, ids []string) (*Worker, *fakeStore) {
 	t.Helper()
-	target := store.Target{ID: "t1", Domain: "example.com", RatePerSec: 100, Exclusions: json.RawMessage(exclusions)}
+	target := store.Target{ID: "t1", OrgID: "o1", Domain: "example.com", RatePerSec: 100, Exclusions: json.RawMessage(exclusions)}
 	if verified {
 		at := time.Now()
 		target.VerifiedAt = &at
 	}
 	st := &fakeStore{
 		targets: map[string]store.Target{"t1": target},
-		queue:   []store.Scan{{ID: "s1", TargetID: "t1", Domain: "example.com", Modules: ids}},
+		queue:   []store.Scan{{ID: "s1", OrgID: "o1", TargetID: "t1", Domain: "example.com", Modules: ids}},
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	w := New(st, reg, trustingRechecker{}, Config{ID: "worker:test", ModuleTimeout: time.Second, Lease: time.Minute}, log)
@@ -250,8 +250,8 @@ func TestActiveModuleRefusedOnUnverifiedTarget(t *testing.T) {
 	if !strings.Contains(r.Failed["ports"], "verified") {
 		t.Errorf("failed = %v, want ports refused for verification", r.Failed)
 	}
-	if len(st.audit) != 1 || st.audit[0].Action != store.ActionModuleRefused {
-		t.Errorf("audit = %+v, want one module.refused entry", st.audit)
+	if len(st.audit) != 1 || st.audit[0].Action != store.ActionModuleRefused || st.audit[0].OrgID != "o1" {
+		t.Errorf("audit = %+v, want one module.refused entry for the target's organization", st.audit)
 	}
 }
 
@@ -541,7 +541,7 @@ func TestActiveModulesGetIPGate(t *testing.T) {
 	}
 	var audited bool
 	for _, e := range st.audit {
-		audited = audited || e.Action == store.ActionIPNotVerified
+		audited = audited || (e.Action == store.ActionIPNotVerified && e.OrgID == "o1")
 	}
 	if !audited {
 		t.Errorf("audit = %+v, want an ip.not_verified entry", st.audit)

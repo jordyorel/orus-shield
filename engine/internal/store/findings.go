@@ -56,13 +56,13 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 	}
 	defer tx.Rollback(ctx)
 
-	var targetID, domain string
+	var orgID, targetID, domain string
 	err = tx.QueryRow(ctx, `
 		UPDATE scans s SET status = 'done', error = nullif($3, ''), locked_until = NULL, finished_at = now()
 		FROM targets t
 		WHERE t.id = s.target_id AND s.id = $1 AND s.attempts = $2 AND s.status = 'running'
-		RETURNING s.target_id::text, t.domain`,
-		r.ScanID, r.Attempt, truncateRunes(failureSummary(r.Failed), maxErrorChars)).Scan(&targetID, &domain)
+		RETURNING s.org_id::text, s.target_id::text, t.domain`,
+		r.ScanID, r.Attempt, truncateRunes(failureSummary(r.Failed), maxErrorChars)).Scan(&orgID, &targetID, &domain)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("finish scan %s: %w", r.ScanID, ErrLeaseLost)
 	}
@@ -86,8 +86,8 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 		}
 		var inserted bool
 		err = tx.QueryRow(ctx, `
-			INSERT INTO findings AS f (target_id, id, module_id, check_id, severity, status, first_seen, last_seen, data)
-			VALUES ($1, $2, $3, $4, $5, 'open', $6, $6, $7)
+			INSERT INTO findings AS f (org_id, target_id, id, module_id, check_id, severity, status, first_seen, last_seen, data)
+			VALUES ($8, $1, $2, $3, $4, $5, 'open', $6, $6, $7)
 			ON CONFLICT (target_id, id) DO UPDATE SET
 				severity  = EXCLUDED.severity,
 				last_seen = EXCLUDED.last_seen,
@@ -98,7 +98,7 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 					'first_seen', f.first_seen,
 					'status', CASE WHEN f.status = 'accepted_risk' THEN 'accepted_risk' ELSE 'open' END)
 			RETURNING (xmax = 0)`, // xmax = 0 only for a freshly inserted row
-			targetID, f.ID, f.ModuleID, f.CheckID, string(f.Severity), at, data).Scan(&inserted)
+			targetID, f.ID, f.ModuleID, f.CheckID, string(f.Severity), at, data, orgID).Scan(&inserted)
 		if err != nil {
 			return fmt.Errorf("finish scan %s: save finding %s: %w", r.ScanID, f.ID, err)
 		}
@@ -124,7 +124,7 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 	succeeded := append([]string{}, r.Succeeded...)
 	failed := append([]string{}, slices.Sorted(maps.Keys(r.Failed))...)
 	if err := appendAudit(ctx, tx, AuditEntry{
-		Actor: r.WorkerID, Action: ActionScanFinished, Target: domain,
+		OrgID: orgID, Actor: r.WorkerID, Action: ActionScanFinished, Target: domain,
 		Details: map[string]any{
 			"scan_id": r.ScanID, "attempt": r.Attempt,
 			"succeeded": succeeded, "failed": failed,
@@ -148,12 +148,21 @@ func failureSummary(failed map[string]string) string {
 	return strings.Join(parts, "; ")
 }
 
-// ListFindings returns every finding of a target, most severe first.
-func (s *Store) ListFindings(ctx context.Context, targetID string) ([]finding.Finding, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT data FROM findings WHERE target_id = $1
+// ListFindings returns every finding of one of the organization's targets,
+// most severe first. A target of another organization has no findings.
+func (o *Org) ListFindings(ctx context.Context, targetID string) ([]finding.Finding, error) {
+	if !isUUID(targetID) {
+		return nil, nil
+	}
+	tx, err := o.begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list findings: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	rows, err := tx.Query(ctx, `
+		SELECT data FROM findings WHERE org_id = $1 AND target_id = $2
 		ORDER BY array_position(ARRAY['critical','high','medium','low','info'], severity), first_seen, id`,
-		targetID)
+		o.orgID, targetID)
 	if err != nil {
 		return nil, fmt.Errorf("list findings: %w", err)
 	}
@@ -169,16 +178,19 @@ func (s *Store) ListFindings(ctx context.Context, targetID string) ([]finding.Fi
 	if err != nil {
 		return nil, fmt.Errorf("list findings: %w", err)
 	}
-	return findings, nil
+	return findings, tx.Commit(ctx)
 }
 
 // SetFindingStatus records a customer decision: accepted_risk, or open to
 // undo it. "fixed" is set by scans only, never by hand.
-func (s *Store) SetFindingStatus(ctx context.Context, targetID, findingID string, status finding.Status, actor string) error {
+func (o *Org) SetFindingStatus(ctx context.Context, targetID, findingID string, status finding.Status, actor string) error {
 	if status != finding.StatusAcceptedRisk && status != finding.StatusOpen {
 		return fmt.Errorf("set finding status: %q cannot be set manually", status)
 	}
-	tx, err := s.pool.Begin(ctx)
+	if !isUUID(targetID) {
+		return fmt.Errorf("set finding status %s: %w", findingID, ErrNotFound)
+	}
+	tx, err := o.begin(ctx)
 	if err != nil {
 		return fmt.Errorf("set finding status: %w", err)
 	}
@@ -186,12 +198,12 @@ func (s *Store) SetFindingStatus(ctx context.Context, targetID, findingID string
 
 	var domain, previous string
 	err = tx.QueryRow(ctx, `
-		WITH old AS (SELECT status FROM findings WHERE target_id = $1 AND id = $2 FOR UPDATE)
+		WITH old AS (SELECT status FROM findings WHERE org_id = $4 AND target_id = $1 AND id = $2 FOR UPDATE)
 		UPDATE findings f SET status = $3, data = f.data || jsonb_build_object('status', $3::text)
 		FROM targets t, old
-		WHERE t.id = f.target_id AND f.target_id = $1 AND f.id = $2
+		WHERE t.id = f.target_id AND f.org_id = $4 AND f.target_id = $1 AND f.id = $2
 		RETURNING t.domain, old.status`,
-		targetID, findingID, string(status)).Scan(&domain, &previous)
+		targetID, findingID, string(status), o.orgID).Scan(&domain, &previous)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("set finding status %s: %w", findingID, ErrNotFound)
 	}
@@ -199,7 +211,7 @@ func (s *Store) SetFindingStatus(ctx context.Context, targetID, findingID string
 		return fmt.Errorf("set finding status %s: %w", findingID, err)
 	}
 	if err := appendAudit(ctx, tx, AuditEntry{
-		Actor: actor, Action: ActionFindingStatus, Target: domain,
+		OrgID: o.orgID, Actor: actor, Action: ActionFindingStatus, Target: domain,
 		Details: map[string]any{"finding_id": findingID, "from": previous, "to": status},
 	}); err != nil {
 		return err

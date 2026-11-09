@@ -21,6 +21,16 @@ import (
 // is not set, so "go test ./..." works without a database.
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
+	s := newEmptyTestStore(t)
+	if err := s.Migrate(context.Background()); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	return s
+}
+
+// newEmptyTestStore is newTestStore without migrations.
+func newEmptyTestStore(t *testing.T) *Store {
+	t.Helper()
 	base := os.Getenv("ORUS_TEST_DATABASE_URL")
 	if base == "" {
 		// In CI a missing database is a configuration error: skipping would
@@ -66,10 +76,22 @@ func newTestStore(t *testing.T) *Store {
 		}
 		_ = admin.Close(ctx)
 	})
-	if err := s.Migrate(ctx); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
 	return s
+}
+
+// defaultOrg returns the handle of the "Default" organization, which
+// migration 0003 creates in every database.
+func defaultOrg(t *testing.T, s *Store) *Org {
+	t.Helper()
+	org, err := s.FindOrganization(context.Background(), "Default")
+	if err != nil {
+		t.Fatalf("find Default organization: %v", err)
+	}
+	h, err := s.Org(org.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return h
 }
 
 func TestOpenHidesPassword(t *testing.T) {
@@ -121,7 +143,7 @@ func TestCreateAndGetTarget(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	created, err := s.CreateTarget(ctx, NewTarget{Domain: " Example.COM. "})
+	created, err := defaultOrg(t, s).CreateTarget(ctx, NewTarget{Domain: " Example.COM. "})
 	if err != nil {
 		t.Fatalf("CreateTarget: %v", err)
 	}
@@ -142,7 +164,7 @@ func TestCreateAndGetTarget(t *testing.T) {
 	if got.ID != created.ID || got.Domain != created.Domain {
 		t.Errorf("GetTarget = %+v, want %+v", got, created)
 	}
-	byDomain, err := s.TargetByDomain(ctx, "EXAMPLE.com")
+	byDomain, err := defaultOrg(t, s).TargetByDomain(ctx, "EXAMPLE.com")
 	if err != nil || byDomain.ID != created.ID {
 		t.Errorf("TargetByDomain = %+v, %v", byDomain, err)
 	}
@@ -151,7 +173,7 @@ func TestCreateAndGetTarget(t *testing.T) {
 func TestCreateTargetRejects(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
-	if _, err := s.CreateTarget(ctx, NewTarget{Domain: "example.com"}); err != nil {
+	if _, err := defaultOrg(t, s).CreateTarget(ctx, NewTarget{Domain: "example.com"}); err != nil {
 		t.Fatal(err)
 	}
 	tests := []struct {
@@ -166,7 +188,7 @@ func TestCreateTargetRejects(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := s.CreateTarget(ctx, tt.nt); err == nil {
+			if _, err := defaultOrg(t, s).CreateTarget(ctx, tt.nt); err == nil {
 				t.Error("CreateTarget() = nil, want error")
 			}
 		})
@@ -186,11 +208,11 @@ func TestAuditLogIsAppendOnly(t *testing.T) {
 	ctx := context.Background()
 	entry := AuditEntry{Actor: "jordy", Action: ActionScanRequested, Target: "example.com",
 		Details: map[string]any{"modules": []string{"email"}}}
-	if err := s.AppendAudit(ctx, entry); err != nil {
+	if err := defaultOrg(t, s).AppendAudit(ctx, entry); err != nil {
 		t.Fatalf("AppendAudit: %v", err)
 	}
 
-	entries, err := s.AuditLog(ctx, "example.com")
+	entries, err := defaultOrg(t, s).AuditLog(ctx, "example.com")
 	if err != nil {
 		t.Fatalf("AuditLog: %v", err)
 	}

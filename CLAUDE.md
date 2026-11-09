@@ -5,11 +5,12 @@ company exposes on the internet, checks it, scores it, and turns each finding in
 prioritized, plain-language action plan. The market is international, with particular
 attention to French-speaking Africa (local payment methods, French-first reports).
 
-Status: roadmap steps 1 to 5 are done (finding schema, Module interface, gated DNS
+Status: roadmap steps 1 to 6 are done (finding schema, Module interface, gated DNS
 resolver and dialer, email and TLS modules, PostgreSQL storage and queue, gate, worker,
 orusctl, ownership verification, per-IP ownership and the ports module). The ports module
-still needs a real-world test on a server Jordy owns. Next: step 7, following the order in
-`docs/ui-adaptation.md` (organizations first).
+still needs a real-world test on a server Jordy owns. Step 7 follows the order in
+`docs/ui-adaptation.md`: organizations (multi-tenant scoping, `store.Org` + PostgreSQL
+row-level security) are done; next is the findings lifecycle (`fixed_at`, status history).
 
 ## How to work on this repo
 
@@ -57,7 +58,8 @@ engine/
   internal/dialer/   TCP connections for modules, to gate-approved IPs only
   internal/gate/     per-scan module.Gate: customer exclusions + rate limiter
   internal/ownership/ DNS TXT ownership verification and re-checks (rule 1)
-  internal/store/    PostgreSQL: targets, scan queue, findings lifecycle, audit log
+  internal/store/    PostgreSQL: organizations, targets, scan queue, findings lifecycle,
+                     audit log; org-scoped handle (store.Org) + row-level security
   internal/worker/   claims scans, runs modules, records results
   internal/modules/all/  the list of shipped modules
 deploy/              local infrastructure files (PostgreSQL init)
@@ -138,6 +140,16 @@ cd engine && go test -race ./...    # integration tests run when ORUS_TEST_DATAB
 go run ./cmd/worker                 # in one terminal
 go run ./cmd/orusctl target add <domain> && go run ./cmd/orusctl scan <domain>
 ```
+
+orusctl works in one organization at a time: `-org NAME|ID`, else `ORUS_ORG`, else
+`Default` (created by migration 0003, which also holds every pre-existing target).
+`orusctl org add <name>` creates another one.
+
+Tenant isolation: API code must only receive a `*store.Org`, never the `*store.Store`
+(cross-organization, worker only). Org transactions run as the `orus_app` role with
+row-level security; the worker connects as the schema owner (a superuser in dev). In
+production the worker needs a role with `BYPASSRLS` and the API a login role granted
+`orus_app`: a role with neither sees no rows at all.
 
 Only scan domains you own, even passively. The lab domain is `orushield.xyz` (verified;
 the product domain will be a .io or .com). For TLS test cases, badssl.com subdomains are

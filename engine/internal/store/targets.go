@@ -18,6 +18,7 @@ const DefaultRatePerSec = 5
 // Target is a domain a customer asked us to scan.
 type Target struct {
 	ID         string
+	OrgID      string // the organization that owns it
 	Domain     string
 	VerifiedAt *time.Time // nil: ownership not verified
 	// Exclusions is kept as raw JSON here; the gate package parses and
@@ -43,12 +44,12 @@ type NewTarget struct {
 	RatePerSec float64         // 0: DefaultRatePerSec
 }
 
-const targetColumns = `id::text, domain, verified_at, exclusions, rate_per_sec, created_at,
+const targetColumns = `id::text, org_id::text, domain, verified_at, exclusions, rate_per_sec, created_at,
 	coalesce(verify_token, ''), verify_token_expires_at, verify_checked_at`
 
 func scanTarget(row pgx.Row) (Target, error) {
 	var t Target
-	err := row.Scan(&t.ID, &t.Domain, &t.VerifiedAt, &t.Exclusions, &t.RatePerSec, &t.CreatedAt,
+	err := row.Scan(&t.ID, &t.OrgID, &t.Domain, &t.VerifiedAt, &t.Exclusions, &t.RatePerSec, &t.CreatedAt,
 		&t.VerifyToken, &t.VerifyTokenExpiresAt, &t.VerifyCheckedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Target{}, ErrNotFound
@@ -56,9 +57,10 @@ func scanTarget(row pgx.Row) (Target, error) {
 	return t, err
 }
 
-// CreateTarget stores a new, unverified target. The domain is normalized
-// first, so "Example.COM." and "example.com" are the same target.
-func (s *Store) CreateTarget(ctx context.Context, nt NewTarget) (Target, error) {
+// CreateTarget stores a new, unverified target in the organization. The
+// domain is normalized first, so "Example.COM." and "example.com" are the
+// same target. Another organization may have the same domain.
+func (o *Org) CreateTarget(ctx context.Context, nt NewTarget) (Target, error) {
 	domain, err := module.NormalizeDomain(nt.Domain)
 	if err != nil {
 		return Target{}, fmt.Errorf("create target: %w", err)
@@ -71,34 +73,61 @@ func (s *Store) CreateTarget(ctx context.Context, nt NewTarget) (Target, error) 
 	if rate == 0 {
 		rate = DefaultRatePerSec
 	}
-	t, err := scanTarget(s.pool.QueryRow(ctx,
-		`INSERT INTO targets (domain, exclusions, rate_per_sec) VALUES ($1, $2, $3)
-		 RETURNING `+targetColumns,
-		domain, exclusions, rate))
+	tx, err := o.begin(ctx)
 	if err != nil {
+		return Target{}, fmt.Errorf("create target %s: %w", domain, err)
+	}
+	defer tx.Rollback(ctx)
+	t, err := scanTarget(tx.QueryRow(ctx,
+		`INSERT INTO targets (org_id, domain, exclusions, rate_per_sec) VALUES ($1, $2, $3, $4)
+		 RETURNING `+targetColumns,
+		o.orgID, domain, exclusions, rate))
+	if err != nil {
+		return Target{}, fmt.Errorf("create target %s: %w", domain, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return Target{}, fmt.Errorf("create target %s: %w", domain, err)
 	}
 	return t, nil
 }
 
-// GetTarget returns the target with the given ID, or ErrNotFound.
-func (s *Store) GetTarget(ctx context.Context, id string) (Target, error) {
-	t, err := scanTarget(s.pool.QueryRow(ctx, "SELECT "+targetColumns+" FROM targets WHERE id = $1", id))
+// GetTarget returns the target with the given ID, or ErrNotFound. Through an
+// Org, a target of another organization is ErrNotFound too: the caller
+// cannot tell it exists.
+func (sc scope) GetTarget(ctx context.Context, id string) (Target, error) {
+	if !isUUID(id) {
+		return Target{}, fmt.Errorf("get target %s: %w", id, ErrNotFound)
+	}
+	tx, err := sc.begin(ctx)
 	if err != nil {
 		return Target{}, fmt.Errorf("get target %s: %w", id, err)
 	}
-	return t, nil
+	defer tx.Rollback(ctx)
+	t, err := scanTarget(tx.QueryRow(ctx,
+		"SELECT "+targetColumns+" FROM targets WHERE id = $1 AND ($2::uuid IS NULL OR org_id = $2::uuid)",
+		id, sc.orgParam()))
+	if err != nil {
+		return Target{}, fmt.Errorf("get target %s: %w", id, err)
+	}
+	return t, tx.Commit(ctx)
 }
 
-// TargetByDomain returns the target for domain, or ErrNotFound.
-func (s *Store) TargetByDomain(ctx context.Context, domain string) (Target, error) {
+// TargetByDomain returns the organization's target for domain, or
+// ErrNotFound.
+func (o *Org) TargetByDomain(ctx context.Context, domain string) (Target, error) {
 	normalized, err := module.NormalizeDomain(domain)
 	if err != nil {
 		return Target{}, fmt.Errorf("get target: %w", err)
 	}
-	t, err := scanTarget(s.pool.QueryRow(ctx, "SELECT "+targetColumns+" FROM targets WHERE domain = $1", normalized))
+	tx, err := o.begin(ctx)
 	if err != nil {
 		return Target{}, fmt.Errorf("get target %s: %w", normalized, err)
 	}
-	return t, nil
+	defer tx.Rollback(ctx)
+	t, err := scanTarget(tx.QueryRow(ctx,
+		"SELECT "+targetColumns+" FROM targets WHERE org_id = $1 AND domain = $2", o.orgID, normalized))
+	if err != nil {
+		return Target{}, fmt.Errorf("get target %s: %w", normalized, err)
+	}
+	return t, tx.Commit(ctx)
 }

@@ -30,6 +30,7 @@ const maxErrorChars = 2000
 // Scan is one job in the queue.
 type Scan struct {
 	ID          string
+	OrgID       string
 	TargetID    string
 	Domain      string
 	Modules     []string
@@ -44,12 +45,12 @@ type Scan struct {
 	FinishedAt *time.Time
 }
 
-const scanColumns = `s.id::text, s.target_id::text, t.domain, s.modules, s.requested_by, s.status,
+const scanColumns = `s.id::text, s.org_id::text, s.target_id::text, t.domain, s.modules, s.requested_by, s.status,
 	s.attempts, coalesce(s.error, ''), s.created_at, s.started_at, s.finished_at`
 
 func scanScan(row pgx.Row) (Scan, error) {
 	var sc Scan
-	err := row.Scan(&sc.ID, &sc.TargetID, &sc.Domain, &sc.Modules, &sc.RequestedBy, &sc.Status,
+	err := row.Scan(&sc.ID, &sc.OrgID, &sc.TargetID, &sc.Domain, &sc.Modules, &sc.RequestedBy, &sc.Status,
 		&sc.Attempt, &sc.Error, &sc.CreatedAt, &sc.StartedAt, &sc.FinishedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Scan{}, ErrNotFound
@@ -57,10 +58,11 @@ func scanScan(row pgx.Row) (Scan, error) {
 	return sc, err
 }
 
-// EnqueueScan adds a scan to the queue and records who requested it in the
-// audit log, in the same transaction: a scan can never exist without its
-// audit entry (security rule 4).
-func (s *Store) EnqueueScan(ctx context.Context, targetID string, modules []string, requestedBy string) (Scan, error) {
+// EnqueueScan adds a scan of one of the organization's targets to the queue
+// and records who requested it in the audit log, in the same transaction: a
+// scan can never exist without its audit entry (security rule 4). A target of
+// another organization is ErrNotFound.
+func (o *Org) EnqueueScan(ctx context.Context, targetID string, modules []string, requestedBy string) (Scan, error) {
 	if len(modules) == 0 {
 		return Scan{}, errors.New("enqueue scan: no modules")
 	}
@@ -68,23 +70,29 @@ func (s *Store) EnqueueScan(ctx context.Context, targetID string, modules []stri
 		return Scan{}, errors.New("enqueue scan: empty requester")
 	}
 
-	tx, err := s.pool.Begin(ctx)
+	if !isUUID(targetID) {
+		return Scan{}, fmt.Errorf("enqueue scan for target %s: %w", targetID, ErrNotFound)
+	}
+	tx, err := o.begin(ctx)
 	if err != nil {
 		return Scan{}, fmt.Errorf("enqueue scan: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
+	// The foreign key on (org_id, target_id) rejects a target of another
+	// organization, exactly like a target that does not exist.
 	sc, err := scanScan(tx.QueryRow(ctx, `
 		WITH s AS (
-			INSERT INTO scans (target_id, modules, requested_by) VALUES ($1, $2, $3)
+			INSERT INTO scans (org_id, target_id, modules, requested_by) VALUES ($1, $2, $3, $4)
 			RETURNING *
 		)
 		SELECT `+scanColumns+` FROM s JOIN targets t ON t.id = s.target_id`,
-		targetID, modules, requestedBy))
+		o.orgID, targetID, modules, requestedBy))
 	if err != nil {
 		return Scan{}, fmt.Errorf("enqueue scan for target %s: %w", targetID, foreignKeyNotFound(err))
 	}
 	if err := appendAudit(ctx, tx, AuditEntry{
+		OrgID:   sc.OrgID,
 		Actor:   requestedBy,
 		Action:  ActionScanRequested,
 		Target:  sc.Domain,
@@ -122,24 +130,24 @@ func (s *Store) ClaimScan(ctx context.Context, workerID string, lease time.Durat
 			error = format('abandoned after %s attempts', s.attempts)
 		FROM targets t
 		WHERE t.id = s.target_id AND s.status = 'running' AND s.locked_until < now() AND s.attempts >= $1
-		RETURNING s.id::text, t.domain, s.attempts`, maxAttempts)
+		RETURNING s.id::text, s.org_id::text, t.domain, s.attempts`, maxAttempts)
 	if err != nil {
 		return Scan{}, false, fmt.Errorf("claim scan: expire abandoned scans: %w", err)
 	}
 	type abandoned struct {
-		id, domain string
-		attempts   int
+		id, orgID, domain string
+		attempts          int
 	}
 	gaveUp, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (abandoned, error) {
 		var a abandoned
-		return a, r.Scan(&a.id, &a.domain, &a.attempts)
+		return a, r.Scan(&a.id, &a.orgID, &a.domain, &a.attempts)
 	})
 	if err != nil {
 		return Scan{}, false, fmt.Errorf("claim scan: expire abandoned scans: %w", err)
 	}
 	for _, a := range gaveUp {
 		if err := appendAudit(ctx, tx, AuditEntry{
-			Actor: "queue", Action: ActionScanFailed, Target: a.domain,
+			OrgID: a.orgID, Actor: "queue", Action: ActionScanFailed, Target: a.domain,
 			Details: map[string]any{"scan_id": a.id, "reason": "abandoned", "attempts": a.attempts},
 		}); err != nil {
 			return Scan{}, false, err
@@ -171,7 +179,7 @@ func (s *Store) ClaimScan(ctx context.Context, workerID string, lease time.Durat
 		return Scan{}, false, fmt.Errorf("claim scan: %w", err)
 	}
 	if err := appendAudit(ctx, tx, AuditEntry{
-		Actor: workerID, Action: ActionScanStarted, Target: sc.Domain,
+		OrgID: sc.OrgID, Actor: workerID, Action: ActionScanStarted, Target: sc.Domain,
 		Details: map[string]any{"scan_id": sc.ID, "modules": sc.Modules, "attempt": sc.Attempt},
 	}); err != nil {
 		return Scan{}, false, err
@@ -207,12 +215,12 @@ func (s *Store) FailScan(ctx context.Context, scanID string, attempt int, worker
 	defer tx.Rollback(ctx)
 
 	reason = truncateRunes(reason, maxErrorChars)
-	var domain string
+	var orgID, domain string
 	err = tx.QueryRow(ctx, `
 		UPDATE scans s SET status = 'failed', error = $3, locked_until = NULL, finished_at = now()
 		FROM targets t
 		WHERE t.id = s.target_id AND s.id = $1 AND s.attempts = $2 AND s.status = 'running'
-		RETURNING t.domain`, scanID, attempt, reason).Scan(&domain)
+		RETURNING s.org_id::text, t.domain`, scanID, attempt, reason).Scan(&orgID, &domain)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("fail scan %s: %w", scanID, ErrLeaseLost)
 	}
@@ -220,7 +228,7 @@ func (s *Store) FailScan(ctx context.Context, scanID string, attempt int, worker
 		return fmt.Errorf("fail scan %s: %w", scanID, err)
 	}
 	if err := appendAudit(ctx, tx, AuditEntry{
-		Actor: workerID, Action: ActionScanFailed, Target: domain,
+		OrgID: orgID, Actor: workerID, Action: ActionScanFailed, Target: domain,
 		Details: map[string]any{"scan_id": scanID, "attempt": attempt, "reason": reason},
 	}); err != nil {
 		return err
@@ -231,14 +239,24 @@ func (s *Store) FailScan(ctx context.Context, scanID string, attempt int, worker
 	return nil
 }
 
-// GetScan returns the scan with the given ID, or ErrNotFound.
-func (s *Store) GetScan(ctx context.Context, id string) (Scan, error) {
-	sc, err := scanScan(s.pool.QueryRow(ctx,
-		"SELECT "+scanColumns+" FROM scans s JOIN targets t ON t.id = s.target_id WHERE s.id = $1", id))
+// GetScan returns the organization's scan with the given ID, or
+// ErrNotFound.
+func (o *Org) GetScan(ctx context.Context, id string) (Scan, error) {
+	if !isUUID(id) {
+		return Scan{}, fmt.Errorf("get scan %s: %w", id, ErrNotFound)
+	}
+	tx, err := o.begin(ctx)
 	if err != nil {
 		return Scan{}, fmt.Errorf("get scan %s: %w", id, err)
 	}
-	return sc, nil
+	defer tx.Rollback(ctx)
+	sc, err := scanScan(tx.QueryRow(ctx,
+		"SELECT "+scanColumns+" FROM scans s JOIN targets t ON t.id = s.target_id WHERE s.id = $1 AND s.org_id = $2",
+		id, o.orgID))
+	if err != nil {
+		return Scan{}, fmt.Errorf("get scan %s: %w", id, err)
+	}
+	return sc, tx.Commit(ctx)
 }
 
 // foreignKeyNotFound turns "target does not exist" foreign key violations

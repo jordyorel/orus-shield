@@ -28,19 +28,20 @@ func makeFinding(moduleID, checkID, domain string) finding.Finding {
 type lifecycle struct {
 	t      *testing.T
 	s      *Store
+	org    *Org
 	target Target
 }
 
 func newLifecycle(t *testing.T) *lifecycle {
 	s := newTestStore(t)
-	return &lifecycle{t: t, s: s, target: newTarget(t, s, "example.com")}
+	return &lifecycle{t: t, s: s, org: defaultOrg(t, s), target: newTarget(t, s, "example.com")}
 }
 
 // scan enqueues, claims and finishes a scan with the given results.
 func (l *lifecycle) scan(at time.Time, succeeded []string, failed map[string]string, findings ...finding.Finding) error {
 	l.t.Helper()
 	ctx := context.Background()
-	if _, err := l.s.EnqueueScan(ctx, l.target.ID, []string{"email", "tls"}, "jordy"); err != nil {
+	if _, err := l.org.EnqueueScan(ctx, l.target.ID, []string{"email", "tls"}, "jordy"); err != nil {
 		l.t.Fatal(err)
 	}
 	sc, ok, err := l.s.ClaimScan(ctx, "worker:test", time.Minute, 3)
@@ -63,7 +64,7 @@ func (l *lifecycle) mustScan(at time.Time, succeeded []string, failed map[string
 // state returns the stored findings by check ID.
 func (l *lifecycle) state() map[string]finding.Finding {
 	l.t.Helper()
-	findings, err := l.s.ListFindings(context.Background(), l.target.ID)
+	findings, err := l.org.ListFindings(context.Background(), l.target.ID)
 	if err != nil {
 		l.t.Fatalf("ListFindings: %v", err)
 	}
@@ -134,7 +135,7 @@ func TestAcceptedRiskIsNeverChangedByScans(t *testing.T) {
 	spf := makeFinding("email", "spf-missing", "example.com")
 	l.mustScan(t1, []string{"email"}, nil, spf)
 
-	if err := l.s.SetFindingStatus(ctx, l.target.ID, spf.ID, finding.StatusAcceptedRisk, "jordy"); err != nil {
+	if err := l.org.SetFindingStatus(ctx, l.target.ID, spf.ID, finding.StatusAcceptedRisk, "jordy"); err != nil {
 		t.Fatalf("SetFindingStatus: %v", err)
 	}
 	l.expect("spf-missing", finding.StatusAcceptedRisk, t1, t1)
@@ -209,7 +210,7 @@ func TestFinishScanIsFenced(t *testing.T) {
 	if !errors.Is(err, ErrLeaseLost) {
 		t.Fatalf("FinishScan with a stale attempt = %v, want ErrLeaseLost", err)
 	}
-	findings, err := s.ListFindings(ctx, target.ID)
+	findings, err := defaultOrg(t, s).ListFindings(ctx, target.ID)
 	if err != nil || len(findings) != 0 {
 		t.Errorf("findings after fenced FinishScan = %v, %v; want none", findings, err)
 	}
@@ -243,7 +244,7 @@ func TestListFindingsOrder(t *testing.T) {
 	critical.Severity = finding.SeverityCritical
 	l.mustScan(t4, []string{"email"}, nil, low, critical)
 
-	findings, err := l.s.ListFindings(context.Background(), l.target.ID)
+	findings, err := l.org.ListFindings(context.Background(), l.target.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,10 +259,10 @@ func TestSetFindingStatusRejects(t *testing.T) {
 	spf := makeFinding("email", "spf-missing", "example.com")
 	l.mustScan(t1, []string{"email"}, nil, spf)
 
-	if err := l.s.SetFindingStatus(ctx, l.target.ID, spf.ID, finding.StatusFixed, "jordy"); err == nil {
+	if err := l.org.SetFindingStatus(ctx, l.target.ID, spf.ID, finding.StatusFixed, "jordy"); err == nil {
 		t.Error("manual fixed = nil, want error: only scans mark findings fixed")
 	}
-	if err := l.s.SetFindingStatus(ctx, l.target.ID, "unknown", finding.StatusAcceptedRisk, "jordy"); !errors.Is(err, ErrNotFound) {
+	if err := l.org.SetFindingStatus(ctx, l.target.ID, "unknown", finding.StatusAcceptedRisk, "jordy"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown finding = %v, want ErrNotFound", err)
 	}
 }

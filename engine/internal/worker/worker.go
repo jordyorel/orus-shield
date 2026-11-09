@@ -194,7 +194,7 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 			log.Warn("module refused", "module", id, "reason", refused.err)
 			result.Failed[id] = "refused: " + refused.err.Error()
 			if err := w.store.AppendAudit(scanCtx, store.AuditEntry{
-				Actor: w.cfg.ID, Action: store.ActionModuleRefused, Target: target.Domain,
+				OrgID: target.OrgID, Actor: w.cfg.ID, Action: store.ActionModuleRefused, Target: target.Domain,
 				Details: map[string]any{"scan_id": sc.ID, "module": id, "reason": refused.err.Error()},
 			}); err != nil {
 				return fmt.Errorf("audit refusal: %w", err)
@@ -255,7 +255,7 @@ func (w *Worker) activeGate(ctx context.Context, sc store.Scan, t store.Target, 
 	return w.owner.IPGate(g, t.Domain, func(ip netip.Addr, reason string) {
 		log.Warn("IP refused for active scan", "ip", ip, "reason", reason)
 		if err := w.store.AppendAudit(ctx, store.AuditEntry{
-			Actor: w.cfg.ID, Action: store.ActionIPNotVerified, Target: t.Domain,
+			OrgID: t.OrgID, Actor: w.cfg.ID, Action: store.ActionIPNotVerified, Target: t.Domain,
 			Details: map[string]any{"scan_id": sc.ID, "ip": ip.String(), "reason": reason},
 		}); err != nil {
 			log.Error("audit IP refusal", "err", err)

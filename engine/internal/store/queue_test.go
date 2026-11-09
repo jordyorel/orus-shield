@@ -12,7 +12,7 @@ import (
 
 func newTarget(t *testing.T, s *Store, domain string) Target {
 	t.Helper()
-	target, err := s.CreateTarget(context.Background(), NewTarget{Domain: domain})
+	target, err := defaultOrg(t, s).CreateTarget(context.Background(), NewTarget{Domain: domain})
 	if err != nil {
 		t.Fatalf("CreateTarget(%s): %v", domain, err)
 	}
@@ -21,7 +21,7 @@ func newTarget(t *testing.T, s *Store, domain string) Target {
 
 func enqueue(t *testing.T, s *Store, target Target, modules ...string) Scan {
 	t.Helper()
-	sc, err := s.EnqueueScan(context.Background(), target.ID, modules, "jordy")
+	sc, err := defaultOrg(t, s).EnqueueScan(context.Background(), target.ID, modules, "jordy")
 	if err != nil {
 		t.Fatalf("EnqueueScan: %v", err)
 	}
@@ -30,7 +30,7 @@ func enqueue(t *testing.T, s *Store, target Target, modules ...string) Scan {
 
 func actions(t *testing.T, s *Store, domain string) []string {
 	t.Helper()
-	entries, err := s.AuditLog(context.Background(), domain)
+	entries, err := defaultOrg(t, s).AuditLog(context.Background(), domain)
 	if err != nil {
 		t.Fatalf("AuditLog: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestEnqueueScanIsAudited(t *testing.T) {
 	if sc.Status != StatusQueued || sc.Attempt != 0 || sc.Domain != "example.com" {
 		t.Errorf("scan = %+v", sc)
 	}
-	entries, err := s.AuditLog(context.Background(), "example.com")
+	entries, err := defaultOrg(t, s).AuditLog(context.Background(), "example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,13 +66,13 @@ func TestEnqueueScanRejects(t *testing.T) {
 	target := newTarget(t, s, "example.com")
 	ctx := context.Background()
 
-	if _, err := s.EnqueueScan(ctx, target.ID, nil, "jordy"); err == nil {
+	if _, err := defaultOrg(t, s).EnqueueScan(ctx, target.ID, nil, "jordy"); err == nil {
 		t.Error("EnqueueScan without modules = nil, want error")
 	}
-	if _, err := s.EnqueueScan(ctx, target.ID, []string{"email"}, ""); err == nil {
+	if _, err := defaultOrg(t, s).EnqueueScan(ctx, target.ID, []string{"email"}, ""); err == nil {
 		t.Error("EnqueueScan without requester = nil, want error")
 	}
-	_, err := s.EnqueueScan(ctx, "0190a000-0000-7000-8000-000000000000", []string{"email"}, "jordy")
+	_, err := defaultOrg(t, s).EnqueueScan(ctx, "0190a000-0000-7000-8000-000000000000", []string{"email"}, "jordy")
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("EnqueueScan(unknown target) = %v, want ErrNotFound", err)
 	}
@@ -191,7 +191,7 @@ func TestScanAbandonedAfterMaxAttempts(t *testing.T) {
 	if _, ok, err := s.ClaimScan(ctx, "worker:b", time.Minute, 1); err != nil || ok {
 		t.Fatalf("claim = %v, %v; want nothing (attempts exhausted)", ok, err)
 	}
-	got, err := s.GetScan(ctx, sc.ID)
+	got, err := defaultOrg(t, s).GetScan(ctx, sc.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +218,7 @@ func TestFailScan(t *testing.T) {
 	if err := s.FailScan(ctx, sc.ID, sc.Attempt, "worker:a", long); err != nil {
 		t.Fatalf("FailScan: %v", err)
 	}
-	got, err := s.GetScan(ctx, sc.ID)
+	got, err := defaultOrg(t, s).GetScan(ctx, sc.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

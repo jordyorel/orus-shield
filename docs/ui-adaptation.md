@@ -13,12 +13,17 @@ CLAUDE.md (one step at a time, design first, tests first, stop for review).
 - `findings`: one row per issue, deterministic ID, `severity`, `status`
   (open, fixed, accepted_risk), `first_seen`, `last_seen`, full JSON in `data`.
 - `audit_log`: append-only record of actions.
+- `organizations` (step 7.1): every target, scan, finding and audit entry has an `org_id`.
+  API code works through `store.Org` (every query filtered by organization), backed by
+  PostgreSQL row-level security (role `orus_app`, `app.org_id` set per transaction).
+  A domain is unique per organization, not globally.
 - Modules: `email` (SPF, DKIM, DMARC) and `tlscheck` (certificates, protocol versions),
   both passive; `ports` (exposed network services), active, which only reaches IPs whose
   ownership is proven by forward-confirmed reverse DNS (`ownership.IPGate`). Check IDs such as `dmarc-policy-none`, `tls-cert-expiring-soon`.
-- `orusctl`: target add/show/verify-token/verify, scan, status, findings, audit.
+- `orusctl`: org add/list; target add/show/verify-token/verify, scan, status, findings,
+  audit, each in one organization (`-org`, `ORUS_ORG`, default `Default`).
 
-What does not exist yet: organizations and users, an asset inventory, a record of checks
+What does not exist yet: users and authentication, an asset inventory, a record of checks
 that passed, a security score, a fixed-at timestamp, CVE or exploit data, context factors,
 an HTTP API, a web dashboard.
 
@@ -124,7 +129,8 @@ findings), `controls`, `policies`. The heat map and risk register read from it.
 
 ## Suggested order
 
-1. Organizations and `org_id` scoping.
+1. Organizations and `org_id` scoping. (done: `store.Org` + row-level security; users and
+   authentication come with the API endpoints)
 2. Findings lifecycle: `fixed_at` / status history.
 3. Asset inventory and the Module contract change for observed assets.
 4. Check catalog and evaluated checks; posture score and snapshots.

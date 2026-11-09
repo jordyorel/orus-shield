@@ -148,7 +148,7 @@ func (v *Verifier) Verify(ctx context.Context, targetID, actor string) error {
 	}
 	if !found {
 		if err := v.st.AppendAudit(ctx, store.AuditEntry{
-			Actor: actor, Action: store.ActionVerificationFailed, Target: t.Domain,
+			OrgID: t.OrgID, Actor: actor, Action: store.ActionVerificationFailed, Target: t.Domain,
 			Details: map[string]any{"reason": "record not found"},
 		}); err != nil {
 			return err
