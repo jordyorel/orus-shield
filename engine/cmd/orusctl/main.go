@@ -2,14 +2,15 @@
 // the API exists (roadmap step 7).
 //
 // It goes through the store like the API will, so every scan it starts is
-// recorded in the audit log. It deliberately has no command to mark a target
-// as verified: that is the job of ownership verification (step 5), and a
-// shortcut here would bypass security rule 1.
+// recorded in the audit log. A target becomes verified only through the DNS
+// check of package ownership; there is no way to force it (security rule 1).
 //
 // Usage:
 //
 //	orusctl target add [-rate N] [-exclusions JSON] <domain>
 //	orusctl target show <domain>
+//	orusctl target verify-token [-as NAME] <domain>
+//	orusctl target verify [-as NAME] <domain>
 //	orusctl scan [-as NAME] <domain> [module ...]
 //	orusctl status <scan-id>
 //	orusctl findings [-v] <domain>
@@ -35,12 +36,16 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
 	"github.com/jordyorel/orus-shield/engine/internal/gate"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/all"
+	"github.com/jordyorel/orus-shield/engine/internal/ownership"
+	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
 const usage = `usage:
   orusctl target add [-rate N] [-exclusions JSON] <domain>
   orusctl target show <domain>
+  orusctl target verify-token [-as NAME] <domain>   (prints the DNS record to publish)
+  orusctl target verify [-as NAME] <domain>         (checks it)
   orusctl scan [-as NAME] <domain> [module ...]   (default: every module)
   orusctl status <scan-id>
   orusctl findings [-v] <domain>
@@ -59,6 +64,12 @@ type Store interface {
 	GetScan(ctx context.Context, id string) (store.Scan, error)
 	ListFindings(ctx context.Context, targetID string) ([]finding.Finding, error)
 	AuditLog(ctx context.Context, target string) ([]store.AuditEntry, error)
+}
+
+// Verifier is the part of ownership.Verifier orusctl uses.
+type Verifier interface {
+	Instructions(ctx context.Context, targetID, actor string) (ownership.Instructions, error)
+	Verify(ctx context.Context, targetID, actor string) error
 }
 
 func main() {
@@ -86,7 +97,10 @@ func main() {
 		for _, m := range reg.All() {
 			ids = append(ids, m.Info().ID)
 		}
-		c := cli{st: st, out: os.Stdout, modules: ids, defaultActor: defaultActor(os.Getenv)}
+		c := cli{
+			st: st, verifier: ownership.New(st, resolver.NewSystem()),
+			out: os.Stdout, modules: ids, defaultActor: defaultActor(os.Getenv),
+		}
 		return c.run(ctx, os.Args[1:])
 	}()
 	if errors.Is(err, errUsage) {
@@ -110,6 +124,7 @@ func defaultActor(getenv func(string) string) string {
 
 type cli struct {
 	st           Store
+	verifier     Verifier
 	out          io.Writer
 	modules      []string // known module IDs
 	defaultActor string
@@ -123,13 +138,17 @@ func (c cli) run(ctx context.Context, args []string) error {
 	switch cmd {
 	case "target":
 		if len(rest) == 0 {
-			return fmt.Errorf("%w: target needs a subcommand (add, show)", errUsage)
+			return fmt.Errorf("%w: target needs a subcommand (add, show, verify-token, verify)", errUsage)
 		}
 		switch rest[0] {
 		case "add":
 			return c.targetAdd(ctx, rest[1:])
 		case "show":
 			return c.targetShow(ctx, rest[1:])
+		case "verify-token":
+			return c.verifyToken(ctx, rest[1:])
+		case "verify":
+			return c.verify(ctx, rest[1:])
 		}
 		return fmt.Errorf("%w: unknown target subcommand %q", errUsage, rest[0])
 	case "scan":
@@ -189,13 +208,69 @@ func (c cli) targetShow(ctx context.Context, args []string) error {
 		return err
 	}
 	verified := "no"
-	if t.Verified() {
-		verified = t.VerifiedAt.Format(time.RFC3339)
+	switch {
+	case t.Verified():
+		verified = "yes, since " + t.VerifiedAt.Format(time.RFC3339)
+		if t.VerifyCheckedAt != nil {
+			verified += ", last checked " + t.VerifyCheckedAt.Format(time.RFC3339)
+		}
+	case t.VerifyToken != "" && t.VerifyTokenExpiresAt != nil:
+		verified = "no, token pending until " + t.VerifyTokenExpiresAt.Format(time.RFC3339)
 	}
 	w := tabwriter.NewWriter(c.out, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "domain\t%s\nid\t%s\nverified\t%s\nrate\t%g req/s\nexclusions\t%s\ncreated\t%s\n",
 		t.Domain, t.ID, verified, t.RatePerSec, t.Exclusions, t.CreatedAt.Format(time.RFC3339))
 	return w.Flush()
+}
+
+func (c cli) verifyToken(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("target verify-token", flag.ContinueOnError)
+	actor := fs.String("as", c.defaultActor, "requester recorded in the audit log")
+	pos, err := parse(fs, args, 1)
+	if err != nil {
+		return err
+	}
+	t, err := c.st.TargetByDomain(ctx, pos[0])
+	if err != nil {
+		return err
+	}
+	in, err := c.verifier.Instructions(ctx, t.ID, *actor)
+	if err != nil {
+		return err
+	}
+	if in.Verified {
+		fmt.Fprintf(c.out, "%s is already verified. Keep this record published:\n", in.Domain)
+	} else {
+		fmt.Fprintf(c.out, "To prove you control %s, publish this DNS record:\n", in.Domain)
+	}
+	w := tabwriter.NewWriter(c.out, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(w, "  name\t%s\n  type\tTXT\n  value\t%s\n", in.RecordName, in.RecordValue)
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	if in.ExpiresAt != nil {
+		fmt.Fprintf(c.out, "Then run: orusctl target verify %s (before %s)\n", in.Domain, in.ExpiresAt.Format(time.RFC3339))
+	}
+	return nil
+}
+
+func (c cli) verify(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("target verify", flag.ContinueOnError)
+	actor := fs.String("as", c.defaultActor, "requester recorded in the audit log")
+	pos, err := parse(fs, args, 1)
+	if err != nil {
+		return err
+	}
+	t, err := c.st.TargetByDomain(ctx, pos[0])
+	if err != nil {
+		return err
+	}
+	if err := c.verifier.Verify(ctx, t.ID, *actor); err != nil {
+		return err
+	}
+	fmt.Fprintf(c.out, "%s is verified: active modules may now run on it.\n", t.Domain)
+	fmt.Fprintln(c.out, "Keep the record published: it is checked again before active scans.")
+	return nil
 }
 
 func (c cli) scan(ctx context.Context, args []string) error {

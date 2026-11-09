@@ -13,6 +13,8 @@ import (
 	"syscall"
 
 	"github.com/jordyorel/orus-shield/engine/internal/modules/all"
+	"github.com/jordyorel/orus-shield/engine/internal/ownership"
+	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 	"github.com/jordyorel/orus-shield/engine/internal/worker"
 )
@@ -51,5 +53,6 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	return worker.New(st, registry, cfg.worker, log).Run(ctx)
+	verifier := ownership.New(st, resolver.NewSystem())
+	return worker.New(st, registry, verifier, cfg.worker, log).Run(ctx)
 }

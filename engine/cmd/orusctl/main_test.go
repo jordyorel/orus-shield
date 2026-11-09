@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
+	"github.com/jordyorel/orus-shield/engine/internal/ownership"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
@@ -56,12 +57,34 @@ func (f *fakeStore) AuditLog(ctx context.Context, target string) ([]store.AuditE
 	return f.audit, nil
 }
 
+// fakeVerifier records calls and returns fixed answers.
+type fakeVerifier struct {
+	in        ownership.Instructions
+	verifyErr error
+	calls     []string
+}
+
+func (f *fakeVerifier) Instructions(ctx context.Context, targetID, actor string) (ownership.Instructions, error) {
+	f.calls = append(f.calls, "instructions "+targetID+" "+actor)
+	return f.in, nil
+}
+
+func (f *fakeVerifier) Verify(ctx context.Context, targetID, actor string) error {
+	f.calls = append(f.calls, "verify "+targetID+" "+actor)
+	return f.verifyErr
+}
+
 func newCLI() (cli, *fakeStore, *bytes.Buffer) {
 	st := &fakeStore{targets: map[string]store.Target{
 		"example.com": {ID: "t-1", Domain: "example.com", RatePerSec: 5, Exclusions: json.RawMessage("{}")},
 	}}
 	out := &bytes.Buffer{}
-	return cli{st: st, out: out, modules: []string{"email", "tls"}, defaultActor: "cli:jordy"}, st, out
+	expires := time.Date(2026, 11, 16, 10, 0, 0, 0, time.UTC)
+	v := &fakeVerifier{in: ownership.Instructions{
+		Domain: "example.com", RecordName: "_orus-verify.example.com",
+		RecordValue: "orus-verify=abc123", ExpiresAt: &expires,
+	}}
+	return cli{st: st, verifier: v, out: out, modules: []string{"email", "tls"}, defaultActor: "cli:jordy"}, st, out
 }
 
 func TestUsageErrors(t *testing.T) {
@@ -216,5 +239,56 @@ func TestDefaultActor(t *testing.T) {
 	}
 	if got := defaultActor(func(string) string { return "" }); got != "cli:unknown" {
 		t.Errorf("defaultActor without USER = %q", got)
+	}
+}
+
+func TestVerifyToken(t *testing.T) {
+	c, _, out := newCLI()
+	if err := c.run(context.Background(), []string{"target", "verify-token", "example.com"}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	for _, want := range []string{"_orus-verify.example.com", "TXT", "orus-verify=abc123", "orusctl target verify example.com"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("output does not contain %q:\n%s", want, out.String())
+		}
+	}
+	if calls := c.verifier.(*fakeVerifier).calls; len(calls) != 1 || calls[0] != "instructions t-1 cli:jordy" {
+		t.Errorf("verifier calls = %v", calls)
+	}
+}
+
+func TestVerify(t *testing.T) {
+	c, _, out := newCLI()
+	if err := c.run(context.Background(), []string{"target", "verify", "-as", "alice", "example.com"}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !strings.Contains(out.String(), "is verified") {
+		t.Errorf("output = %q", out.String())
+	}
+	if calls := c.verifier.(*fakeVerifier).calls; len(calls) != 1 || calls[0] != "verify t-1 alice" {
+		t.Errorf("verifier calls = %v", calls)
+	}
+
+	c, _, out = newCLI()
+	c.verifier.(*fakeVerifier).verifyErr = ownership.ErrRecordMissing
+	if err := c.run(context.Background(), []string{"target", "verify", "example.com"}); !errors.Is(err, ownership.ErrRecordMissing) {
+		t.Errorf("run = %v, want ErrRecordMissing", err)
+	}
+	if strings.Contains(out.String(), "is verified") {
+		t.Error("printed success on failure")
+	}
+}
+
+func TestTargetShowVerification(t *testing.T) {
+	c, st, out := newCLI()
+	expires := time.Date(2026, 11, 16, 10, 0, 0, 0, time.UTC)
+	tg := st.targets["example.com"]
+	tg.VerifyToken, tg.VerifyTokenExpiresAt = "abc", &expires
+	st.targets["example.com"] = tg
+	if err := c.run(context.Background(), []string{"target", "show", "example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "token pending until 2026-11-16") {
+		t.Errorf("output = %q", out.String())
 	}
 }

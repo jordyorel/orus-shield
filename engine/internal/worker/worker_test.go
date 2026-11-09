@@ -150,7 +150,7 @@ func setupWithModules(t *testing.T, verified bool, exclusions string, reg *modul
 		queue:   []store.Scan{{ID: "s1", TargetID: "t1", Domain: "example.com", Modules: ids}},
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	w := New(st, reg, Config{ID: "worker:test", ModuleTimeout: time.Second, Lease: time.Minute}, log)
+	w := New(st, reg, trustingRechecker{}, Config{ID: "worker:test", ModuleTimeout: time.Second, Lease: time.Minute}, log)
 	return w, st
 }
 
@@ -161,6 +161,25 @@ func runOnce(t *testing.T, w *Worker) error {
 		t.Fatal("RunOnce did not pick the scan")
 	}
 	return err
+}
+
+// trustingRechecker confirms whatever the stored status says.
+type trustingRechecker struct{}
+
+func (trustingRechecker) Recheck(ctx context.Context, t store.Target, g module.Gate, actor string) (bool, error) {
+	return t.Verified(), nil
+}
+
+// fixedRechecker returns a fixed answer and counts calls.
+type fixedRechecker struct {
+	ok    bool
+	err   error
+	calls int
+}
+
+func (f *fixedRechecker) Recheck(ctx context.Context, t store.Target, g module.Gate, actor string) (bool, error) {
+	f.calls++
+	return f.ok, f.err
 }
 
 // ---- Tests ----------------------------------------------------------------
@@ -406,5 +425,63 @@ func TestRunStopsOnCancel(t *testing.T) {
 	}
 	if len(st.finished) != 1 {
 		t.Errorf("finished %d scans, want 1", len(st.finished))
+	}
+}
+
+func TestOwnershipIsRecheckedBeforeActiveModules(t *testing.T) {
+	tests := []struct {
+		name      string
+		recheck   *fixedRechecker
+		wantRuns  int32
+		wantCalls int
+	}{
+		{"still verified", &fixedRechecker{ok: true}, 1, 1},
+		{"record removed", &fixedRechecker{ok: false}, 0, 1},
+		{"dns failure", &fixedRechecker{err: errors.New("timeout")}, 0, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ports := newModule("ports", module.KindActive, nil)
+			w, st := setup(t, true, "{}", ports)
+			w.recheck = tt.recheck
+			if err := runOnce(t, w); err != nil {
+				t.Fatalf("RunOnce: %v", err)
+			}
+			if got := ports.runs.Load(); got != tt.wantRuns {
+				t.Errorf("active module ran %d times, want %d", got, tt.wantRuns)
+			}
+			if tt.recheck.calls != tt.wantCalls {
+				t.Errorf("Recheck called %d times, want %d", tt.recheck.calls, tt.wantCalls)
+			}
+			if tt.wantRuns == 0 && !strings.Contains(st.finished[0].Failed["ports"], "verified") {
+				t.Errorf("failed = %v, want ports refused", st.finished[0].Failed)
+			}
+		})
+	}
+}
+
+// Passive-only scans do not trigger a DNS re-check.
+func TestNoRecheckForPassiveScans(t *testing.T) {
+	email := newModule("email", module.KindPassive, nil)
+	w, _ := setup(t, true, "{}", email)
+	r := &fixedRechecker{ok: true}
+	w.recheck = r
+	if err := runOnce(t, w); err != nil {
+		t.Fatal(err)
+	}
+	if r.calls != 0 {
+		t.Errorf("Recheck called %d times for a passive scan", r.calls)
+	}
+}
+
+func TestNilRecheckerRefusesActiveModules(t *testing.T) {
+	ports := newModule("ports", module.KindActive, nil)
+	w, _ := setup(t, true, "{}", ports)
+	w.recheck = nil
+	if err := runOnce(t, w); err != nil {
+		t.Fatal(err)
+	}
+	if ports.runs.Load() != 0 {
+		t.Error("active module ran without a rechecker")
 	}
 }

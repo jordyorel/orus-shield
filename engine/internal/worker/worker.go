@@ -31,6 +31,12 @@ type Store interface {
 	AppendAudit(ctx context.Context, e store.AuditEntry) error
 }
 
+// Rechecker confirms, right before active modules run, that the target is
+// still verified (see ownership.Verifier.Recheck).
+type Rechecker interface {
+	Recheck(ctx context.Context, t store.Target, g module.Gate, actor string) (bool, error)
+}
+
 // Config tunes a worker. Zero values get the defaults below.
 type Config struct {
 	ID            string        // identity in the audit log, e.g. "worker:host-1234"
@@ -60,13 +66,16 @@ const (
 type Worker struct {
 	store   Store
 	modules *module.Registry
+	recheck Rechecker
 	cfg     Config
 	log     *slog.Logger
 	now     func() time.Time
 }
 
-// New returns a worker. modules is the set of checks it can run.
-func New(st Store, modules *module.Registry, cfg Config, log *slog.Logger) *Worker {
+// New returns a worker. modules is the set of checks it can run; recheck
+// confirms ownership before active modules (nil: active modules are always
+// refused).
+func New(st Store, modules *module.Registry, recheck Rechecker, cfg Config, log *slog.Logger) *Worker {
 	if cfg.ID == "" {
 		cfg.ID = "worker"
 	}
@@ -82,7 +91,7 @@ func New(st Store, modules *module.Registry, cfg Config, log *slog.Logger) *Work
 	if cfg.MaxAttempts <= 0 {
 		cfg.MaxAttempts = defaultMaxAttempts
 	}
-	return &Worker{store: st, modules: modules, cfg: cfg, log: log.With("worker", cfg.ID), now: time.Now}
+	return &Worker{store: st, modules: modules, recheck: recheck, cfg: cfg, log: log.With("worker", cfg.ID), now: time.Now}
 }
 
 // Run processes scans until ctx is cancelled, then returns nil. A scan in
@@ -143,16 +152,12 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 	if err != nil {
 		return w.fail(ctx, sc, fmt.Sprintf("load target: %v", err))
 	}
-	// Fail closed: never scan with exclusions we cannot read.
-	rules, err := gate.ParseExclusions(target.Exclusions)
+	// Fail closed: never scan with exclusions or a rate we cannot read.
+	g, err := gate.FromTarget(target.Exclusions, target.RatePerSec)
 	if err != nil {
-		return w.fail(ctx, sc, fmt.Sprintf("invalid exclusions: %v", err))
+		return w.fail(ctx, sc, fmt.Sprintf("invalid target settings: %v", err))
 	}
-	g, err := gate.New(rules, target.RatePerSec)
-	if err != nil {
-		return w.fail(ctx, sc, fmt.Sprintf("invalid rate: %v", err))
-	}
-	mt := module.Target{Domain: target.Domain, Verified: target.Verified()}
+	mt := module.Target{Domain: target.Domain, Verified: w.stillVerified(scanCtx, sc, target, g, log)}
 
 	result := store.ScanResult{
 		ScanID: sc.ID, Attempt: sc.Attempt, WorkerID: w.cfg.ID,
@@ -198,6 +203,38 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 		return fmt.Errorf("record results: %w", err)
 	}
 	return nil
+}
+
+// stillVerified decides whether active modules may run in this scan. The
+// stored status is confirmed against DNS when an active module is requested
+// (rule 1 is checked at scan time, not only once). If the confirmation
+// fails, the answer is no for this scan.
+func (w *Worker) stillVerified(ctx context.Context, sc store.Scan, t store.Target, g module.Gate, log *slog.Logger) bool {
+	if !t.Verified() || !w.wantsActive(sc.Modules) {
+		return t.Verified()
+	}
+	if w.recheck == nil {
+		return false
+	}
+	ok, err := w.recheck.Recheck(ctx, t, g, w.cfg.ID)
+	if err != nil {
+		log.Warn("ownership re-check failed, active modules refused for this scan", "err", err)
+		return false
+	}
+	if !ok {
+		log.Warn("ownership no longer verified, active modules refused")
+	}
+	return ok
+}
+
+// wantsActive reports whether one of the requested modules is active.
+func (w *Worker) wantsActive(ids []string) bool {
+	for _, id := range ids {
+		if m, ok := w.modules.Get(id); ok && m.Info().Kind == module.KindActive {
+			return true
+		}
+	}
+	return false
 }
 
 // refusedError means a module was not allowed to run (rule 1 or unknown ID).
