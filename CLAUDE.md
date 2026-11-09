@@ -114,7 +114,13 @@ These are the product. A breach of them is a bug, never a trade-off.
 
 ## Go conventions
 
-- Format with `gofmt`, check with `go vet`; run `golangci-lint` once it is set up.
+- Format with `gofmt`, check with `go vet` and `golangci-lint` (config in
+  `engine/.golangci.yml`; from `engine/`:
+  `go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./...`).
+  A `//nolint` needs a comment explaining why.
+- CI (`.github/workflows/ci.yml`) runs tidy check, vet, golangci-lint, `go test -race` with a
+  PostgreSQL 18 service, and govulncheck on every push and pull request. Actions are pinned
+  to commit SHAs.
 - Prefer the standard library (`net`, `net/http`, `crypto/tls`, `log/slog`, `context`).
 - Every network operation has a timeout via `context.Context`.
 - Wrap errors with context: `fmt.Errorf("lookup dmarc for %s: %w", domain, err)`.
