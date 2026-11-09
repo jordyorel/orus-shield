@@ -1,0 +1,55 @@
+# Go build output
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go coverage and profiling
+coverage.*
+*.coverprofile
+*.prof
+
+# Go workspace (local only)
+go.work
+go.work.sum
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.crt
+secrets/
+
+# Scan output and local data (may contain customer data)
+/reports/
+/scan-results/
+/data/
+*.db
+*.sqlite
+
+# Logs and temporary files
+*.log
+tmp/
+.tmp/
+
+# Web (dashboard)
+node_modules/
+.next/
+.cache/
+build/
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
