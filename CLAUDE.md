@@ -13,8 +13,9 @@ still needs a real-world test on a server Jordy owns. Step 7 follows the order i
 row-level security), the findings lifecycle (`fixed_at`, `finding_events` history) and the
 asset inventory (`module.Result` with findings and assets, `assets` table) and the check
 catalog with evaluated checks and posture score (`check_status`, `posture_snapshots`,
-package `posture`) are done; framework mappings (CIS Controls v8) wait for Jordy's review.
-Next: CDN and hosting detection.
+package `posture`) and CDN / WAF detection (passive `cdn` module, asset details) are done;
+framework mappings (CIS Controls v8) wait for Jordy's review. Next: API endpoints for
+screens 1 to 3 (with users and authentication).
 
 ## How to work on this repo
 
@@ -56,7 +57,7 @@ engine/
   cmd/worker/        worker entrypoint
   cmd/orusctl/       development CLI (targets, scans, findings, audit) until the API exists
   internal/module/   the Module interface and the registry
-  internal/modules/  one package per check (email, tls, ports, ...)
+  internal/modules/  one package per check (email, tls, ports, cdn, ...)
   internal/finding/  finding schema and validation
   internal/asset/    asset schema (hostname, ip, service, certificate) and validation
   internal/dnsname/  DNS name normalization, shared by module and asset

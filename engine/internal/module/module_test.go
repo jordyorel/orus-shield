@@ -169,7 +169,6 @@ func TestRegistryValidatesCatalog(t *testing.T) {
 		name   string
 		checks []Check
 	}{
-		{"no checks", nil},
 		{"check id not a slug", check(func(c *Check) { c.ID = "X Check" })},
 		{"unknown category", check(func(c *Check) { c.Category = "printers" })},
 		{"unknown severity", check(func(c *Check) { c.Severity = "severe" })},
@@ -234,5 +233,11 @@ func TestEvaluate(t *testing.T) {
 	}
 	if _, err := Evaluate(info, Result{Evaluated: []string{"dkim-typo"}}); err == nil {
 		t.Error("undeclared evaluated check: Evaluate() = nil, want error")
+	}
+}
+
+func TestRegistryAcceptsInventoryOnlyModule(t *testing.T) {
+	if err := NewRegistry().Register(fakeModule{Info{ID: "cdn", Name: "CDN", Kind: KindPassive}}); err != nil {
+		t.Errorf("module without checks: Register() = %v, want nil", err)
 	}
 }

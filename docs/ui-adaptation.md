@@ -21,7 +21,8 @@ CLAUDE.md (one step at a time, design first, tests first, stop for review).
   service (`ip:port/tcp`), certificate (SHA-256). `sources` lists the modules that saw the
   asset in their last successful run; an asset no module sees any more gets `gone_at`.
   `tls` reports names, addresses, port 443 and certificates; `ports` reports scanned
-  addresses and open ports; `email` reports none. There is no "discovered" state yet: it
+  addresses and open ports; `cdn` adds `cdn`, `cdn_evidence` and `waf` details to
+  hostnames and IPs ("none" when we looked and found none); `email` reports none. There is no "discovered" state yet: it
   comes with the discovery module.
 - Check catalog and posture (step 7.4): each module declares its checks (`Info.Checks`:
   ID, category, severity, title) and reports the ones it evaluated. `module.Evaluate`
@@ -92,7 +93,7 @@ Backend work needed:
 | Exposure (days open) | `now - first_seen` | Yes |
 | Running / Internet-facing | All current modules are external, so always "yes" | Show only once an internal agent or service detection exists |
 | Threat (actively exploited, public exploit) | CISA KEV catalog (public JSON), matched on CVE IDs | No: useful only once modules emit CVEs (Nuclei, service versions) |
-| Protections (WAF, CDN) | CDN and WAF detection | No: see below |
+| Protections (WAF, CDN) | `cdn` module: asset details `cdn` / `waf` on hostnames and IPs | Yes (CDN; WAF only for WAF products) |
 | Real risk score and the raw-vs-real funnel | Contextual risk function | No |
 
 Backend work needed:
@@ -154,7 +155,9 @@ findings), `controls`, `policies`. The heat map and risk register read from it.
    `module.Result`, package `asset`, `assets` table, `orusctl assets`)
 4. Check catalog and evaluated checks; posture score and snapshots. (done, except
    framework mappings)
-5. CDN and hosting detection (for the "Protections" column).
+5. CDN and hosting detection (for the "Protections" column). (done: passive `cdn`
+   module; published ranges for Cloudflare and Fastly, response headers for the others;
+   no hosting-provider detection, which needs ASN data)
 6. API endpoints for screens 1 to 3, scoped by organization, with tests.
 7. Contextual risk function, then KEV ingestion once CVE-producing modules exist.
 8. Discovery module and connectors.

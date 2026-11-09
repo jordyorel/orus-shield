@@ -24,8 +24,10 @@ func NewRegistry() *Registry {
 }
 
 // Register adds m. It rejects a nil module, an invalid Info, an ID that is
-// already registered, and an invalid or empty check catalog. Check IDs must
-// be unique across modules: reports and translations look checks up by ID.
+// already registered, and an invalid check catalog. Check IDs must be unique
+// across modules: reports and translations look checks up by ID. A module
+// may declare no checks if it only reports assets (it then cannot return
+// findings).
 func (r *Registry) Register(m Module) error {
 	if m == nil {
 		return errors.New("register module: nil module")
@@ -42,9 +44,6 @@ func (r *Registry) Register(m Module) error {
 	}
 	if _, exists := r.modules[info.ID]; exists {
 		return fmt.Errorf("register module %q: already registered", info.ID)
-	}
-	if len(info.Checks) == 0 {
-		return fmt.Errorf("register module %q: no checks declared", info.ID)
 	}
 	seen := make(map[string]bool, len(info.Checks))
 	for _, c := range info.Checks {

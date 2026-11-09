@@ -7,6 +7,7 @@ package all
 import (
 	"github.com/jordyorel/orus-shield/engine/internal/dialer"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
+	"github.com/jordyorel/orus-shield/engine/internal/modules/cdn"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/email"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/ports"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/tlscheck"
@@ -22,6 +23,7 @@ func Registry() (*module.Registry, error) {
 		email.New(dns),
 		tlscheck.New(dns, dialer.NewSystem()),
 		ports.New(dns, dialer.NewSystem()),
+		cdn.New(dns, dialer.NewSystem()),
 	} {
 		if err := reg.Register(m); err != nil {
 			return nil, err
