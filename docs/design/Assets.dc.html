@@ -39,68 +39,68 @@ input::placeholder{color:#7A848E}
 <p style="margin: 0; font-size: 14px; color: #5B6570">Microfinance Exemple SA</p>
 <h1 style="margin: 4px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 32px; letter-spacing: -0.02em">Actifs</h1>
 
-<section style="margin-top: 24px; background: #FFFFFF; border: 1px solid #E4E7E3; border-radius: 16px; padding: 24px">
+<section style="margin-top: 24px; background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 24px">
 <h2 style="margin: 0; font-size: 17px; font-weight: 600">Ajouter un actif</h2>
 <p style="margin: 6px 0 0; font-size: 14px; color: #5B6570">Les scans actifs ne démarrent qu'après vérification de la propriété.</p>
 <div style="margin-top: 18px; display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end">
 <div style="display: flex; flex-direction: column; gap: 6px; flex: 0 1 220px">
 <label for="atype" style="font-size: 13px; font-weight: 500">Type</label>
-<select id="atype" style="height: 44px; padding: 0 12px; font: inherit; font-size: 15px; border: 1px solid #D5DAD4; border-radius: 10px; background: #FFFFFF; color: #0E1116">
+<select id="atype" style="height: 44px; padding: 0 12px; font: inherit; font-size: 15px; border: 1px solid #D5DAE1; border-radius: 10px; background: #FFFFFF; color: #0E1116">
 <option>Domaine</option><option>Adresse IP ou plage</option><option>Application web</option><option>Microsoft 365</option><option>Google Workspace</option><option>Compte cloud (AWS, Azure)</option>
 </select>
 </div>
 <div style="display: flex; flex-direction: column; gap: 6px; flex: 1 1 280px">
 <label for="aname" style="font-size: 13px; font-weight: 500">Adresse</label>
-<input id="aname" type="text" value="{{name}}" onChange="{{onName}}" placeholder="agence-pointenoire.microfinance.cg" style="height: 44px; box-sizing: border-box; padding: 0 12px; font: inherit; font-size: 15px; border: 1px solid #D5DAD4; border-radius: 10px; color: #0E1116">
+<input id="aname" type="text" value="{{name}}" onChange="{{onName}}" placeholder="agence-pointenoire.microfinance.cg" style="height: 44px; box-sizing: border-box; padding: 0 12px; font: inherit; font-size: 15px; border: 1px solid #D5DAE1; border-radius: 10px; color: #0E1116">
 </div>
 <div style="display: flex; flex-direction: column; gap: 6px; flex: 0 1 200px">
 <label for="acrit" style="font-size: 13px; font-weight: 500">Criticité métier</label>
-<select id="acrit" style="height: 44px; padding: 0 12px; font: inherit; font-size: 15px; border: 1px solid #D5DAD4; border-radius: 10px; background: #FFFFFF; color: #0E1116"><option>Haute</option><option>Moyenne</option><option>Basse</option></select>
+<select id="acrit" style="height: 44px; padding: 0 12px; font: inherit; font-size: 15px; border: 1px solid #D5DAE1; border-radius: 10px; background: #FFFFFF; color: #0E1116"><option>Haute</option><option>Moyenne</option><option>Basse</option></select>
 </div>
-<button type="button" onClick="{{add}}" style="height: 44px; padding: 0 18px; font: inherit; font-size: 15px; font-weight: 600; color: #FFFFFF; background: #0E1116; border: 0; border-radius: 10px; cursor: pointer">Ajouter</button>
+<button type="button" onClick="{{add}}" style="height: 44px; padding: 0 18px; font: inherit; font-size: 15px; font-weight: 600; color: #FFFFFF; background: #0C5DA5; border: 0; border-radius: 10px; cursor: pointer">Ajouter</button>
 </div>
 <p style="margin: 8px 0 0; font-size: 13px; color: #B42318">{{error}}</p>
 
 <sc-if value="{{pending}}" hint-placeholder-val="{{ false }}">
-<div style="margin-top: 12px; background: #F8FAF9; border: 1px solid #E1E8E5; border-radius: 14px; padding: 20px">
+<div style="margin-top: 12px; background: #F6F8FA; border: 1px solid #E3E7EC; border-radius: 14px; padding: 20px">
 <p style="margin: 0; font-size: 15px; font-weight: 600">Vérifiez la propriété de {{added}}</p>
-<p style="margin: 6px 0 0; font-size: 14px; color: #4B5560">Ajoutez cet enregistrement TXT dans la zone DNS du domaine, puis lancez la vérification.</p>
-<pre style="margin: 14px 0 0; padding: 14px 16px; background: #0E1116; color: #C9F2EA; border-radius: 10px; font-family: 'JetBrains Mono', monospace; font-size: 13px; overflow-x: auto">_orus-verify.{{added}}  TXT  "orus-site-verification=8f3k2q9x7m"</pre>
+<p style="margin: 6px 0 0; font-size: 14px; color: #3D4752">Ajoutez cet enregistrement TXT dans la zone DNS du domaine, puis lancez la vérification.</p>
+<pre style="margin: 14px 0 0; padding: 14px 16px; background: #0E1116; color: #D1E9FF; border-radius: 10px; font-family: 'JetBrains Mono', monospace; font-size: 13px; overflow-x: auto">_orus-verify.{{added}}  TXT  "orus-site-verification=8f3k2q9x7m"</pre>
 <div style="margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap">
-<button type="button" onClick="{{verify}}" style="min-height: 44px; padding: 0 16px; font: inherit; font-size: 14px; font-weight: 600; color: #04201C; background: #2DD4BF; border: 0; border-radius: 10px; cursor: pointer">Vérifier maintenant</button>
-<button type="button" style="min-height: 44px; padding: 0 16px; font: inherit; font-size: 14px; color: #0E1116; background: #FFFFFF; border: 1px solid #D5DAD4; border-radius: 10px; cursor: pointer">Envoyer les instructions à mon informaticien</button>
+<button type="button" onClick="{{verify}}" style="min-height: 44px; padding: 0 16px; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; background: #0C5DA5; border: 0; border-radius: 10px; cursor: pointer">Vérifier maintenant</button>
+<button type="button" style="min-height: 44px; padding: 0 16px; font: inherit; font-size: 14px; color: #0E1116; background: #FFFFFF; border: 1px solid #D5DAE1; border-radius: 10px; cursor: pointer">Envoyer les instructions à mon informaticien</button>
 </div>
 </div>
 </sc-if>
 <sc-if value="{{verified}}" hint-placeholder-val="{{ false }}">
-<p style="margin: 12px 0 0; font-size: 14px; color: #0F5F58; background: #E6F4F1; padding: 12px 14px; border-radius: 10px">Propriété vérifiée pour {{added}}. Le premier scan complet démarre maintenant.</p>
+<p style="margin: 12px 0 0; font-size: 14px; color: #067647; background: #DCFAE6; padding: 12px 14px; border-radius: 10px">Propriété vérifiée pour {{added}}. Le premier scan complet démarre maintenant.</p>
 </sc-if>
 </section>
 
-<section style="margin-top: 16px; background: #FFFFFF; border: 1px solid #E4E7E3; border-radius: 16px; padding: 24px">
+<section style="margin-top: 16px; background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 24px">
 <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px">
 <h2 style="margin: 0; font-size: 17px; font-weight: 600">Actifs surveillés</h2>
 <p style="margin: 0; font-size: 13px; color: #5B6570">{{total}} actifs</p>
 </div>
 <div style="margin-top: 12px; overflow-x: auto">
 <table style="width: 100%; min-width: 760px; border-collapse: collapse; font-size: 14px">
-<thead><tr style="text-align: left; color: #5B6570; font-size: 13px"><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #ECEEEA">Actif</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #ECEEEA">Type</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #ECEEEA">Criticité</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #ECEEEA">Propriété</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #ECEEEA">Score</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #ECEEEA">Ouvertes</th></tr></thead>
+<thead><tr style="text-align: left; color: #5B6570; font-size: 13px"><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #E3E7EC">Actif</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #E3E7EC">Type</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #E3E7EC">Criticité</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #E3E7EC">Propriété</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #E3E7EC">Score</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #E3E7EC">Ouvertes</th></tr></thead>
 <tbody>
 <sc-for list="{{assets}}" as="a" hint-placeholder-count="6">
-<tr><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF; font-weight: 500">{{a.name}}</td><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF; color: #5B6570">{{a.type}}</td><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF">{{a.crit}}</td><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF"><span style="{{a.statusStyle}}">{{a.status}}</span></td><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF; font-weight: 600">{{a.score}}</td><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF">{{a.open}}</td></tr>
+<tr><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4; font-weight: 500">{{a.name}}</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4; color: #5B6570">{{a.type}}</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4">{{a.crit}}</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4"><span style="{{a.statusStyle}}">{{a.status}}</span></td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4; font-weight: 600">{{a.score}}</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4">{{a.open}}</td></tr>
 </sc-for>
 </tbody>
 </table>
 </div>
 </section>
 
-<section style="margin-top: 16px; background: #FFFFFF; border: 1px solid #E4E7E3; border-radius: 16px; padding: 24px">
+<section style="margin-top: 16px; background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 24px">
 <h2 style="margin: 0; font-size: 17px; font-weight: 600">Découverts automatiquement</h2>
 <p style="margin: 6px 0 0; font-size: 14px; color: #5B6570">Ces éléments semblent vous appartenir mais ne sont pas encore surveillés.</p>
 <div style="margin-top: 14px; display: flex; flex-direction: column">
-<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid #F1F2EF"><div><p style="margin: 0; font-weight: 500">test.microfinance.cg</p><p style="margin: 2px 0 0; font-size: 13px; color: #5B6570">Sous-domaine · trouvé via certificats publics</p></div><button type="button" style="min-height: 40px; padding: 0 14px; font: inherit; font-size: 14px; color: #0E1116; background: #FFFFFF; border: 1px solid #D5DAD4; border-radius: 10px; cursor: pointer">Surveiller</button></div>
-<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid #F1F2EF"><div><p style="margin: 0; font-weight: 500">ancien-site.microfinance.cg</p><p style="margin: 2px 0 0; font-size: 13px; color: #5B6570">Sous-domaine · enregistrement DNS actif</p></div><button type="button" style="min-height: 40px; padding: 0 14px; font: inherit; font-size: 14px; color: #0E1116; background: #FFFFFF; border: 1px solid #D5DAD4; border-radius: 10px; cursor: pointer">Surveiller</button></div>
-<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 0"><div><p style="margin: 0; font-weight: 500">196.x.x.31</p><p style="margin: 2px 0 0; font-size: 13px; color: #5B6570">Adresse IP · même bloc réseau</p></div><button type="button" style="min-height: 40px; padding: 0 14px; font: inherit; font-size: 14px; color: #0E1116; background: #FFFFFF; border: 1px solid #D5DAD4; border-radius: 10px; cursor: pointer">Surveiller</button></div>
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid #EEF1F4"><div><p style="margin: 0; font-weight: 500">test.microfinance.cg</p><p style="margin: 2px 0 0; font-size: 13px; color: #5B6570">Sous-domaine · trouvé via certificats publics</p></div><button type="button" style="min-height: 40px; padding: 0 14px; font: inherit; font-size: 14px; color: #0E1116; background: #FFFFFF; border: 1px solid #D5DAE1; border-radius: 10px; cursor: pointer">Surveiller</button></div>
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid #EEF1F4"><div><p style="margin: 0; font-weight: 500">ancien-site.microfinance.cg</p><p style="margin: 2px 0 0; font-size: 13px; color: #5B6570">Sous-domaine · enregistrement DNS actif</p></div><button type="button" style="min-height: 40px; padding: 0 14px; font: inherit; font-size: 14px; color: #0E1116; background: #FFFFFF; border: 1px solid #D5DAE1; border-radius: 10px; cursor: pointer">Surveiller</button></div>
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 0"><div><p style="margin: 0; font-weight: 500">196.x.x.31</p><p style="margin: 2px 0 0; font-size: 13px; color: #5B6570">Adresse IP · même bloc réseau</p></div><button type="button" style="min-height: 40px; padding: 0 14px; font: inherit; font-size: 14px; color: #0E1116; background: #FFFFFF; border: 1px solid #D5DAE1; border-radius: 10px; cursor: pointer">Surveiller</button></div>
 </div>
 </section>
 </main>
@@ -113,8 +113,8 @@ class Component extends DCLogic {
     this.state = { name: '', added: '', step: 'idle', error: '', extra: [] };
   }
   renderVals() {
-    const ok = 'font-size: 12px; font-weight: 600; color: #0F5F58; background: #D7EFEA; padding: 3px 8px; border-radius: 6px';
-    const wait = 'font-size: 12px; font-weight: 600; color: #93370D; background: #FEF0C7; padding: 3px 8px; border-radius: 6px';
+    const ok = 'font-size: 12px; font-weight: 600; color: #067647; background: #DCFAE6; padding: 3px 8px; border-radius: 6px';
+    const wait = 'font-size: 12px; font-weight: 600; color: #B54708; background: #FEF0C7; padding: 3px 8px; border-radius: 6px';
     const base = [
       { name: 'microfinance.cg', type: 'Domaine', crit: 'Haute', status: 'Vérifiée', statusStyle: ok, score: 86, open: 2 },
       { name: 'portail.microfinance.cg', type: 'Application web', crit: 'Haute', status: 'Vérifiée', statusStyle: ok, score: 57, open: 5 },

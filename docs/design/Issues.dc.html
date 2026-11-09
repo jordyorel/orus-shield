@@ -48,30 +48,30 @@ a{color:#0F766E}a:hover{color:#115E59}
 </div>
 
 <div style="margin-top: 24px; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
-<section aria-label="Liste des vulnérabilités" style="flex: 1 1 380px; min-width: 0; background: #FFFFFF; border: 1px solid #E4E7E3; border-radius: 16px; overflow: hidden">
+<section aria-label="Liste des vulnérabilités" style="flex: 1 1 380px; min-width: 0; background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; overflow: hidden">
 <sc-for list="{{list}}" as="i" hint-placeholder-count="6">
 <button type="button" onClick="{{i.pick}}" style="{{i.rowStyle}}">
-<span style="display: flex; justify-content: space-between; gap: 12px; align-items: center"><span style="{{i.sevStyle}}">{{i.sevLabel}}</span><span style="font-size: 12px; color: #6B7580">{{i.age}}</span></span>
+<span style="display: flex; justify-content: space-between; gap: 12px; align-items: center"><span style="{{i.sevStyle}}">{{i.sevLabel}}</span><span style="font-size: 12px; color: #5B6570">{{i.age}}</span></span>
 <span style="display: block; margin-top: 8px; font-size: 15px; font-weight: 600; color: #0E1116">{{i.title}}</span>
 <span style="display: block; margin-top: 4px; font-size: 13px; color: #5B6570">{{i.asset}} · {{i.module}}</span>
 </button>
 </sc-for>
 </section>
 
-<section aria-label="Détail" style="flex: 1.4 1 480px; min-width: 0; background: #FFFFFF; border: 1px solid #E4E7E3; border-radius: 16px; padding: 28px">
+<section aria-label="Détail" style="flex: 1.4 1 480px; min-width: 0; background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 28px">
 <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center"><span style="{{sel.sevStyle}}">{{sel.sevLabel}}</span><span style="font-size: 13px; color: #5B6570">{{sel.module}} · détectée {{sel.age}}</span></div>
 <h2 style="margin: 14px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 26px; line-height: 1.2; letter-spacing: -0.01em">{{sel.title}}</h2>
 <p style="margin: 6px 0 0; font-size: 14px; color: #5B6570">Actif concerné : <a href="Assets.dc.html">{{sel.asset}}</a></p>
 
 <div style="margin-top: 22px; display: flex; flex-wrap: wrap; gap: 10px">
-<button type="button" onClick="{{markFixed}}" style="min-height: 44px; padding: 0 16px; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; background: #0E1116; border: 0; border-radius: 10px; cursor: pointer">{{fixLabel}}</button>
-<button type="button" style="min-height: 44px; padding: 0 16px; font: inherit; font-size: 14px; color: #0E1116; background: #FFFFFF; border: 1px solid #D5DAD4; border-radius: 10px; cursor: pointer">Revérifier</button>
-<button type="button" style="min-height: 44px; padding: 0 16px; font: inherit; font-size: 14px; color: #0E1116; background: #FFFFFF; border: 1px solid #D5DAD4; border-radius: 10px; cursor: pointer">Créer un ticket</button>
+<button type="button" onClick="{{markFixed}}" style="min-height: 44px; padding: 0 16px; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; background: #0C5DA5; border: 0; border-radius: 10px; cursor: pointer">{{fixLabel}}</button>
+<button type="button" style="min-height: 44px; padding: 0 16px; font: inherit; font-size: 14px; color: #0E1116; background: #FFFFFF; border: 1px solid #D5DAE1; border-radius: 10px; cursor: pointer">Revérifier</button>
+<button type="button" style="min-height: 44px; padding: 0 16px; font: inherit; font-size: 14px; color: #0E1116; background: #FFFFFF; border: 1px solid #D5DAE1; border-radius: 10px; cursor: pointer">Créer un ticket</button>
 <button type="button" style="min-height: 44px; padding: 0 16px; font: inherit; font-size: 14px; color: #5B6570; background: transparent; border: 0; cursor: pointer">Accepter le risque</button>
 </div>
 
-<div style="margin-top: 26px; background: #F3F8F7; border: 1px solid #D7EBE7; border-radius: 14px; padding: 20px">
-<p style="margin: 0; font-size: 13px; font-weight: 600; color: #0F5F58">Explication de l'IA</p>
+<div style="margin-top: 26px; background: #F1F6FB; border: 1px solid #C9DBF0; border-radius: 14px; padding: 20px">
+<p style="margin: 0; font-size: 13px; font-weight: 600; color: #067647">Explication de l'IA</p>
 <p style="margin: 8px 0 0; font-size: 15px; line-height: 1.65; color: #1F2A33">{{sel.explain}}</p>
 </div>
 
@@ -81,7 +81,7 @@ a{color:#0F766E}a:hover{color:#115E59}
 </ol>
 
 <h3 style="margin: 26px 0 0; font-size: 15px; font-weight: 600">Preuve technique</h3>
-<pre style="margin: 12px 0 0; padding: 16px; background: #0E1116; color: #C9F2EA; border-radius: 12px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.6; overflow-x: auto; white-space: pre-wrap">{{sel.evidence}}</pre>
+<pre style="margin: 12px 0 0; padding: 16px; background: #0E1116; color: #D1E9FF; border-radius: 12px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.6; overflow-x: auto; white-space: pre-wrap">{{sel.evidence}}</pre>
 </section>
 </div>
 </main>
@@ -96,10 +96,10 @@ class Component extends DCLogic {
   renderVals() {
     const sev = {
       crit: ['Critique', 'font-size: 12px; font-weight: 600; color: #B42318; background: #FEE4E2; padding: 3px 8px; border-radius: 6px'],
-      high: ['Élevé', 'font-size: 12px; font-weight: 600; color: #93370D; background: #FEF0C7; padding: 3px 8px; border-radius: 6px'],
-      med: ['Moyen', 'font-size: 12px; font-weight: 600; color: #1849A9; background: #E0EAFF; padding: 3px 8px; border-radius: 6px'],
-      low: ['Faible', 'font-size: 12px; font-weight: 600; color: #475467; background: #EAECF0; padding: 3px 8px; border-radius: 6px'],
-      done: ['Corrigée', 'font-size: 12px; font-weight: 600; color: #0F5F58; background: #D7EFEA; padding: 3px 8px; border-radius: 6px']
+      high: ['Élevé', 'font-size: 12px; font-weight: 600; color: #B54708; background: #FEF0C7; padding: 3px 8px; border-radius: 6px'],
+      med: ['Moyen', 'font-size: 12px; font-weight: 600; color: #854A0E; background: #FEF7C3; padding: 3px 8px; border-radius: 6px'],
+      low: ['Faible', 'font-size: 12px; font-weight: 600; color: #1849A9; background: #E0EAFF; padding: 3px 8px; border-radius: 6px'],
+      done: ['Corrigée', 'font-size: 12px; font-weight: 600; color: #067647; background: #DCFAE6; padding: 3px 8px; border-radius: 6px']
     };
     const all = [
       { id: 'rdp', s: 'crit', title: 'Bureau à distance (RDP) exposé sur internet', asset: 'srv-compta.microfinance.cg', module: 'Ports et services', age: 'il y a 2 j',
@@ -133,8 +133,8 @@ class Component extends DCLogic {
     ];
     const counts = { all: all.length, crit: 0, high: 0, med: 0, low: 0 };
     all.forEach((x) => { counts[x.s] += 1; });
-    const on = 'min-height: 40px; padding: 0 14px; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; background: #0E1116; border: 1px solid #0E1116; border-radius: 999px; cursor: pointer';
-    const off = 'min-height: 40px; padding: 0 14px; font: inherit; font-size: 14px; color: #1F2A33; background: #FFFFFF; border: 1px solid #D5DAD4; border-radius: 999px; cursor: pointer';
+    const on = 'min-height: 40px; padding: 0 14px; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; background: #0C5DA5; border: 1px solid #0C5DA5; border-radius: 999px; cursor: pointer';
+    const off = 'min-height: 40px; padding: 0 14px; font: inherit; font-size: 14px; color: #1F2A33; background: #FFFFFF; border: 1px solid #D5DAE1; border-radius: 999px; cursor: pointer';
     const filters = [['all', 'Toutes'], ['crit', 'Critiques'], ['high', 'Élevées'], ['med', 'Moyennes'], ['low', 'Faibles']].map(([id, label]) => ({
       label, count: counts[id], style: this.state.filter === id ? on : off, pick: () => this.setState({ filter: id })
     }));
@@ -142,10 +142,10 @@ class Component extends DCLogic {
       const k = this.state.fixed[x.id] ? 'done' : x.s;
       return { ...x, sevLabel: sev[k][0], sevStyle: sev[k][1] };
     };
-    const base = 'display: block; width: 100%; text-align: left; font: inherit; padding: 18px 20px; border: 0; border-bottom: 1px solid #F1F2EF; cursor: pointer; ';
+    const base = 'display: block; width: 100%; text-align: left; font: inherit; padding: 18px 20px; border: 0; border-bottom: 1px solid #EEF1F4; cursor: pointer; ';
     const list = all.filter((x) => this.state.filter === 'all' || x.s === this.state.filter).map((x) => ({
       ...deco(x),
-      rowStyle: base + (x.id === this.state.selected ? 'background: #F3F8F7; box-shadow: inset 3px 0 0 #0F766E' : 'background: #FFFFFF'),
+      rowStyle: base + (x.id === this.state.selected ? 'background: #F1F6FB; box-shadow: inset 3px 0 0 #0C5DA5' : 'background: #FFFFFF'),
       pick: () => this.setState({ selected: x.id })
     }));
     const sel = deco(all.find((x) => x.id === this.state.selected));

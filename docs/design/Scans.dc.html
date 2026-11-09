@@ -42,9 +42,9 @@ input[type=range]{accent-color:#0F766E}
 <h1 style="margin: 4px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 32px; letter-spacing: -0.02em">Configuration des scans</h1>
 </div>
 <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
-<span style="font-size: 14px; color: #0F5F58">{{savedMsg}}</span>
-<button type="button" style="min-height: 44px; padding: 0 16px; font: inherit; font-size: 15px; color: #0E1116; background: #FFFFFF; border: 1px solid #D5DAD4; border-radius: 10px; cursor: pointer">Lancer maintenant</button>
-<button type="button" onClick="{{save}}" style="min-height: 44px; padding: 0 18px; font: inherit; font-size: 15px; font-weight: 600; color: #FFFFFF; background: #0E1116; border: 0; border-radius: 10px; cursor: pointer">Enregistrer</button>
+<span style="font-size: 14px; color: #067647">{{savedMsg}}</span>
+<button type="button" style="min-height: 44px; padding: 0 16px; font: inherit; font-size: 15px; color: #0E1116; background: #FFFFFF; border: 1px solid #D5DAE1; border-radius: 10px; cursor: pointer">Lancer maintenant</button>
+<button type="button" onClick="{{save}}" style="min-height: 44px; padding: 0 18px; font: inherit; font-size: 15px; font-weight: 600; color: #FFFFFF; background: #0C5DA5; border: 0; border-radius: 10px; cursor: pointer">Enregistrer</button>
 </div>
 </div>
 
@@ -54,20 +54,20 @@ input[type=range]{accent-color:#0F766E}
 <sc-for list="{{profiles}}" as="p" hint-placeholder-count="3">
 <button type="button" onClick="{{p.pick}}" aria-pressed="{{p.pressed}}" style="{{p.style}}">
 <span style="display: block; font-size: 16px; font-weight: 600; color: #0E1116">{{p.name}}</span>
-<span style="display: block; margin-top: 6px; font-size: 14px; line-height: 1.5; color: #4B5560">{{p.desc}}</span>
-<span style="display: block; margin-top: 10px; font-size: 13px; color: #0F5F58">{{p.time}}</span>
+<span style="display: block; margin-top: 6px; font-size: 14px; line-height: 1.5; color: #3D4752">{{p.desc}}</span>
+<span style="display: block; margin-top: 10px; font-size: 13px; color: #067647">{{p.time}}</span>
 </button>
 </sc-for>
 </div>
 </section>
 
 <div style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
-<section style="flex: 1.5 1 480px; min-width: 0; background: #FFFFFF; border: 1px solid #E4E7E3; border-radius: 16px; padding: 24px">
+<section style="flex: 1.5 1 480px; min-width: 0; background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 24px">
 <h2 style="margin: 0; font-size: 17px; font-weight: 600">Modules</h2>
 <p style="margin: 6px 0 0; font-size: 14px; color: #5B6570">{{activeCount}} modules actifs</p>
 <div style="margin-top: 8px; display: flex; flex-direction: column">
 <sc-for list="{{modules}}" as="m" hint-placeholder-count="9">
-<div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px solid #F1F2EF">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px solid #EEF1F4">
 <div style="min-width: 0">
 <p style="margin: 0; font-size: 15px; font-weight: 600">{{m.name}} <span style="{{m.tagStyle}}">{{m.tag}}</span></p>
 <p style="margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: #5B6570">{{m.desc}}</p>
@@ -79,19 +79,19 @@ input[type=range]{accent-color:#0F766E}
 </section>
 
 <div style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
-<section style="background: #FFFFFF; border: 1px solid #E4E7E3; border-radius: 16px; padding: 24px">
+<section style="background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 24px">
 <h2 style="margin: 0; font-size: 17px; font-weight: 600">Planification</h2>
 <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 14px">
-<div style="display: flex; flex-direction: column; gap: 6px"><label for="freq" style="font-size: 13px; font-weight: 500">Fréquence</label><select id="freq" style="height: 44px; padding: 0 12px; font: inherit; font-size: 15px; border: 1px solid #D5DAD4; border-radius: 10px; background: #FFFFFF; color: #0E1116"><option>Quotidienne</option><option selected>Hebdomadaire</option><option>Mensuelle</option><option>Continue (surveillance)</option></select></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="freq" style="font-size: 13px; font-weight: 500">Fréquence</label><select id="freq" style="height: 44px; padding: 0 12px; font: inherit; font-size: 15px; border: 1px solid #D5DAE1; border-radius: 10px; background: #FFFFFF; color: #0E1116"><option>Quotidienne</option><option selected>Hebdomadaire</option><option>Mensuelle</option><option>Continue (surveillance)</option></select></div>
 <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
-<div style="display: flex; flex-direction: column; gap: 6px"><label for="day" style="font-size: 13px; font-weight: 500">Jour</label><select id="day" style="height: 44px; padding: 0 12px; font: inherit; font-size: 15px; border: 1px solid #D5DAD4; border-radius: 10px; background: #FFFFFF; color: #0E1116"><option>Dimanche</option><option>Lundi</option><option>Samedi</option></select></div>
-<div style="display: flex; flex-direction: column; gap: 6px"><label for="hour" style="font-size: 13px; font-weight: 500">Heure</label><select id="hour" style="height: 44px; padding: 0 12px; font: inherit; font-size: 15px; border: 1px solid #D5DAD4; border-radius: 10px; background: #FFFFFF; color: #0E1116"><option>02:00</option><option>06:00</option><option>22:00</option></select></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="day" style="font-size: 13px; font-weight: 500">Jour</label><select id="day" style="height: 44px; padding: 0 12px; font: inherit; font-size: 15px; border: 1px solid #D5DAE1; border-radius: 10px; background: #FFFFFF; color: #0E1116"><option>Dimanche</option><option>Lundi</option><option>Samedi</option></select></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="hour" style="font-size: 13px; font-weight: 500">Heure</label><select id="hour" style="height: 44px; padding: 0 12px; font: inherit; font-size: 15px; border: 1px solid #D5DAE1; border-radius: 10px; background: #FFFFFF; color: #0E1116"><option>02:00</option><option>06:00</option><option>22:00</option></select></div>
 </div>
 <p style="margin: 0; font-size: 13px; color: #5B6570">Fuseau horaire : Africa/Brazzaville (UTC+1)</p>
 </div>
 </section>
 
-<section style="background: #FFFFFF; border: 1px solid #E4E7E3; border-radius: 16px; padding: 24px">
+<section style="background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 24px">
 <h2 style="margin: 0; font-size: 17px; font-weight: 600">Intensité</h2>
 <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 8px">
 <div style="display: flex; justify-content: space-between"><label for="rate" style="font-size: 13px; font-weight: 500">Requêtes par seconde, par actif</label><span style="font-size: 14px; font-weight: 600">{{rate}}</span></div>
@@ -100,7 +100,7 @@ input[type=range]{accent-color:#0F766E}
 </div>
 <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 6px">
 <label for="excl" style="font-size: 13px; font-weight: 500">Exclusions</label>
-<textarea id="excl" rows="3" style="font: inherit; font-size: 14px; padding: 10px 12px; border: 1px solid #D5DAD4; border-radius: 10px; resize: vertical; color: #0E1116">/admin/paiements
+<textarea id="excl" rows="3" style="font: inherit; font-size: 14px; padding: 10px 12px; border: 1px solid #D5DAE1; border-radius: 10px; resize: vertical; color: #0E1116">/admin/paiements
 196.x.x.20</textarea>
 <p style="margin: 0; font-size: 13px; color: #5B6570">Chemins, adresses ou ports à ne jamais tester.</p>
 </div>
@@ -108,15 +108,15 @@ input[type=range]{accent-color:#0F766E}
 </div>
 </div>
 
-<section style="margin-top: 16px; background: #FFFFFF; border: 1px solid #E4E7E3; border-radius: 16px; padding: 24px">
+<section style="margin-top: 16px; background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 24px">
 <h2 style="margin: 0; font-size: 17px; font-weight: 600">Historique</h2>
 <div style="margin-top: 12px; overflow-x: auto">
 <table style="width: 100%; min-width: 700px; border-collapse: collapse; font-size: 14px">
-<thead><tr style="text-align: left; color: #5B6570; font-size: 13px"><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #ECEEEA">Date</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #ECEEEA">Profil</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #ECEEEA">Actifs</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #ECEEEA">Durée</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #ECEEEA">Nouvelles</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #ECEEEA">Statut</th></tr></thead>
+<thead><tr style="text-align: left; color: #5B6570; font-size: 13px"><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #E3E7EC">Date</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #E3E7EC">Profil</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #E3E7EC">Actifs</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #E3E7EC">Durée</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #E3E7EC">Nouvelles</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #E3E7EC">Statut</th></tr></thead>
 <tbody>
-<tr><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF">08/11, 22:40</td><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF">Standard</td><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF">14</td><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF">—</td><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF">—</td><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF"><div style="display: flex; align-items: center; gap: 10px"><div style="width: 120px; height: 6px; background: #EEF0ED; border-radius: 3px"><div style="width: 64%; height: 6px; background: #0F766E; border-radius: 3px"></div></div><span style="font-size: 13px; color: #0F5F58">En cours · 64 %</span></div></td></tr>
-<tr><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF">08/11, 06:00</td><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF">Rapide</td><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF">14</td><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF">6 min</td><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF">1</td><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF; color: #5B6570">Terminé</td></tr>
-<tr><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF">02/11, 02:00</td><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF">Approfondi</td><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF">13</td><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF">2 h 14</td><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF">7</td><td style="padding: 14px 8px; border-bottom: 1px solid #F1F2EF; color: #5B6570">Terminé</td></tr>
+<tr><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4">08/11, 22:40</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4">Standard</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4">14</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4">—</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4">—</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4"><div style="display: flex; align-items: center; gap: 10px"><div style="width: 120px; height: 6px; background: #EEF1F4; border-radius: 3px"><div style="width: 64%; height: 6px; background: #0C5DA5; border-radius: 3px"></div></div><span style="font-size: 13px; color: #067647">En cours · 64 %</span></div></td></tr>
+<tr><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4">08/11, 06:00</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4">Rapide</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4">14</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4">6 min</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4">1</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4; color: #5B6570">Terminé</td></tr>
+<tr><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4">02/11, 02:00</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4">Approfondi</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4">13</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4">2 h 14</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4">7</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4; color: #5B6570">Terminé</td></tr>
 <tr><td style="padding: 14px 8px">26/10, 02:00</td><td style="padding: 14px 8px">Standard</td><td style="padding: 14px 8px">11</td><td style="padding: 14px 8px">38 min</td><td style="padding: 14px 8px">3</td><td style="padding: 14px 8px; color: #5B6570">Terminé</td></tr>
 </tbody>
 </table>
@@ -143,7 +143,7 @@ class Component extends DCLogic {
     ].map((p) => ({
       ...p,
       pressed: this.state.profile === p.id ? 'true' : 'false',
-      style: card + (this.state.profile === p.id ? 'border: 2px solid #0F766E' : 'border: 2px solid #E4E7E3'),
+      style: card + (this.state.profile === p.id ? 'border: 2px solid #0C5DA5' : 'border: 2px solid #E3E7EC'),
       pick: () => this.setState({ profile: p.id, saved: false })
     }));
     const defs = [
@@ -161,10 +161,10 @@ class Component extends DCLogic {
       const on = !!this.state.on[id];
       return {
         name, desc, tag,
-        tagStyle: tag === 'Intrusif' ? 'font-size: 12px; font-weight: 600; color: #93370D; background: #FEF0C7; padding: 2px 7px; border-radius: 6px; margin-left: 6px' : (tag ? 'font-size: 12px; font-weight: 600; color: #1849A9; background: #E0EAFF; padding: 2px 7px; border-radius: 6px; margin-left: 6px' : 'display: none'),
+        tagStyle: tag === 'Intrusif' ? 'font-size: 12px; font-weight: 600; color: #B54708; background: #FEF0C7; padding: 2px 7px; border-radius: 6px; margin-left: 6px' : (tag ? 'font-size: 12px; font-weight: 600; color: #1849A9; background: #E0EAFF; padding: 2px 7px; border-radius: 6px; margin-left: 6px' : 'display: none'),
         on: on ? 'true' : 'false',
         aria: (on ? 'Désactiver ' : 'Activer ') + name,
-        track: 'flex: 0 0 auto; position: relative; width: 52px; height: 30px; border: 0; border-radius: 15px; cursor: pointer; padding: 0; background: ' + (on ? '#0F766E' : '#C9CFCA'),
+        track: 'flex: 0 0 auto; position: relative; width: 52px; height: 30px; border: 0; border-radius: 15px; cursor: pointer; padding: 0; background: ' + (on ? '#0C5DA5' : '#C5CCD5'),
         knob: 'position: absolute; top: 3px; left: ' + (on ? '25px' : '3px') + '; width: 24px; height: 24px; border-radius: 50%; background: #FFFFFF',
         toggle: () => this.setState({ on: { ...this.state.on, [id]: !on }, saved: false })
       };
