@@ -148,6 +148,19 @@ func TestValidate(t *testing.T) {
 		{"last seen before first seen", func(f *Finding) {
 			f.LastSeen = f.FirstSeen.Add(-time.Hour)
 		}, "last_seen"},
+		{"fixed with fixed_at", func(f *Finding) {
+			at := f.LastSeen.Add(time.Hour)
+			f.Status, f.FixedAt = StatusFixed, &at
+		}, ""},
+		{"fixed without fixed_at", func(f *Finding) { f.Status = StatusFixed }, "fixed_at"},
+		{"open with fixed_at", func(f *Finding) {
+			at := f.LastSeen.Add(time.Hour)
+			f.FixedAt = &at
+		}, "fixed_at"},
+		{"fixed before last seen", func(f *Finding) {
+			at := f.LastSeen.Add(-time.Hour)
+			f.Status, f.FixedAt = StatusFixed, &at
+		}, "fixed_at"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -214,6 +227,31 @@ func TestJSONRoundTrip(t *testing.T) {
 	}
 	if !reflect.DeepEqual(in, out) {
 		t.Errorf("round trip mismatch:\n in: %+v\nout: %+v", in, out)
+	}
+}
+
+// fixed_at is optional: absent from the JSON of a finding that is not fixed,
+// so readers of earlier documents see no change.
+func TestFixedAtJSON(t *testing.T) {
+	f := validFinding()
+	data, err := json.Marshal(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "fixed_at") {
+		t.Errorf("open finding JSON has fixed_at: %s", data)
+	}
+	at := f.LastSeen.Add(time.Hour)
+	f.Status, f.FixedAt = StatusFixed, &at
+	if data, err = json.Marshal(f); err != nil {
+		t.Fatal(err)
+	}
+	var out Finding
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.FixedAt == nil || !out.FixedAt.Equal(at) {
+		t.Errorf("fixed_at round trip = %v, want %v", out.FixedAt, at)
 	}
 }
 

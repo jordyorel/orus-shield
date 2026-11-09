@@ -42,9 +42,13 @@ type ScanResult struct {
 // Lifecycle rules:
 //   - new finding: open, first_seen = last_seen = At;
 //   - seen again: last_seen = At, first_seen kept; fixed becomes open again
-//     (a regression);
-//   - open and not seen again by a module that succeeded: fixed;
+//     (a regression) and loses its fixed_at;
+//   - open and not seen again by a module that succeeded: fixed, with
+//     fixed_at = At;
 //   - accepted_risk is the customer's decision and is never changed here.
+//
+// Every status change (opened, fixed, reopened) is also recorded in
+// finding_events, in the same transaction, for remediation history.
 func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 	// PostgreSQL stores microseconds. Rounding here keeps the columns and
 	// the JSON copy identical.
@@ -71,7 +75,7 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 	}
 
 	seen := make([]string, 0, len(r.Findings))
-	created := 0
+	created, reopened := 0, 0
 	for _, f := range r.Findings {
 		f.FirstSeen, f.LastSeen, f.Status = at, at, finding.StatusOpen
 		if err := f.Validate(); err != nil {
@@ -84,7 +88,11 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 		if err != nil {
 			return fmt.Errorf("finish scan %s: encode finding %s: %w", r.ScanID, f.ID, err)
 		}
-		var inserted bool
+		// RETURNING old.status (PostgreSQL 18) gives the status before this
+		// statement: NULL for a new row. That is all we need to know which
+		// event happened. data comes from f, whose FixedAt is nil, so a
+		// reopened finding's JSON loses fixed_at like its column.
+		var previous *string
 		err = tx.QueryRow(ctx, `
 			INSERT INTO findings AS f (org_id, target_id, id, module_id, check_id, severity, status, first_seen, last_seen, data)
 			VALUES ($8, $1, $2, $3, $4, $5, 'open', $6, $6, $7)
@@ -92,28 +100,47 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 				severity  = EXCLUDED.severity,
 				last_seen = EXCLUDED.last_seen,
 				status    = CASE WHEN f.status = 'accepted_risk' THEN 'accepted_risk' ELSE 'open' END,
+				fixed_at  = NULL,
 				-- The JSON copy gets the lifecycle fields from the row, so
 				-- both always agree.
 				data = EXCLUDED.data || jsonb_build_object(
 					'first_seen', f.first_seen,
 					'status', CASE WHEN f.status = 'accepted_risk' THEN 'accepted_risk' ELSE 'open' END)
-			RETURNING (xmax = 0)`, // xmax = 0 only for a freshly inserted row
-			targetID, f.ID, f.ModuleID, f.CheckID, string(f.Severity), at, data, orgID).Scan(&inserted)
+			RETURNING old.status`,
+			targetID, f.ID, f.ModuleID, f.CheckID, string(f.Severity), at, data, orgID).Scan(&previous)
 		if err != nil {
 			return fmt.Errorf("finish scan %s: save finding %s: %w", r.ScanID, f.ID, err)
 		}
-		if inserted {
+		switch {
+		case previous == nil:
 			created++
+			err = recordEvent(ctx, tx, FindingEvent{OrgID: orgID, TargetID: targetID, FindingID: f.ID, At: at,
+				To: finding.StatusOpen, Actor: r.WorkerID, ScanID: r.ScanID})
+		case *previous == string(finding.StatusFixed):
+			reopened++
+			err = recordEvent(ctx, tx, FindingEvent{OrgID: orgID, TargetID: targetID, FindingID: f.ID, At: at,
+				From: finding.StatusFixed, To: finding.StatusOpen, Actor: r.WorkerID, ScanID: r.ScanID})
+		}
+		if err != nil {
+			return fmt.Errorf("finish scan %s: finding %s: %w", r.ScanID, f.ID, err)
 		}
 		seen = append(seen, f.ID)
 	}
 
 	var fixed int64
 	if len(r.Succeeded) > 0 {
+		// One statement marks the findings fixed and records one event per
+		// finding, from the rows the UPDATE returns.
 		tag, err := tx.Exec(ctx, `
-			UPDATE findings SET status = 'fixed', data = data || '{"status": "fixed"}'
-			WHERE target_id = $1 AND status = 'open' AND module_id = ANY($2) AND NOT (id = ANY($3))`,
-			targetID, r.Succeeded, seen)
+			WITH fixed AS (
+				UPDATE findings SET status = 'fixed', fixed_at = $4,
+					data = data || jsonb_build_object('status', 'fixed', 'fixed_at', $4::timestamptz)
+				WHERE target_id = $1 AND status = 'open' AND module_id = ANY($2) AND NOT (id = ANY($3))
+				RETURNING org_id, target_id, id
+			)
+			INSERT INTO finding_events (org_id, target_id, finding_id, at, from_status, to_status, actor, scan_id)
+			SELECT org_id, target_id, id, $4, 'open', 'fixed', $5, $6 FROM fixed`,
+			targetID, r.Succeeded, seen, at, r.WorkerID, r.ScanID)
 		if err != nil {
 			return fmt.Errorf("finish scan %s: mark fixed findings: %w", r.ScanID, err)
 		}
@@ -128,7 +155,7 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 		Details: map[string]any{
 			"scan_id": r.ScanID, "attempt": r.Attempt,
 			"succeeded": succeeded, "failed": failed,
-			"findings": len(r.Findings), "new": created, "fixed": fixed,
+			"findings": len(r.Findings), "new": created, "fixed": fixed, "reopened": reopened,
 		},
 	}); err != nil {
 		return err
@@ -196,19 +223,28 @@ func (o *Org) SetFindingStatus(ctx context.Context, targetID, findingID string, 
 	}
 	defer tx.Rollback(ctx)
 
+	// A fixed finding whose risk is accepted is no longer fixed: fixed_at
+	// is cleared, in the column and in the JSON copy.
 	var domain, previous string
+	var at time.Time
 	err = tx.QueryRow(ctx, `
-		WITH old AS (SELECT status FROM findings WHERE org_id = $4 AND target_id = $1 AND id = $2 FOR UPDATE)
-		UPDATE findings f SET status = $3, data = f.data || jsonb_build_object('status', $3::text)
-		FROM targets t, old
+		UPDATE findings f SET status = $3, fixed_at = NULL,
+			data = (f.data - 'fixed_at') || jsonb_build_object('status', $3::text)
+		FROM targets t
 		WHERE t.id = f.target_id AND f.org_id = $4 AND f.target_id = $1 AND f.id = $2
-		RETURNING t.domain, old.status`,
-		targetID, findingID, string(status), o.orgID).Scan(&domain, &previous)
+		RETURNING t.domain, old.status, now()`,
+		targetID, findingID, string(status), o.orgID).Scan(&domain, &previous, &at)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("set finding status %s: %w", findingID, ErrNotFound)
 	}
 	if err != nil {
 		return fmt.Errorf("set finding status %s: %w", findingID, err)
+	}
+	if previous != string(status) {
+		if err := recordEvent(ctx, tx, FindingEvent{OrgID: o.orgID, TargetID: targetID, FindingID: findingID,
+			At: at, From: finding.Status(previous), To: status, Actor: actor}); err != nil {
+			return fmt.Errorf("set finding status %s: %w", findingID, err)
+		}
 	}
 	if err := appendAudit(ctx, tx, AuditEntry{
 		OrgID: o.orgID, Actor: actor, Action: ActionFindingStatus, Target: domain,

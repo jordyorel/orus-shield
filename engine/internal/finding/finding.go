@@ -78,8 +78,9 @@ func (s Status) Valid() bool {
 
 // Finding is one security observation about one asset of a target.
 //
-// Modules fill the descriptive fields. FirstSeen, LastSeen and Status describe
-// history across scans, so the engine sets them, not the module.
+// Modules fill the descriptive fields. FirstSeen, LastSeen, Status and
+// FixedAt describe history across scans, so the engine sets them, not the
+// module.
 type Finding struct {
 	SchemaVersion string `json:"schema_version"`
 	// ID is derived from ModuleID, CheckID, Target and Asset (see NewID), so
@@ -100,6 +101,11 @@ type Finding struct {
 	FirstSeen   time.Time `json:"first_seen"`
 	LastSeen    time.Time `json:"last_seen"`
 	Status      Status    `json:"status"`
+	// FixedAt is when a scan first stopped seeing the finding; set only
+	// while Status is fixed. The real fix happened between LastSeen and
+	// FixedAt. Added in schema version 1 as an optional field: older
+	// readers ignore it.
+	FixedAt *time.Time `json:"fixed_at,omitempty"`
 }
 
 // NewID returns the deterministic ID of a finding: the hex SHA-256 of its
@@ -178,6 +184,14 @@ func (f Finding) Validate() error {
 	}
 	if !f.Status.Valid() {
 		fail("status: unknown value %q", f.Status)
+	}
+	switch {
+	case f.Status == StatusFixed && f.FixedAt == nil:
+		fail("fixed_at: must be set when status is fixed")
+	case f.Status != StatusFixed && f.FixedAt != nil:
+		fail("fixed_at: must be empty unless status is fixed")
+	case f.FixedAt != nil && f.FixedAt.Before(f.LastSeen):
+		fail("fixed_at: must not be before last_seen")
 	}
 
 	return errors.Join(errs...)

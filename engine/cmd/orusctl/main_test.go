@@ -20,7 +20,8 @@ type fakeStore struct {
 	enqueued []string // "targetID modules requester"
 	findings []finding.Finding
 	audit    []store.AuditEntry
-	verifier *fakeVerifier // the verifier opened with this organization
+	verifier *fakeVerifier                   // the verifier opened with this organization
+	history  map[string][]store.FindingEvent // by finding ID
 }
 
 func (f *fakeStore) CreateTarget(ctx context.Context, nt store.NewTarget) (store.Target, error) {
@@ -52,6 +53,10 @@ func (f *fakeStore) GetScan(ctx context.Context, id string) (store.Scan, error) 
 
 func (f *fakeStore) ListFindings(ctx context.Context, targetID string) ([]finding.Finding, error) {
 	return f.findings, nil
+}
+
+func (f *fakeStore) FindingHistory(ctx context.Context, targetID, findingID string) ([]store.FindingEvent, error) {
+	return f.history[findingID], nil
 }
 
 func (f *fakeStore) AuditLog(ctx context.Context, target string) ([]store.AuditEntry, error) {
@@ -401,5 +406,32 @@ func TestVerifyTokenHintNamesNonDefaultOrg(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "orusctl target verify -org Default example.com") {
 		t.Errorf("output = %q", out.String())
+	}
+}
+
+func TestFindingsShowFixDateAndHistory(t *testing.T) {
+	c, st, out := newCLI()
+	fixed := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
+	st.findings = []finding.Finding{{
+		ID: "f1", Severity: finding.SeverityHigh, Status: finding.StatusFixed, FixedAt: &fixed,
+		ModuleID: "email", CheckID: "spf-missing", Asset: "example.com", Title: "No SPF record",
+		Description: "No SPF.",
+	}}
+	st.history = map[string][]store.FindingEvent{"f1": {
+		{At: time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC), To: finding.StatusOpen},
+		{At: fixed, From: finding.StatusOpen, To: finding.StatusFixed},
+	}}
+	if err := c.run(context.Background(), []string{"findings", "example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "fixed 2026-11-03") {
+		t.Errorf("table output does not show the fix date:\n%s", out.String())
+	}
+	out.Reset()
+	if err := c.run(context.Background(), []string{"findings", "-v", "example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "history: opened 2026-11-01, fixed 2026-11-03") {
+		t.Errorf("verbose output does not show the history:\n%s", out.String())
 	}
 }

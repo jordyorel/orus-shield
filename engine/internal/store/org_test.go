@@ -167,6 +167,9 @@ func TestOrgHandleIsolation(t *testing.T) {
 	if _, err := a.GetScan(ctx, c.scanB.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("GetScan(B's scan) = %v, want ErrNotFound", err)
 	}
+	if got, err := a.FindingHistory(ctx, c.tb.ID, c.findingB.ID); err != nil || len(got) != 0 {
+		t.Errorf("FindingHistory(B's finding) = %v, %v; want none", got, err)
+	}
 	if got, err := a.ListFindings(ctx, c.tb.ID); err != nil || len(got) != 0 {
 		t.Errorf("ListFindings(B's target) = %v, %v; want none", got, err)
 	}
@@ -231,7 +234,7 @@ func TestRowLevelSecurity(t *testing.T) {
 	}
 	defer tx.Rollback(ctx)
 
-	for _, table := range []string{"organizations", "targets", "scans", "findings", "audit_log"} {
+	for _, table := range []string{"organizations", "targets", "scans", "findings", "finding_events", "audit_log"} {
 		var foreign int
 		err := tx.QueryRow(ctx, "SELECT count(*) FROM "+table+" WHERE "+orgColumn(table)+" <> $1", c.a.ID()).Scan(&foreign)
 		if err != nil {

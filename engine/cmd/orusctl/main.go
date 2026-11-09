@@ -85,6 +85,7 @@ type OrgStore interface {
 	EnqueueScan(ctx context.Context, targetID string, modules []string, requestedBy string) (store.Scan, error)
 	GetScan(ctx context.Context, id string) (store.Scan, error)
 	ListFindings(ctx context.Context, targetID string) ([]finding.Finding, error)
+	FindingHistory(ctx context.Context, targetID, findingID string) ([]store.FindingEvent, error)
 	AuditLog(ctx context.Context, target string) ([]store.AuditEntry, error)
 }
 
@@ -452,7 +453,7 @@ func (c cli) status(ctx context.Context, args []string) error {
 func (c cli) findings(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("findings", flag.ContinueOnError)
 	orgRef := c.orgFlag(fs)
-	verbose := fs.Bool("v", false, "show description, evidence and remediation")
+	verbose := fs.Bool("v", false, "show description, evidence, remediation and history")
 	pos, err := parse(fs, args, 1)
 	if err != nil {
 		return err
@@ -483,6 +484,17 @@ func (c cli) findings(ctx context.Context, args []string) error {
 			for i, step := range f.Remediation {
 				fmt.Fprintf(c.out, "  fix %d: %s\n", i+1, step)
 			}
+			events, err := st.FindingHistory(ctx, t.ID, f.ID)
+			if err != nil {
+				return err
+			}
+			var history []string
+			for _, e := range events {
+				history = append(history, e.Kind()+" "+e.At.Format(time.DateOnly))
+			}
+			if len(history) > 0 {
+				fmt.Fprintf(c.out, "  history: %s\n", strings.Join(history, ", "))
+			}
 			fmt.Fprintln(c.out)
 		}
 		return nil
@@ -490,7 +502,11 @@ func (c cli) findings(ctx context.Context, args []string) error {
 	w := tabwriter.NewWriter(c.out, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "SEVERITY\tSTATUS\tCHECK\tASSET\tTITLE")
 	for _, f := range findings {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", f.Severity, f.Status, f.CheckID, f.Asset, f.Title)
+		status := string(f.Status)
+		if f.FixedAt != nil {
+			status += " " + f.FixedAt.Format(time.DateOnly)
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", f.Severity, status, f.CheckID, f.Asset, f.Title)
 	}
 	return w.Flush()
 }

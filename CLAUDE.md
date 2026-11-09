@@ -10,7 +10,8 @@ resolver and dialer, email and TLS modules, PostgreSQL storage and queue, gate, 
 orusctl, ownership verification, per-IP ownership and the ports module). The ports module
 still needs a real-world test on a server Jordy owns. Step 7 follows the order in
 `docs/ui-adaptation.md`: organizations (multi-tenant scoping, `store.Org` + PostgreSQL
-row-level security) are done; next is the findings lifecycle (`fixed_at`, status history).
+row-level security) and the findings lifecycle (`fixed_at`, `finding_events` history) are
+done; next is the asset inventory (it changes the Module contract).
 
 ## How to work on this repo
 

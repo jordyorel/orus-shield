@@ -11,7 +11,11 @@ CLAUDE.md (one step at a time, design first, tests first, stop for review).
   `verify_token`, `verify_checked_at`), exclusions and rate.
 - `scans`: the queue, with `requested_by`, `modules`, status and timings.
 - `findings`: one row per issue, deterministic ID, `severity`, `status`
-  (open, fixed, accepted_risk), `first_seen`, `last_seen`, full JSON in `data`.
+  (open, fixed, accepted_risk), `first_seen`, `last_seen`, `fixed_at` (step 7.2), full JSON
+  in `data`.
+- `finding_events` (step 7.2): every status change (opened, fixed, reopened, risk
+  accepted or withdrawn) with its time, actor and scan. Mean time to remediate and
+  "opened vs fixed per month" are computed from it.
 - `audit_log`: append-only record of actions.
 - `organizations` (step 7.1): every target, scan, finding and audit entry has an `org_id`.
   API code works through `store.Org` (every query filtered by organization), backed by
@@ -24,7 +28,7 @@ CLAUDE.md (one step at a time, design first, tests first, stop for review).
   audit, each in one organization (`-org`, `ORUS_ORG`, default `Default`).
 
 What does not exist yet: users and authentication, an asset inventory, a record of checks
-that passed, a security score, a fixed-at timestamp, CVE or exploit data, context factors,
+that passed, a security score, CVE or exploit data, context factors,
 an HTTP API, a web dashboard.
 
 ## Rules for every screen
@@ -131,7 +135,8 @@ findings), `controls`, `policies`. The heat map and risk register read from it.
 
 1. Organizations and `org_id` scoping. (done: `store.Org` + row-level security; users and
    authentication come with the API endpoints)
-2. Findings lifecycle: `fixed_at` / status history.
+2. Findings lifecycle: `fixed_at` / status history. (done: `findings.fixed_at` and
+   `finding_events`)
 3. Asset inventory and the Module contract change for observed assets.
 4. Check catalog and evaluated checks; posture score and snapshots.
 5. CDN and hosting detection (for the "Protections" column).
