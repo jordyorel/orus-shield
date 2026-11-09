@@ -110,3 +110,27 @@ These are the product. A breach of them is a bug, never a trade-off.
 5. Ownership verification (DNS TXT).
 6. Ports module (active, verified targets only).
 7. API, then dashboard (design mockups exist on the project canvas).
+
+## External tools: plan and status
+
+Steps 1 to 3 need nothing beyond Go and its standard library. Do not introduce any of the
+tools below before the roadmap step listed for it.
+
+| Tool | Role | Decision | When |
+|---|---|---|---|
+| PostgreSQL | Main database: customers, assets, scans, findings (`JSONB`) | Adopt | Step 4 |
+| Docker / Compose | Local dev environment; isolation of heavy scanners | Adopt | Step 4 |
+| Queue | Scan jobs for workers | Start with PostgreSQL (`SELECT ... FOR UPDATE SKIP LOCKED`); no extra service | Step 4 |
+| Redis or Valkey | Shared rate limiting and cache across workers | Defer until several workers run; check Redis's current license first, prefer Valkey (BSD) if in doubt | After step 4 |
+| Nuclei | Template-based vulnerability detection (Go, MIT) | Adopt as a library, wrapped in a module | After step 6 |
+| OWASP ZAP | Deep web application testing ("Deep" scan profile) | Adopt later, run in Docker, driven through its API | After step 7 |
+| naabu / native Go | Port discovery | Preferred for the ports module (native TCP connect scan, or naabu, MIT) | Step 6 |
+| Nmap | Service fingerprinting | Do not integrate until its license (NPSL) has been reviewed for commercial SaaS use | Undecided |
+| OpenVAS | Network vulnerability scanning | Not planned: heavy to operate, feed usage terms set by Greenbone; Nuclei and our modules cover the SME scope | Not planned |
+
+Rules for every external tool:
+- It runs only inside a module and obeys all security rules above: verified ownership for
+  active scans, exclusions, the shared rate limiter, the audit log.
+- Its output is converted to the standard finding schema; nothing downstream depends on the
+  tool's own format.
+- Verify its license before it ships in the paid product, and record the result here.
