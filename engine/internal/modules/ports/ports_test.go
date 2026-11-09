@@ -533,3 +533,45 @@ func TestAssets(t *testing.T) {
 		}
 	}
 }
+
+func TestEvaluatedChecks(t *testing.T) {
+	m, _, dial, g := newTest()
+	dial.routes[route(ip1, 3389)] = ""
+	g.excludePort = map[int]bool{22: true, 2222: true} // every port of the SSH family
+
+	res, err := runAll(context.Background(), m, g)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	outcomes, err := module.Evaluate(m.Info(), res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range outcomes {
+		want := module.CheckPassed
+		switch o.ID {
+		case "port-remote-desktop-exposed":
+			want = module.CheckFailed
+		case "port-ssh-exposed":
+			want = module.CheckNotApplicable // excluded: never probed
+		}
+		if o.Status != want {
+			t.Errorf("%s = %s, want %s", o.ID, o.Status, want)
+		}
+	}
+}
+
+func TestCatalogCoversEveryFamily(t *testing.T) {
+	declared := map[string]bool{}
+	for _, c := range Checks {
+		declared[c.ID] = true
+	}
+	for _, svc := range catalog {
+		if !declared[svc.family.checkID] {
+			t.Errorf("port %d: family check %q is not in Checks", svc.port, svc.family.checkID)
+		}
+	}
+	if err := module.NewRegistry().Register(New(&fakeDNS{}, &fakeDialer{})); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+}

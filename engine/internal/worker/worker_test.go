@@ -90,10 +90,11 @@ func (f *fakeStore) AppendAudit(ctx context.Context, e store.AuditEntry) error {
 // fakeModule returns the findings run returns, plus assets, and counts its
 // runs.
 type fakeModule struct {
-	info   module.Info
-	runs   atomic.Int32
-	run    func(ctx context.Context, req module.Request) ([]finding.Finding, error)
-	assets []asset.Asset
+	info      module.Info
+	runs      atomic.Int32
+	run       func(ctx context.Context, req module.Request) ([]finding.Finding, error)
+	assets    []asset.Asset
+	evaluated []string
 }
 
 func (m *fakeModule) Info() module.Info { return m.info }
@@ -101,22 +102,23 @@ func (m *fakeModule) Info() module.Info { return m.info }
 func (m *fakeModule) Run(ctx context.Context, req module.Request) (module.Result, error) {
 	m.runs.Add(1)
 	if m.run == nil {
-		return module.Result{Assets: m.assets}, nil
+		return module.Result{Assets: m.assets, Evaluated: m.evaluated}, nil
 	}
 	findings, err := m.run(ctx, req)
-	return module.Result{Findings: findings, Assets: m.assets}, err
+	return module.Result{Findings: findings, Assets: m.assets, Evaluated: m.evaluated}, err
 }
 
 func newModule(id string, kind module.Kind, run func(context.Context, module.Request) ([]finding.Finding, error)) *fakeModule {
-	return &fakeModule{info: module.Info{ID: id, Name: id, Kind: kind}, run: run}
+	checks := []module.Check{{ID: id + "-check", Category: module.CategoryTLS, Severity: finding.SeverityMedium, Title: "A check"}}
+	return &fakeModule{info: module.Info{ID: id, Name: id, Kind: kind, Checks: checks}, run: run}
 }
 
 func validFinding(moduleID, domain string) finding.Finding {
 	return finding.Finding{
 		SchemaVersion: finding.SchemaVersion,
-		ID:            finding.NewID(moduleID, "some-check", domain, domain),
+		ID:            finding.NewID(moduleID, moduleID+"-check", domain, domain),
 		ModuleID:      moduleID,
-		CheckID:       "some-check",
+		CheckID:       moduleID + "-check",
 		Target:        domain,
 		Asset:         domain,
 		Severity:      finding.SeverityMedium,
@@ -598,6 +600,49 @@ func TestBadAssetsFailThatModule(t *testing.T) {
 			r := st.finished[0]
 			if !strings.Contains(r.Failed["tls"], tt.want) || len(r.Assets) != 0 || len(r.Succeeded) != 0 {
 				t.Errorf("result = %+v, want tls failed with %q and no assets", r, tt.want)
+			}
+		})
+	}
+}
+
+func TestCheckOutcomesAreForwarded(t *testing.T) {
+	email := newModule("email", module.KindPassive, returns(validFinding("email", "example.com")))
+	tls := newModule("tls", module.KindPassive, nil)
+	tls.evaluated = []string{"tls-check"}
+	silent := newModule("silent", module.KindPassive, nil) // evaluates nothing
+	w, st := setup(t, false, "", email, tls, silent)
+	if err := runOnce(t, w); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	got := st.finished[0].Checks
+	want := map[string]module.CheckStatus{"email": module.CheckFailed, "tls": module.CheckPassed, "silent": module.CheckNotApplicable}
+	for id, status := range want {
+		if len(got[id]) != 1 || got[id][0].Status != status {
+			t.Errorf("%s outcomes = %+v, want one %s", id, got[id], status)
+		}
+	}
+}
+
+func TestUndeclaredCheckFailsTheModule(t *testing.T) {
+	typo := validFinding("email", "example.com")
+	typo.CheckID = "emial-check"
+	typo.ID = finding.NewID("email", typo.CheckID, "example.com", "example.com")
+	for name, m := range map[string]*fakeModule{
+		"finding": newModule("email", module.KindPassive, returns(typo)),
+		"evaluated": func() *fakeModule {
+			m := newModule("email", module.KindPassive, nil)
+			m.evaluated = []string{"emial-check"}
+			return m
+		}(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			w, st := setup(t, false, "", m)
+			if err := runOnce(t, w); err != nil {
+				t.Fatalf("RunOnce: %v", err)
+			}
+			r := st.finished[0]
+			if !strings.Contains(r.Failed["email"], "undeclared check") || len(r.Checks["email"]) != 0 {
+				t.Errorf("result = %+v, want email failed for an undeclared check", r)
 			}
 		})
 	}

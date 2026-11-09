@@ -23,6 +23,12 @@ CLAUDE.md (one step at a time, design first, tests first, stop for review).
   `tls` reports names, addresses, port 443 and certificates; `ports` reports scanned
   addresses and open ports; `email` reports none. There is no "discovered" state yet: it
   comes with the discovery module.
+- Check catalog and posture (step 7.4): each module declares its checks (`Info.Checks`:
+  ID, category, severity, title) and reports the ones it evaluated. `module.Evaluate`
+  gives each check passed, failed or not_applicable; `check_status` keeps the latest
+  status per target and check, `posture_snapshots` the score after each scan with its
+  breakdown (package `posture`: weights critical 10, high 6, medium 3, low 1, info 0;
+  score = passed weight / evaluated weight; no score when nothing was evaluated).
 - `audit_log`: append-only record of actions.
 - `organizations` (step 7.1): every target, scan, finding and audit entry has an `org_id`.
   API code works through `store.Org` (every query filtered by organization), backed by
@@ -106,11 +112,11 @@ Backend work needed:
 | Panel | Data source | Available now? |
 |---|---|---|
 | Threats | Open critical and high findings | Yes |
-| Misconfigurations "31 / 212" | Failed checks / evaluated checks | No: we only store failures |
-| Posture score | Passed checks weighted by severity | No: same reason |
+| Misconfigurations "31 / 212" | Failed checks / evaluated checks (`check_status`) | Yes |
+| Posture score | Passed checks weighted by severity (`posture_snapshots`) | Yes |
 | Coverage | Verified targets / targets; connected sources | Partly |
 | Risk categories (Emails, Web, TLS, DNS, Identities, Network, Cloud, Leaks) | `module_id` to category mapping | Partly: Emails and TLS now, others "Coming soon" |
-| Compliance reports (passed / failed per framework) | Check catalog with framework mappings | No |
+| Compliance reports (passed / failed per framework) | Check catalog with framework mappings | No: mappings not written yet (Jordy reviews them) |
 
 Backend work needed:
 - A **check catalog**: each module declares its checks (check_id, category, default
@@ -146,7 +152,8 @@ findings), `controls`, `policies`. The heat map and risk register read from it.
    `finding_events`)
 3. Asset inventory and the Module contract change for observed assets. (done:
    `module.Result`, package `asset`, `assets` table, `orusctl assets`)
-4. Check catalog and evaluated checks; posture score and snapshots.
+4. Check catalog and evaluated checks; posture score and snapshots. (done, except
+   framework mappings)
 5. CDN and hosting detection (for the "Protections" column).
 6. API endpoints for screens 1 to 3, scoped by organization, with tests.
 7. Contextual risk function, then KEV ingestion once CVE-producing modules exist.

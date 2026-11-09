@@ -779,3 +779,53 @@ func TestCertificateAsset(t *testing.T) {
 	}
 	t.Errorf("no certificate asset in %v", assetKeys(res.Assets))
 }
+
+func TestEvaluatedChecks(t *testing.T) {
+	status := func(t *testing.T, setup func(*testing.T, *env)) map[string]module.CheckStatus {
+		e := newEnv(t)
+		setup(t, e)
+		res, err := e.runAll(context.Background(), "example.com")
+		if err != nil {
+			t.Fatal(err)
+		}
+		outcomes, err := module.Evaluate(New(e.dns, e.dial).Info(), res)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]module.CheckStatus{}
+		for _, o := range outcomes {
+			out[o.ID] = o.Status
+		}
+		return out
+	}
+
+	t.Run("valid certificate: everything passes", func(t *testing.T) {
+		got := status(t, func(t *testing.T, e *env) {
+			e.route(apexIP, serveTLS(t, e.ca.leaf(t, leafOpts{}), tls.VersionTLS12))
+		})
+		for id, st := range got {
+			if st != module.CheckPassed {
+				t.Errorf("%s = %s, want passed", id, st)
+			}
+		}
+	})
+	t.Run("no HTTPS server: nothing is applicable", func(t *testing.T) {
+		for id, st := range status(t, func(*testing.T, *env) {}) {
+			if st != module.CheckNotApplicable {
+				t.Errorf("%s = %s, want not_applicable (nothing to observe is not a pass)", id, st)
+			}
+		}
+	})
+	t.Run("not TLS: only the handshake check is evaluated", func(t *testing.T) {
+		got := status(t, func(t *testing.T, e *env) { e.route(apexIP, servePlain(t)) })
+		if got[CheckHandshakeFailed] != module.CheckFailed || got[CheckCertExpired] != module.CheckNotApplicable {
+			t.Errorf("handshake = %s, expired = %s", got[CheckHandshakeFailed], got[CheckCertExpired])
+		}
+	})
+}
+
+func TestCatalogRegisters(t *testing.T) {
+	if err := module.NewRegistry().Register(New(&fakeDNS{}, &fakeDialer{})); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+}

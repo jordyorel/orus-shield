@@ -58,8 +58,37 @@ func New(dns resolver.Resolver) *Module {
 
 // Info implements module.Module.
 func (m *Module) Info() module.Info {
-	return module.Info{ID: ID, Name: "Email security (SPF, DKIM, DMARC)", Kind: module.KindPassive}
+	return module.Info{ID: ID, Name: "Email security (SPF, DKIM, DMARC)", Kind: module.KindPassive, Checks: Checks}
 }
+
+// Checks is the module's catalog. Severity is the check's weight in the
+// posture score: the usual severity of its finding.
+var Checks = []module.Check{
+	{ID: CheckSPFMissing, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "SPF record published"},
+	{ID: CheckSPFMultiple, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "Single SPF record"},
+	{ID: CheckSPFInvalid, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "SPF record is valid"},
+	{ID: CheckSPFPassAll, Category: module.CategoryEmail, Severity: finding.SeverityCritical, Title: "SPF does not authorize every server (+all)"},
+	{ID: CheckSPFNeutralAll, Category: module.CategoryEmail, Severity: finding.SeverityMedium, Title: "SPF rejects unknown senders (not ?all)"},
+	{ID: CheckSPFSoftfailAll, Category: module.CategoryEmail, Severity: finding.SeverityLow, Title: "SPF fails unknown senders strictly (not ~all)"},
+	{ID: CheckSPFNoAll, Category: module.CategoryEmail, Severity: finding.SeverityMedium, Title: "SPF has a default rule"},
+	{ID: CheckSPFTooManyLookups, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "SPF stays within 10 DNS lookups"},
+	{ID: CheckDMARCMissing, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "DMARC record published"},
+	{ID: CheckDMARCMultiple, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "Single DMARC record"},
+	{ID: CheckDMARCInvalid, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "DMARC record is valid"},
+	{ID: CheckDMARCPolicyNone, Category: module.CategoryEmail, Severity: finding.SeverityMedium, Title: "DMARC policy blocks spoofing"},
+	{ID: CheckDMARCPartialEnforcement, Category: module.CategoryEmail, Severity: finding.SeverityLow, Title: "DMARC policy applies to all mail"},
+	{ID: CheckDMARCSubdomainNone, Category: module.CategoryEmail, Severity: finding.SeverityLow, Title: "DMARC protects subdomains"},
+	{ID: CheckDMARCNoReporting, Category: module.CategoryEmail, Severity: finding.SeverityLow, Title: "DMARC reports are collected"},
+	{ID: CheckDKIMNotFound, Category: module.CategoryEmail, Severity: finding.SeverityInfo, Title: "DKIM key published"},
+	{ID: CheckDKIMInvalidKey, Category: module.CategoryEmail, Severity: finding.SeverityMedium, Title: "DKIM keys are valid"},
+	{ID: CheckDKIMWeakKey, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "DKIM keys are strong"},
+	{ID: CheckDKIMShortKey, Category: module.CategoryEmail, Severity: finding.SeverityLow, Title: "DKIM keys use 2048 bits"},
+}
+
+// evaluated collects the checks a run actually performed.
+type evaluated struct{ ids []string }
+
+func (e *evaluated) add(ids ...string) { e.ids = append(e.ids, ids...) }
 
 // Run implements module.Module. It has no configuration yet; req.Config is
 // ignored. It reports no assets: the DNS records it reads (SPF, DMARC, DKIM
@@ -81,12 +110,13 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 		return module.Result{}, fmt.Errorf("email: %w", err)
 	}
 
-	checks := []func(context.Context, resolver.Resolver, string, bool) ([]issue, error){
+	checks := []func(context.Context, resolver.Resolver, string, bool, *evaluated) ([]issue, error){
 		checkSPF, checkDMARC, checkDKIM,
 	}
 	var findings []finding.Finding
+	var ev evaluated
 	for _, check := range checks {
-		issues, err := check(ctx, dns, domain, receivesMail)
+		issues, err := check(ctx, dns, domain, receivesMail, &ev)
 		if err != nil {
 			return module.Result{}, fmt.Errorf("email: %w", err)
 		}
@@ -94,7 +124,7 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 			findings = append(findings, i.finding(domain))
 		}
 	}
-	return module.Result{Findings: findings}, nil
+	return module.Result{Findings: findings, Evaluated: ev.ids}, nil
 }
 
 // receivesMail reports whether domain has at least one usable MX record.

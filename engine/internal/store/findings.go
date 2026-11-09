@@ -14,6 +14,7 @@ import (
 
 	"github.com/jordyorel/orus-shield/engine/internal/asset"
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
+	"github.com/jordyorel/orus-shield/engine/internal/module"
 )
 
 // Audit action for manual status changes.
@@ -36,6 +37,9 @@ type ScanResult struct {
 	// Assets observed, by module ID. Only succeeded modules may report
 	// assets; a succeeded module absent from the map reported none.
 	Assets map[string][]asset.Asset
+	// Checks are the catalog outcomes of the succeeded modules, by module
+	// ID (module.Evaluate). They update check_status and the posture.
+	Checks map[string][]module.CheckOutcome
 }
 
 // FinishScan records a scan's results in one transaction: the scan is marked
@@ -156,6 +160,10 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 	if err != nil {
 		return fmt.Errorf("finish scan %s: %w", r.ScanID, err)
 	}
+	score, err := saveChecks(ctx, tx, orgID, targetID, r.ScanID, at, r)
+	if err != nil {
+		return fmt.Errorf("finish scan %s: %w", r.ScanID, err)
+	}
 
 	// Empty lists, not null, so the audit JSON has one shape.
 	succeeded := append([]string{}, r.Succeeded...)
@@ -167,6 +175,7 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 			"succeeded": succeeded, "failed": failed,
 			"findings": len(r.Findings), "new": created, "fixed": fixed, "reopened": reopened,
 			"assets": assets.reported, "assets_new": assets.created, "assets_back": assets.back, "assets_gone": assets.gone,
+			"score": score,
 		},
 	}); err != nil {
 		return err

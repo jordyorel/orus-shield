@@ -6,7 +6,8 @@ import (
 	"sort"
 )
 
-// Registry holds the modules available to a worker.
+// Registry holds the modules available to a worker, and their check
+// catalogs.
 //
 // It is deliberately not a package-level global filled by init() functions:
 // the worker builds one explicitly at startup, and each test builds its own,
@@ -14,15 +15,17 @@ import (
 // startup and then only read; it is not safe for concurrent Register calls.
 type Registry struct {
 	modules map[string]Module
+	checks  map[string]string // check ID -> module ID
 }
 
 // NewRegistry returns an empty registry.
 func NewRegistry() *Registry {
-	return &Registry{modules: make(map[string]Module)}
+	return &Registry{modules: make(map[string]Module), checks: make(map[string]string)}
 }
 
-// Register adds m. It rejects a nil module, an invalid Info, and an ID that is
-// already registered.
+// Register adds m. It rejects a nil module, an invalid Info, an ID that is
+// already registered, and an invalid or empty check catalog. Check IDs must
+// be unique across modules: reports and translations look checks up by ID.
 func (r *Registry) Register(m Module) error {
 	if m == nil {
 		return errors.New("register module: nil module")
@@ -39,6 +42,30 @@ func (r *Registry) Register(m Module) error {
 	}
 	if _, exists := r.modules[info.ID]; exists {
 		return fmt.Errorf("register module %q: already registered", info.ID)
+	}
+	if len(info.Checks) == 0 {
+		return fmt.Errorf("register module %q: no checks declared", info.ID)
+	}
+	seen := make(map[string]bool, len(info.Checks))
+	for _, c := range info.Checks {
+		switch {
+		case !isSlug(c.ID):
+			return fmt.Errorf("register module %q: check id %q must be a lowercase slug", info.ID, c.ID)
+		case seen[c.ID]:
+			return fmt.Errorf("register module %q: check %q declared twice", info.ID, c.ID)
+		case r.checks[c.ID] != "":
+			return fmt.Errorf("register module %q: check %q already declared by module %q", info.ID, c.ID, r.checks[c.ID])
+		case !c.Category.Valid():
+			return fmt.Errorf("register module %q: check %q: unknown category %q", info.ID, c.ID, c.Category)
+		case !c.Severity.Valid():
+			return fmt.Errorf("register module %q: check %q: unknown severity %q", info.ID, c.ID, c.Severity)
+		case c.Title == "":
+			return fmt.Errorf("register module %q: check %q: empty title", info.ID, c.ID)
+		}
+		seen[c.ID] = true
+	}
+	for _, c := range info.Checks {
+		r.checks[c.ID] = info.ID
 	}
 	r.modules[info.ID] = m
 	return nil

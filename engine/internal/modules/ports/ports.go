@@ -77,7 +77,28 @@ func New(dns resolver.Resolver, dial dialer.Dialer) *Module {
 
 // Info implements module.Module.
 func (m *Module) Info() module.Info {
-	return module.Info{ID: ID, Name: "Exposed network services", Kind: module.KindActive}
+	return module.Info{ID: ID, Name: "Exposed network services", Kind: module.KindActive, Checks: Checks}
+}
+
+// Checks is the module's catalog: one check per family of services.
+var Checks = []module.Check{
+	familyCheck(remoteDesktop, "No remote desktop exposed"),
+	familyCheck(windowsSharing, "No Windows file sharing exposed"),
+	familyCheck(cleartextAdmin, "No clear-text administration (Telnet) exposed"),
+	familyCheck(orchestration, "No container or cluster API exposed"),
+	familyCheck(database, "No database exposed"),
+	familyCheck(fileSharing, "No file-sharing service exposed"),
+	familyCheck(directory, "No directory service (LDAP) exposed"),
+	familyCheck(broker, "No message broker exposed"),
+	familyCheck(proxy, "No open proxy exposed"),
+	familyCheck(adminWeb, "No admin web port exposed"),
+	familyCheck(voip, "No telephony (SIP) server exposed"),
+	familyCheck(cleartextMail, "No clear-text mail access exposed"),
+	familyCheck(ssh, "SSH not exposed"),
+}
+
+func familyCheck(f family, title string) module.Check {
+	return module.Check{ID: f.checkID, Category: module.CategoryNetwork, Severity: f.severity, Title: title}
 }
 
 // Run implements module.Module. It scans the addresses of the domain and of
@@ -104,9 +125,10 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 
 	var findings []finding.Finding
 	var assets asset.Set
+	evaluated := make(map[string]bool)
 	scanned := 0
 	for _, t := range targets {
-		open, refused, err := m.scanIP(ctx, dial, t)
+		open, probed, refused, err := m.scanIP(ctx, dial, t)
 		if err != nil {
 			return module.Result{}, fmt.Errorf("ports: %w", err)
 		}
@@ -114,6 +136,9 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 			continue // not ours to scan; the refusal is audited by the worker
 		}
 		scanned++
+		for id := range probed {
+			evaluated[id] = true
+		}
 		assets.Add(asset.Hostname(t.host))
 		assets.Add(asset.IP(t.ip))
 		for _, o := range open {
@@ -125,7 +150,16 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 		return module.Result{}, fmt.Errorf("ports: %w: none of %d addresses has verified ownership or all are excluded (see the audit log)",
 			ErrNoVerifiedIP, len(targets))
 	}
-	return module.Result{Findings: findings, Assets: assets.List()}, nil
+	// A check is evaluated when at least one of its ports was actually
+	// probed: if the customer excluded every port of a family, we know
+	// nothing about it.
+	var ids []string
+	for _, c := range Checks {
+		if evaluated[c.ID] {
+			ids = append(ids, c.ID)
+		}
+	}
+	return module.Result{Findings: findings, Assets: assets.List(), Evaluated: ids}, nil
 }
 
 // asset describes the open port for the inventory. The banner is already
@@ -181,10 +215,11 @@ type openPort struct {
 // errSkipped marks a destination the gate excluded.
 var errSkipped = errors.New("skipped")
 
-// scanIP tries every catalog port on one address. refused is true when the
-// gate excluded every port, which happens when the IP itself is not
-// verified or excluded.
-func (m *Module) scanIP(ctx context.Context, dial dialer.Gated, a address) (open []openPort, refused bool, err error) {
+// scanIP tries every catalog port on one address. probed holds the check IDs
+// of the families with at least one port actually tried. refused is true
+// when the gate excluded every port, which happens when the IP itself is
+// not verified or excluded.
+func (m *Module) scanIP(ctx context.Context, dial dialer.Gated, a address) (open []openPort, probed map[string]bool, refused bool, err error) {
 	type result struct {
 		svc    service
 		open   bool
@@ -211,6 +246,7 @@ func (m *Module) scanIP(ctx context.Context, dial dialer.Gated, a address) (open
 	close(results)
 
 	skipped := 0
+	probed = make(map[string]bool)
 	var firstErr error
 	for r := range results {
 		switch {
@@ -220,15 +256,18 @@ func (m *Module) scanIP(ctx context.Context, dial dialer.Gated, a address) (open
 			if firstErr == nil {
 				firstErr = r.err
 			}
-		case r.open:
-			open = append(open, openPort{svc: r.svc, banner: r.banner})
+		default:
+			probed[r.svc.family.checkID] = true
+			if r.open {
+				open = append(open, openPort{svc: r.svc, banner: r.banner})
+			}
 		}
 	}
 	if firstErr != nil {
-		return nil, false, firstErr
+		return nil, nil, false, firstErr
 	}
 	sort.Slice(open, func(i, j int) bool { return open[i].svc.port < open[j].svc.port })
-	return open, skipped == len(m.services), nil
+	return open, probed, skipped == len(m.services), nil
 }
 
 // probe connects to one port and reads the banner, if any. A closed or

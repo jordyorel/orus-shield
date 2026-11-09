@@ -66,7 +66,25 @@ func New(dns resolver.Resolver, dial dialer.Dialer) *Module {
 
 // Info implements module.Module.
 func (m *Module) Info() module.Info {
-	return module.Info{ID: ID, Name: "TLS and certificates", Kind: module.KindPassive}
+	return module.Info{ID: ID, Name: "TLS and certificates", Kind: module.KindPassive, Checks: Checks}
+}
+
+// Checks is the module's catalog.
+var Checks = []module.Check{
+	{ID: CheckHandshakeFailed, Category: module.CategoryTLS, Severity: finding.SeverityMedium, Title: "HTTPS connections succeed"},
+	{ID: CheckLegacyVersion, Category: module.CategoryTLS, Severity: finding.SeverityMedium, Title: "TLS 1.0 and 1.1 are refused"},
+	{ID: CheckCertExpired, Category: module.CategoryTLS, Severity: finding.SeverityCritical, Title: "Certificate has not expired"},
+	{ID: CheckCertExpiringSoon, Category: module.CategoryTLS, Severity: finding.SeverityMedium, Title: "Certificate is not about to expire"},
+	{ID: CheckCertNotYetValid, Category: module.CategoryTLS, Severity: finding.SeverityHigh, Title: "Certificate is already valid"},
+	{ID: CheckCertHostnameMismatch, Category: module.CategoryTLS, Severity: finding.SeverityHigh, Title: "Certificate matches the site name"},
+	{ID: CheckCertUntrusted, Category: module.CategoryTLS, Severity: finding.SeverityHigh, Title: "Certificate is trusted by browsers"},
+	{ID: CheckCertWeakKey, Category: module.CategoryTLS, Severity: finding.SeverityMedium, Title: "Certificate key is strong enough"},
+}
+
+// certChecks are evaluated on every completed handshake.
+var certChecks = []string{
+	CheckHandshakeFailed, CheckCertExpired, CheckCertExpiringSoon, CheckCertNotYetValid,
+	CheckCertHostnameMismatch, CheckCertUntrusted, CheckCertWeakKey,
 }
 
 // Run implements module.Module. It checks the domain and its www. subdomain
@@ -84,10 +102,11 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 		return module.Result{}, fmt.Errorf("tls: %w", err)
 	}
 	p := prober{
-		dns:    resolver.Gated{Gate: req.Gate, Inner: m.dns},
-		dial:   dialer.Gated{Gate: req.Gate, Inner: m.dial},
-		roots:  m.roots,
-		assets: &asset.Set{},
+		dns:       resolver.Gated{Gate: req.Gate, Inner: m.dns},
+		dial:      dialer.Gated{Gate: req.Gate, Inner: m.dial},
+		roots:     m.roots,
+		assets:    &asset.Set{},
+		evaluated: &[]string{},
 	}
 
 	hosts := []string{domain}
@@ -105,7 +124,7 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 			findings = append(findings, i.finding(domain))
 		}
 	}
-	return module.Result{Findings: findings, Assets: p.assets.List()}, nil
+	return module.Result{Findings: findings, Assets: p.assets.List(), Evaluated: *p.evaluated}, nil
 }
 
 // prober holds the gated network tools for one run, and collects the
@@ -116,7 +135,13 @@ type prober struct {
 	dial   dialer.Gated
 	roots  *x509.CertPool
 	assets *asset.Set
+	// evaluated lists the checks performed: certificate checks need a
+	// completed handshake, so a domain with no HTTPS server has them all
+	// not applicable rather than passed.
+	evaluated *[]string
 }
+
+func (p prober) evaluate(ids ...string) { *p.evaluated = append(*p.evaluated, ids...) }
 
 // maxIPsPerHost bounds how many addresses of one host we test. Each address
 // costs two handshakes; 4 covers typical load balancers and CDN answers.
@@ -172,12 +197,14 @@ func (p prober) probe(ctx context.Context, dest module.Destination, findingAsset
 		}
 		if isTLSFailure(err) {
 			// The port is open, even though TLS failed.
+			p.evaluate(CheckHandshakeFailed)
 			p.assets.Add(asset.Service(dest.IP, httpsPort, map[string]string{"expected": "https"}))
 			return []issue{handshakeFailed(findingAsset, dest, err)}, nil
 		}
 		return nil, nil // excluded, closed or silent: nothing to assert
 	}
 	p.observe(dest, state)
+	p.evaluate(certChecks...)
 	issues := certIssues(findingAsset, dest, state, p.roots, time.Now())
 
 	// 2. Legacy handshake, offering only TLS 1.0 and 1.1. If the server
@@ -187,8 +214,12 @@ func (p prober) probe(ctx context.Context, dest module.Destination, findingAsset
 		if stop := stopError(ctx, err); stop != nil {
 			return nil, stop
 		}
-		return issues, nil // refused: good
+		if errors.Is(err, errHandshake) {
+			p.evaluate(CheckLegacyVersion) // the server answered and refused: good
+		}
+		return issues, nil
 	}
+	p.evaluate(CheckLegacyVersion)
 	return append(issues, legacyVersion(findingAsset, dest, legacy)), nil
 }
 

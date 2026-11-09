@@ -38,6 +38,107 @@ type Info struct {
 	ID   string // lowercase slug, e.g. "email"
 	Name string // human-readable, e.g. "Email security"
 	Kind Kind
+	// Checks is the module's check catalog: every check it can evaluate.
+	// Every finding it returns must use one of these check IDs.
+	Checks []Check
+}
+
+// Category groups checks for the dashboard's risk categories.
+type Category string
+
+const (
+	CategoryEmail    Category = "email"
+	CategoryWeb      Category = "web"
+	CategoryTLS      Category = "tls"
+	CategoryDNS      Category = "dns"
+	CategoryNetwork  Category = "network"
+	CategoryIdentity Category = "identity"
+	CategoryCloud    Category = "cloud"
+	CategoryLeaks    Category = "leaks"
+)
+
+// Valid reports whether c is one of the defined categories.
+func (c Category) Valid() bool {
+	switch c {
+	case CategoryEmail, CategoryWeb, CategoryTLS, CategoryDNS, CategoryNetwork,
+		CategoryIdentity, CategoryCloud, CategoryLeaks:
+		return true
+	}
+	return false
+}
+
+// Check is one entry of a module's catalog.
+//
+// ID is stable like a module ID: findings, reports and translations refer
+// to it (localized text is looked up by check ID). Severity is the weight
+// of the check in the posture score; individual findings may be more or
+// less severe.
+type Check struct {
+	ID       string // lowercase slug, unique across all modules, e.g. "dmarc-missing"
+	Category Category
+	Severity finding.Severity
+	Title    string // short English title of what is checked
+}
+
+// CheckStatus is the outcome of one check in one run.
+type CheckStatus string
+
+const (
+	// CheckPassed: the check was evaluated and found nothing.
+	CheckPassed CheckStatus = "passed"
+	// CheckFailed: the check produced at least one finding.
+	CheckFailed CheckStatus = "failed"
+	// CheckNotApplicable: the check could not be evaluated on this target
+	// (no record to analyze, no server answering). It counts neither for
+	// nor against the score.
+	CheckNotApplicable CheckStatus = "not_applicable"
+)
+
+// CheckOutcome is a check of the catalog with its status in one run.
+type CheckOutcome struct {
+	Check
+	Status   CheckStatus
+	Findings int // findings produced by the check
+}
+
+// Evaluate turns a module's result into one outcome per catalog check:
+// failed when the check produced a finding, passed when the module reports
+// it as evaluated, not applicable otherwise. "Passed" must be claimed
+// explicitly: a check the module did not mention never counts as passed.
+//
+// It returns an error if the result uses a check ID the catalog does not
+// declare, so a typo cannot create an orphan finding.
+func Evaluate(info Info, res Result) ([]CheckOutcome, error) {
+	declared := make(map[string]bool, len(info.Checks))
+	for _, c := range info.Checks {
+		declared[c.ID] = true
+	}
+	counts := make(map[string]int)
+	for _, f := range res.Findings {
+		if !declared[f.CheckID] {
+			return nil, fmt.Errorf("module %s: finding for undeclared check %q", info.ID, f.CheckID)
+		}
+		counts[f.CheckID]++
+	}
+	evaluated := make(map[string]bool, len(res.Evaluated))
+	for _, id := range res.Evaluated {
+		if !declared[id] {
+			return nil, fmt.Errorf("module %s: evaluated undeclared check %q", info.ID, id)
+		}
+		evaluated[id] = true
+	}
+	out := make([]CheckOutcome, 0, len(info.Checks))
+	for _, c := range info.Checks {
+		o := CheckOutcome{Check: c, Status: CheckNotApplicable, Findings: counts[c.ID]}
+		switch {
+		case o.Findings > 0:
+			o.Status = CheckFailed
+		case evaluated[c.ID]:
+			o.Status = CheckPassed
+		}
+		out = append(out, o)
+	}
+	return out, nil
 }
 
 // Target is what a customer asked us to scan.
@@ -90,6 +191,11 @@ type Result struct {
 	// it did not report in a successful run is considered gone, as far as
 	// this module knows.
 	Assets []asset.Asset
+	// Evaluated lists the catalog checks the run actually performed. A check
+	// with a finding is evaluated implicitly. A check absent from both is
+	// not applicable: for example DMARC policy checks when the domain has
+	// no DMARC record, or certificate checks when no server answered.
+	Evaluated []string
 }
 
 // Module is one independent security check.

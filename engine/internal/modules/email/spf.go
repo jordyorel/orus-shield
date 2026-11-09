@@ -88,11 +88,12 @@ func parseSPF(record string) spfRecord {
 	return r
 }
 
-func checkSPF(ctx context.Context, dns resolver.Resolver, domain string, receivesMail bool) ([]issue, error) {
+func checkSPF(ctx context.Context, dns resolver.Resolver, domain string, receivesMail bool, ev *evaluated) ([]issue, error) {
 	txt, err := lookupTXT(ctx, dns, domain)
 	if err != nil {
 		return nil, err
 	}
+	ev.add(CheckSPFMissing)
 	var records []string
 	for _, rec := range txt {
 		if isSPF(rec) {
@@ -100,6 +101,12 @@ func checkSPF(ctx context.Context, dns resolver.Resolver, domain string, receive
 		}
 	}
 
+	// Each step below is evaluated only if the previous one passed: a
+	// record that is missing, duplicated or unparseable has no policy to
+	// analyze, so the later checks are not applicable.
+	if len(records) > 0 {
+		ev.add(CheckSPFMultiple)
+	}
 	switch len(records) {
 	case 0:
 		return []issue{spfMissing(domain, receivesMail)}, nil
@@ -120,6 +127,7 @@ func checkSPF(ctx context.Context, dns resolver.Resolver, domain string, receive
 
 	record := records[0]
 	parsed := parseSPF(record)
+	ev.add(CheckSPFInvalid)
 	if len(parsed.unknown) > 0 {
 		// Receivers reject the whole record; analyzing it further would
 		// describe a policy that is never applied.
@@ -136,6 +144,11 @@ func checkSPF(ctx context.Context, dns resolver.Resolver, domain string, receive
 	}
 
 	var issues []issue
+	// With a redirect and no "all", the redirected record decides: the
+	// "all" checks say nothing about this one.
+	if parsed.all != "" || parsed.redirect == "" {
+		ev.add(CheckSPFPassAll, CheckSPFNeutralAll, CheckSPFSoftfailAll, CheckSPFNoAll)
+	}
 	if i, ok := spfAllIssue(domain, record, parsed); ok {
 		issues = append(issues, i)
 	}
@@ -144,6 +157,7 @@ func checkSPF(ctx context.Context, dns resolver.Resolver, domain string, receive
 	if err != nil {
 		return nil, err
 	}
+	ev.add(CheckSPFTooManyLookups)
 	if lookups > spfLookupLimit {
 		issues = append(issues, issue{
 			checkID:     CheckSPFTooManyLookups,

@@ -11,6 +11,7 @@ import (
 
 	"github.com/jordyorel/orus-shield/engine/internal/asset"
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
+	"github.com/jordyorel/orus-shield/engine/internal/module"
 )
 
 func newOrg(t *testing.T, s *Store, name string) *Org {
@@ -139,6 +140,10 @@ func newCrossTenant(t *testing.T) *crossTenant {
 		ScanID: claimed.ID, Attempt: claimed.Attempt, WorkerID: "worker:test", At: t1,
 		Succeeded: []string{"email"}, Findings: []finding.Finding{c.findingB},
 		Assets: map[string][]asset.Asset{"email": {asset.Hostname("example.com")}},
+		Checks: map[string][]module.CheckOutcome{"email": {{
+			Check:  module.Check{ID: "spf-missing", Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "x"},
+			Status: module.CheckFailed, Findings: 1,
+		}}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -168,6 +173,12 @@ func TestOrgHandleIsolation(t *testing.T) {
 	}
 	if _, err := a.GetScan(ctx, c.scanB.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("GetScan(B's scan) = %v, want ErrNotFound", err)
+	}
+	if got, err := a.CheckStatuses(ctx, c.tb.ID); err != nil || len(got) != 0 {
+		t.Errorf("CheckStatuses(B's target) = %v, %v; want none", got, err)
+	}
+	if got, err := a.PostureHistory(ctx, c.tb.ID, 10); err != nil || len(got) != 0 {
+		t.Errorf("PostureHistory(B's target) = %v, %v; want none", got, err)
 	}
 	if got, err := a.ListAssets(ctx, c.tb.ID, true); err != nil || len(got) != 0 {
 		t.Errorf("ListAssets(B's target) = %v, %v; want none", got, err)
@@ -239,7 +250,7 @@ func TestRowLevelSecurity(t *testing.T) {
 	}
 	defer tx.Rollback(ctx)
 
-	for _, table := range []string{"organizations", "targets", "scans", "findings", "finding_events", "assets", "audit_log"} {
+	for _, table := range []string{"organizations", "targets", "scans", "findings", "finding_events", "assets", "check_status", "posture_snapshots", "audit_log"} {
 		var foreign int
 		err := tx.QueryRow(ctx, "SELECT count(*) FROM "+table+" WHERE "+orgColumn(table)+" <> $1", c.a.ID()).Scan(&foreign)
 		if err != nil {

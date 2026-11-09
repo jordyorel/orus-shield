@@ -128,7 +128,33 @@ func run(t *testing.T, dns *fakeDNS, domain string) ([]finding.Finding, error) {
 	if len(res.Assets) != 0 {
 		t.Errorf("email reported assets %v, want none", res.Assets)
 	}
+	// Every scenario also checks the catalog: no finding may use an
+	// undeclared check.
+	if err == nil {
+		if _, evalErr := module.Evaluate(m.Info(), res); evalErr != nil {
+			t.Errorf("Evaluate: %v", evalErr)
+		}
+	}
 	return res.Findings, err
+}
+
+// statuses runs the module and returns the status of every catalog check.
+func statuses(t *testing.T, dns *fakeDNS) map[string]module.CheckStatus {
+	t.Helper()
+	m := New(dns)
+	res, err := m.Run(context.Background(), module.Request{Target: module.Target{Domain: "example.com"}, Gate: &countingGate{}})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	outcomes, err := module.Evaluate(m.Info(), res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := make(map[string]module.CheckStatus)
+	for _, o := range outcomes {
+		out[o.ID] = o.Status
+	}
+	return out
 }
 
 func checkIDs(findings []finding.Finding) []string {
@@ -481,4 +507,69 @@ func TestNoReportingSeverityDependsOnMail(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCatalogRegisters(t *testing.T) {
+	if err := module.NewRegistry().Register(New(&fakeDNS{})); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+}
+
+func TestEvaluatedChecks(t *testing.T) {
+	t.Run("well configured: everything passes", func(t *testing.T) {
+		for id, st := range statuses(t, goodDNS(t)) {
+			if st != module.CheckPassed {
+				t.Errorf("%s = %s, want passed", id, st)
+			}
+		}
+	})
+
+	t.Run("no DMARC: policy checks are not applicable", func(t *testing.T) {
+		dns := goodDNS(t)
+		delete(dns.txt, "_dmarc.example.com")
+		got := statuses(t, dns)
+		want := map[string]module.CheckStatus{
+			CheckDMARCMissing:            module.CheckFailed,
+			CheckDMARCMultiple:           module.CheckNotApplicable,
+			CheckDMARCPolicyNone:         module.CheckNotApplicable,
+			CheckDMARCPartialEnforcement: module.CheckNotApplicable,
+			CheckDMARCNoReporting:        module.CheckNotApplicable,
+			CheckSPFPassAll:              module.CheckPassed,
+		}
+		for id, st := range want {
+			if got[id] != st {
+				t.Errorf("%s = %s, want %s", id, got[id], st)
+			}
+		}
+	})
+
+	t.Run("p=none: enforcement details are not applicable", func(t *testing.T) {
+		dns := goodDNS(t)
+		dns.txt["_dmarc.example.com"] = []string{"v=DMARC1; p=none; rua=mailto:d@example.com"}
+		got := statuses(t, dns)
+		if got[CheckDMARCPolicyNone] != module.CheckFailed || got[CheckDMARCPartialEnforcement] != module.CheckNotApplicable {
+			t.Errorf("policy none = %s, partial = %s", got[CheckDMARCPolicyNone], got[CheckDMARCPartialEnforcement])
+		}
+	})
+
+	t.Run("SPF redirect without all: the all checks are not applicable", func(t *testing.T) {
+		dns := goodDNS(t)
+		dns.txt["example.com"] = []string{"v=spf1 redirect=_spf.example.net"}
+		got := statuses(t, dns)
+		if got[CheckSPFNoAll] != module.CheckNotApplicable || got[CheckSPFMissing] != module.CheckPassed {
+			t.Errorf("no-all = %s, missing = %s", got[CheckSPFNoAll], got[CheckSPFMissing])
+		}
+	})
+
+	t.Run("no mail and no DKIM: DKIM checks are not applicable", func(t *testing.T) {
+		dns := goodDNS(t)
+		delete(dns.mx, "example.com")
+		delete(dns.txt, "selector1._domainkey.example.com")
+		got := statuses(t, dns)
+		for _, id := range []string{CheckDKIMNotFound, CheckDKIMWeakKey} {
+			if got[id] != module.CheckNotApplicable {
+				t.Errorf("%s = %s, want not_applicable", id, got[id])
+			}
+		}
+	})
 }

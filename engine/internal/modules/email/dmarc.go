@@ -22,12 +22,13 @@ func parseDMARC(record string) (map[string]string, bool) {
 	return tagMap(tags), true
 }
 
-func checkDMARC(ctx context.Context, dns resolver.Resolver, domain string, receivesMail bool) ([]issue, error) {
+func checkDMARC(ctx context.Context, dns resolver.Resolver, domain string, receivesMail bool, ev *evaluated) ([]issue, error) {
 	asset := "_dmarc." + domain
 	txt, err := lookupTXT(ctx, dns, asset)
 	if err != nil {
 		return nil, err
 	}
+	ev.add(CheckDMARCMissing)
 	var records []string
 	var tags map[string]string
 	for _, rec := range txt {
@@ -37,6 +38,10 @@ func checkDMARC(ctx context.Context, dns resolver.Resolver, domain string, recei
 		}
 	}
 
+	// As for SPF, each step is evaluated only if the previous one passed.
+	if len(records) > 0 {
+		ev.add(CheckDMARCMultiple)
+	}
 	switch len(records) {
 	case 0:
 		return []issue{dmarcMissing(asset, receivesMail)}, nil
@@ -57,6 +62,7 @@ func checkDMARC(ctx context.Context, dns resolver.Resolver, domain string, recei
 
 	record := records[0]
 	policy := strings.ToLower(tags["p"])
+	ev.add(CheckDMARCInvalid)
 	switch policy {
 	case "none", "quarantine", "reject":
 	default:
@@ -73,6 +79,7 @@ func checkDMARC(ctx context.Context, dns resolver.Resolver, domain string, recei
 	}
 
 	var issues []issue
+	ev.add(CheckDMARCPolicyNone, CheckDMARCNoReporting)
 	if policy == "none" {
 		issues = append(issues, issue{
 			checkID:     CheckDMARCPolicyNone,
@@ -88,6 +95,9 @@ func checkDMARC(ctx context.Context, dns resolver.Resolver, domain string, recei
 			references: []string{refDMARC},
 		})
 	} else {
+		// Partial enforcement and subdomain policy only matter once the
+		// policy enforces something.
+		ev.add(CheckDMARCPartialEnforcement, CheckDMARCSubdomainNone)
 		if pct, err := strconv.Atoi(tags["pct"]); err == nil && pct < 100 {
 			issues = append(issues, issue{
 				checkID:     CheckDMARCPartialEnforcement,

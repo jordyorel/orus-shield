@@ -30,7 +30,7 @@ var dkimSelectors = []string{
 // about 740 characters; anything far larger is not a real key (rule 7).
 const maxDKIMKeyChars = 4096
 
-func checkDKIM(ctx context.Context, dns resolver.Resolver, domain string, receivesMail bool) ([]issue, error) {
+func checkDKIM(ctx context.Context, dns resolver.Resolver, domain string, receivesMail bool, ev *evaluated) ([]issue, error) {
 	var issues []issue
 	keysFound := 0
 	for _, selector := range dkimSelectors {
@@ -57,6 +57,14 @@ func checkDKIM(ctx context.Context, dns resolver.Resolver, domain string, receiv
 		}
 	}
 
+	// Key checks need a key; "not found" is only meaningful for a domain
+	// that receives mail (it is only reported then).
+	if keysFound > 0 {
+		ev.add(CheckDKIMInvalidKey, CheckDKIMWeakKey, CheckDKIMShortKey)
+	}
+	if receivesMail {
+		ev.add(CheckDKIMNotFound)
+	}
 	if keysFound == 0 && receivesMail {
 		issues = append(issues, issue{
 			checkID:  CheckDKIMNotFound,

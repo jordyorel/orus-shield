@@ -22,6 +22,7 @@
 //	orusctl status [-org ORG] <scan-id>
 //	orusctl findings [-org ORG] [-v] <domain>
 //	orusctl assets [-org ORG] [-all] <domain>
+//	orusctl posture [-org ORG] [-v] <domain>
 //	orusctl audit [-org ORG] <domain>
 //
 // It reads ORUS_DATABASE_URL (and optionally ORUS_ORG) from the environment.
@@ -62,6 +63,7 @@ const usage = `usage:
   orusctl status [-org ORG] <scan-id>
   orusctl findings [-org ORG] [-v] <domain>
   orusctl assets [-org ORG] [-all] <domain>          (inventory; -all: include gone assets)
+  orusctl posture [-org ORG] [-v] <domain>           (score and history; -v: every check)
   orusctl audit [-org ORG] <domain>
 
 ORG is an organization name or ID; default: $ORUS_ORG, else "Default".
@@ -90,6 +92,8 @@ type OrgStore interface {
 	ListFindings(ctx context.Context, targetID string) ([]finding.Finding, error)
 	FindingHistory(ctx context.Context, targetID, findingID string) ([]store.FindingEvent, error)
 	ListAssets(ctx context.Context, targetID string, includeGone bool) ([]store.Asset, error)
+	CheckStatuses(ctx context.Context, targetID string) ([]store.CheckState, error)
+	PostureHistory(ctx context.Context, targetID string, limit int) ([]store.PostureSnapshot, error)
 	AuditLog(ctx context.Context, target string) ([]store.AuditEntry, error)
 }
 
@@ -224,6 +228,8 @@ func (c cli) run(ctx context.Context, args []string) error {
 		return c.findings(ctx, rest)
 	case "assets":
 		return c.assets(ctx, rest)
+	case "posture":
+		return c.posture(ctx, rest)
 	case "audit":
 		return c.audit(ctx, rest)
 	}
@@ -556,6 +562,76 @@ func (c cli) assets(ctx context.Context, args []string) error {
 			a.FirstSeen.Format(time.DateOnly), a.LastSeen.Format(time.DateOnly), strings.Join(details, " "))
 	}
 	return w.Flush()
+}
+
+// postureHistory is how many snapshots the posture command shows.
+const postureHistory = 10
+
+func (c cli) posture(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("posture", flag.ContinueOnError)
+	orgRef := c.orgFlag(fs)
+	verbose := fs.Bool("v", false, "list every check with its status")
+	pos, err := parse(fs, args, 1)
+	if err != nil {
+		return err
+	}
+	_, st, _, err := c.openOrg(ctx, *orgRef)
+	if err != nil {
+		return err
+	}
+	t, err := st.TargetByDomain(ctx, pos[0])
+	if err != nil {
+		return err
+	}
+	snaps, err := st.PostureHistory(ctx, t.ID, postureHistory)
+	if err != nil {
+		return err
+	}
+	if len(snaps) == 0 {
+		fmt.Fprintln(c.out, "no posture yet (run a scan first)")
+		return nil
+	}
+	last := snaps[0].Details
+	fmt.Fprintf(c.out, "score: %s  (%d passed, %d failed, %d not applicable)\n",
+		scoreText(last.Score), last.Total.Passed, last.Total.Failed, last.Total.NotApplicable)
+	cats := last.CategoryScores()
+	for _, cat := range slices.Sorted(maps.Keys(last.ByCategory)) {
+		tally := last.ByCategory[cat]
+		score := "n/a"
+		if s, ok := cats[cat]; ok {
+			score = fmt.Sprint(s)
+		}
+		fmt.Fprintf(c.out, "  %-8s %3s  (%d passed, %d failed)\n", cat, score, tally.Passed, tally.Failed)
+	}
+	if len(last.FailedChecks) > 0 {
+		fmt.Fprintf(c.out, "failed: %s\n", strings.Join(last.FailedChecks, ", "))
+	}
+	var history []string
+	for _, s := range slices.Backward(snaps) {
+		history = append(history, s.At.Format(time.DateOnly)+" "+scoreText(s.Score))
+	}
+	fmt.Fprintf(c.out, "history: %s\n", strings.Join(history, ", "))
+
+	if !*verbose {
+		return nil
+	}
+	states, err := st.CheckStatuses(ctx, t.ID)
+	if err != nil {
+		return err
+	}
+	w := tabwriter.NewWriter(c.out, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "\nCHECK\tMODULE\tSEVERITY\tSTATUS\tEVALUATED")
+	for _, s := range states {
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", s.CheckID, s.ModuleID, s.Severity, s.Status, s.EvaluatedAt.Format(time.DateOnly))
+	}
+	return w.Flush()
+}
+
+func scoreText(score *int) string {
+	if score == nil {
+		return "none"
+	}
+	return fmt.Sprintf("%d/100", *score)
 }
 
 func (c cli) audit(ctx context.Context, args []string) error {

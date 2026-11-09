@@ -11,7 +11,9 @@ import (
 
 	"github.com/jordyorel/orus-shield/engine/internal/asset"
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
+	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/ownership"
+	"github.com/jordyorel/orus-shield/engine/internal/posture"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
@@ -25,6 +27,8 @@ type fakeStore struct {
 	history   map[string][]store.FindingEvent // by finding ID
 	assets    []store.Asset
 	assetsAll bool // includeGone of the last ListAssets call
+	checks    []store.CheckState
+	snapshots []store.PostureSnapshot // newest first
 }
 
 func (f *fakeStore) CreateTarget(ctx context.Context, nt store.NewTarget) (store.Target, error) {
@@ -65,6 +69,14 @@ func (f *fakeStore) FindingHistory(ctx context.Context, targetID, findingID stri
 func (f *fakeStore) ListAssets(ctx context.Context, targetID string, includeGone bool) ([]store.Asset, error) {
 	f.assetsAll = includeGone
 	return f.assets, nil
+}
+
+func (f *fakeStore) CheckStatuses(ctx context.Context, targetID string) ([]store.CheckState, error) {
+	return f.checks, nil
+}
+
+func (f *fakeStore) PostureHistory(ctx context.Context, targetID string, limit int) ([]store.PostureSnapshot, error) {
+	return f.snapshots, nil
 }
 
 func (f *fakeStore) AuditLog(ctx context.Context, target string) ([]store.AuditEntry, error) {
@@ -381,7 +393,7 @@ func TestOrgFlag(t *testing.T) {
 	ctx := context.Background()
 	commands := [][]string{
 		{"target", "show"}, {"target", "verify-token"}, {"target", "verify"},
-		{"scan"}, {"findings"}, {"assets"},
+		{"scan"}, {"findings"}, {"assets"}, {"posture"},
 	}
 	for _, cmd := range commands {
 		name := strings.Join(cmd, " ")
@@ -467,6 +479,39 @@ func TestAssets(t *testing.T) {
 		t.Error("-all did not ask for gone assets")
 	}
 	for _, want := range []string{"tls,ports", "gone 2026-11-03", "expected=SSH", "192.0.2.10:22/tcp"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("output does not contain %q:\n%s", want, out.String())
+		}
+	}
+}
+
+func TestPosture(t *testing.T) {
+	c, st, out := newCLI()
+	if err := c.run(context.Background(), []string{"posture", "example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "no posture yet") {
+		t.Errorf("empty output = %q", out.String())
+	}
+
+	day := time.Date(2026, 11, 2, 10, 0, 0, 0, time.UTC)
+	latest := posture.Compute([]posture.Check{
+		{ID: "spf-missing", Category: module.CategoryEmail, Severity: finding.SeverityHigh, Status: module.CheckPassed},
+		{ID: "tls-cert-expired", Category: module.CategoryTLS, Severity: finding.SeverityCritical, Status: module.CheckFailed},
+	})
+	st.snapshots = []store.PostureSnapshot{
+		{At: day, Score: latest.Score, Details: latest},
+		{At: day.Add(-24 * time.Hour), Score: nil},
+	}
+	st.checks = []store.CheckState{{CheckID: "tls-cert-expired", ModuleID: "tls", Severity: finding.SeverityCritical,
+		Status: module.CheckFailed, EvaluatedAt: day}}
+	out.Reset()
+	if err := c.run(context.Background(), []string{"posture", "-v", "example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	// 6 / 16 = 38
+	for _, want := range []string{"score: 38/100", "1 passed, 1 failed", "failed: tls-cert-expired",
+		"history: 2026-11-01 none, 2026-11-02 38/100", "tls-cert-expired  tls"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output does not contain %q:\n%s", want, out.String())
 		}

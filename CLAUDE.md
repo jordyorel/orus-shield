@@ -11,8 +11,10 @@ orusctl, ownership verification, per-IP ownership and the ports module). The por
 still needs a real-world test on a server Jordy owns. Step 7 follows the order in
 `docs/ui-adaptation.md`: organizations (multi-tenant scoping, `store.Org` + PostgreSQL
 row-level security), the findings lifecycle (`fixed_at`, `finding_events` history) and the
-asset inventory (`module.Result` with findings and assets, `assets` table) are done; next
-is the check catalog and evaluated checks (posture score).
+asset inventory (`module.Result` with findings and assets, `assets` table) and the check
+catalog with evaluated checks and posture score (`check_status`, `posture_snapshots`,
+package `posture`) are done; framework mappings (CIS Controls v8) wait for Jordy's review.
+Next: CDN and hosting detection.
 
 ## How to work on this repo
 
@@ -58,6 +60,7 @@ engine/
   internal/finding/  finding schema and validation
   internal/asset/    asset schema (hostname, ip, service, certificate) and validation
   internal/dnsname/  DNS name normalization, shared by module and asset
+  internal/posture/  posture score from check statuses (pure, deterministic)
   internal/resolver/ DNS lookups for modules, gated (exclusions + rate limit) per scan
   internal/dialer/   TCP connections for modules, to gate-approved IPs only
   internal/gate/     per-scan module.Gate: customer exclusions + rate limiter
@@ -77,11 +80,14 @@ docs/
 Every module:
 - has a stable ID, a name, and declares whether it is **passive** (public data only: DNS,
   certificates, HTTP responses) or **active** (sends probes: port scans, app tests);
+- declares its check catalog in `Info.Checks` (ID unique across modules, category,
+  severity used as the score weight, title); every finding uses a declared check;
 - receives a `context.Context` and must respect its cancellation and deadline;
 - receives the target and its configuration; never reads global state;
 - returns a `module.Result`: findings in the standard schema and the assets it observed
-  (package `asset`: hostnames under the target, IPs, services, certificates), or an error;
-  it never prints or logs findings itself;
+  (package `asset`: hostnames under the target, IPs, services, certificates), and the
+  checks it actually evaluated (`Result.Evaluated`; a check never claimed is not
+  applicable, never passed), or an error; it never prints or logs findings itself;
 - goes through the shared rate limiter for every network call.
 
 ### Finding schema (fields to include)

@@ -185,13 +185,14 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 		ScanID: sc.ID, Attempt: sc.Attempt, WorkerID: w.cfg.ID,
 		Failed: make(map[string]string),
 		Assets: make(map[string][]asset.Asset),
+		Checks: make(map[string][]module.CheckOutcome),
 	}
 	for _, id := range sc.Modules {
 		if scanCtx.Err() != nil {
 			break
 		}
 		start := time.Now()
-		res, err := w.runModule(scanCtx, id, mt, gateFor(id))
+		res, checks, err := w.runModule(scanCtx, id, mt, gateFor(id))
 		var refused *refusedError
 		switch {
 		case errors.As(err, &refused):
@@ -216,6 +217,7 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 			if len(res.Assets) > 0 {
 				result.Assets[id] = res.Assets
 			}
+			result.Checks[id] = checks
 		}
 	}
 	// Lease lost or shutdown: drop the partial result. Recording it could
@@ -294,22 +296,23 @@ type refusedError struct{ err error }
 
 func (e *refusedError) Error() string { return "refused: " + e.err.Error() }
 
-// runModule runs one module with its own timeout and checks its output.
-func (w *Worker) runModule(ctx context.Context, id string, t module.Target, g module.Gate) (res module.Result, err error) {
+// runModule runs one module with its own timeout, checks its output, and
+// evaluates its check catalog (module.Evaluate).
+func (w *Worker) runModule(ctx context.Context, id string, t module.Target, g module.Gate) (res module.Result, checks []module.CheckOutcome, err error) {
 	m, ok := w.modules.Get(id)
 	if !ok {
-		return module.Result{}, &refusedError{fmt.Errorf("unknown module %q", id)}
+		return module.Result{}, nil, &refusedError{fmt.Errorf("unknown module %q", id)}
 	}
 	// Security rule 1, checked right before every run.
 	if err := module.CheckAllowed(m.Info(), t); err != nil {
-		return module.Result{}, &refusedError{err}
+		return module.Result{}, nil, &refusedError{err}
 	}
 
 	// Modules parse untrusted data. A panic in one must fail that module,
 	// not crash the worker and every scan after it.
 	defer func() {
 		if r := recover(); r != nil {
-			res, err = module.Result{}, fmt.Errorf("module %s panicked: %v", id, r)
+			res, checks, err = module.Result{}, nil, fmt.Errorf("module %s panicked: %v", id, r)
 		}
 	}()
 
@@ -317,14 +320,14 @@ func (w *Worker) runModule(ctx context.Context, id string, t module.Target, g mo
 	defer cancel()
 	res, err = m.Run(mctx, module.Request{Target: t, Gate: g})
 	if err != nil {
-		return module.Result{}, err
+		return module.Result{}, nil, err
 	}
 	findings := res.Findings
 	if len(findings) > maxFindingsPerModule {
-		return module.Result{}, fmt.Errorf("module %s returned %d findings, limit is %d", id, len(findings), maxFindingsPerModule)
+		return module.Result{}, nil, fmt.Errorf("module %s returned %d findings, limit is %d", id, len(findings), maxFindingsPerModule)
 	}
 	if len(res.Assets) > maxAssetsPerModule {
-		return module.Result{}, fmt.Errorf("module %s returned %d assets, limit is %d", id, len(res.Assets), maxAssetsPerModule)
+		return module.Result{}, nil, fmt.Errorf("module %s returned %d assets, limit is %d", id, len(res.Assets), maxAssetsPerModule)
 	}
 
 	// Reject the whole output if one finding is wrong: storing part of it
@@ -332,12 +335,12 @@ func (w *Worker) runModule(ctx context.Context, id string, t module.Target, g mo
 	now := w.now()
 	for _, f := range findings {
 		if f.ModuleID != id || f.Target != t.Domain {
-			return module.Result{}, fmt.Errorf("module %s returned a finding for module %q, target %q", id, f.ModuleID, f.Target)
+			return module.Result{}, nil, fmt.Errorf("module %s returned a finding for module %q, target %q", id, f.ModuleID, f.Target)
 		}
 		stamped := f
 		stamped.FirstSeen, stamped.LastSeen, stamped.Status = now, now, finding.StatusOpen
 		if err := stamped.Validate(); err != nil {
-			return module.Result{}, fmt.Errorf("module %s returned an invalid finding %s: %w", id, f.CheckID, err)
+			return module.Result{}, nil, fmt.Errorf("module %s returned an invalid finding %s: %w", id, f.CheckID, err)
 		}
 	}
 	// Same for assets: a missing asset would be marked gone. Duplicates
@@ -345,11 +348,17 @@ func (w *Worker) runModule(ctx context.Context, id string, t module.Target, g mo
 	var assets asset.Set
 	for _, a := range res.Assets {
 		if err := a.Validate(t.Domain); err != nil {
-			return module.Result{}, fmt.Errorf("module %s returned an invalid asset: %w", id, err)
+			return module.Result{}, nil, fmt.Errorf("module %s returned an invalid asset: %w", id, err)
 		}
 		assets.Add(a)
 	}
-	return module.Result{Findings: findings, Assets: assets.List()}, nil
+	res = module.Result{Findings: findings, Assets: assets.List(), Evaluated: res.Evaluated}
+	// Rejects findings or evaluated checks the catalog does not declare.
+	checks, err = module.Evaluate(m.Info(), res)
+	if err != nil {
+		return module.Result{}, nil, err
+	}
+	return res, checks, nil
 }
 
 // heartbeat extends the lease every Lease/3 until stopped. If the lease is
