@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/netip"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
+	"github.com/jordyorel/orus-shield/engine/internal/ownership"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
@@ -163,15 +165,21 @@ func runOnce(t *testing.T, w *Worker) error {
 	return err
 }
 
-// trustingRechecker confirms whatever the stored status says.
+// trustingRechecker confirms whatever the stored status says and lets
+// active modules reach every IP.
 type trustingRechecker struct{}
 
 func (trustingRechecker) Recheck(ctx context.Context, t store.Target, g module.Gate, actor string) (bool, error) {
 	return t.Verified(), nil
 }
 
+func (trustingRechecker) IPGate(inner module.Gate, domain string, onRefuse ownership.RefuseFunc) module.Gate {
+	return inner
+}
+
 // fixedRechecker returns a fixed answer and counts calls.
 type fixedRechecker struct {
+	trustingRechecker
 	ok    bool
 	err   error
 	calls int
@@ -181,6 +189,26 @@ func (f *fixedRechecker) Recheck(ctx context.Context, t store.Target, g module.G
 	f.calls++
 	return f.ok, f.err
 }
+
+// ipOwnership refuses one IP for active modules, like ownership.IPGate.
+type ipOwnership struct {
+	trustingRechecker
+	refused netip.Addr
+}
+
+func (o ipOwnership) IPGate(inner module.Gate, domain string, onRefuse ownership.RefuseFunc) module.Gate {
+	return gateFunc(func(ctx context.Context, d module.Destination) error {
+		if d.IP == o.refused {
+			onRefuse(d.IP, "no PTR")
+			return fmt.Errorf("not owned: %w", module.ErrExcluded)
+		}
+		return inner.Allow(ctx, d)
+	})
+}
+
+type gateFunc func(context.Context, module.Destination) error
+
+func (f gateFunc) Allow(ctx context.Context, d module.Destination) error { return f(ctx, d) }
 
 // ---- Tests ----------------------------------------------------------------
 
@@ -443,7 +471,7 @@ func TestOwnershipIsRecheckedBeforeActiveModules(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ports := newModule("ports", module.KindActive, nil)
 			w, st := setup(t, true, "{}", ports)
-			w.recheck = tt.recheck
+			w.owner = tt.recheck
 			if err := runOnce(t, w); err != nil {
 				t.Fatalf("RunOnce: %v", err)
 			}
@@ -465,7 +493,7 @@ func TestNoRecheckForPassiveScans(t *testing.T) {
 	email := newModule("email", module.KindPassive, nil)
 	w, _ := setup(t, true, "{}", email)
 	r := &fixedRechecker{ok: true}
-	w.recheck = r
+	w.owner = r
 	if err := runOnce(t, w); err != nil {
 		t.Fatal(err)
 	}
@@ -477,11 +505,45 @@ func TestNoRecheckForPassiveScans(t *testing.T) {
 func TestNilRecheckerRefusesActiveModules(t *testing.T) {
 	ports := newModule("ports", module.KindActive, nil)
 	w, _ := setup(t, true, "{}", ports)
-	w.recheck = nil
+	w.owner = nil
 	if err := runOnce(t, w); err != nil {
 		t.Fatal(err)
 	}
 	if ports.runs.Load() != 0 {
 		t.Error("active module ran without a rechecker")
+	}
+}
+
+// Active modules get the IP-restricted gate; passive modules do not.
+func TestActiveModulesGetIPGate(t *testing.T) {
+	shared := netip.MustParseAddr("198.51.100.20")
+	dest := module.Destination{Host: "example.com", IP: shared, Port: 443}
+	var activeErr, passiveErr error
+	ports := newModule("ports", module.KindActive, func(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+		activeErr = req.Gate.Allow(ctx, dest)
+		return nil, nil
+	})
+	tls := newModule("tls", module.KindPassive, func(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+		passiveErr = req.Gate.Allow(ctx, dest)
+		return nil, nil
+	})
+	w, st := setup(t, true, "{}", ports, tls)
+	w.owner = ipOwnership{refused: shared}
+
+	if err := runOnce(t, w); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	if !errors.Is(activeErr, module.ErrExcluded) {
+		t.Errorf("active module reached an unverified IP: %v", activeErr)
+	}
+	if passiveErr != nil {
+		t.Errorf("passive module was IP-restricted: %v", passiveErr)
+	}
+	var audited bool
+	for _, e := range st.audit {
+		audited = audited || e.Action == store.ActionIPNotVerified
+	}
+	if !audited {
+		t.Errorf("audit = %+v, want an ip.not_verified entry", st.audit)
 	}
 }

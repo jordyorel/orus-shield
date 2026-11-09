@@ -31,6 +31,11 @@ func (s *stubResolver) LookupIP(ctx context.Context, host string) ([]netip.Addr,
 	return []netip.Addr{netip.MustParseAddr("192.0.2.1")}, nil
 }
 
+func (s *stubResolver) LookupAddr(ctx context.Context, ip netip.Addr) ([]string, error) {
+	s.calls = append(s.calls, "PTR "+ip.String())
+	return []string{"srv.example.com"}, nil
+}
+
 // stubGate records destinations and can refuse every request.
 type stubGate struct {
 	allowed []module.Destination
@@ -241,4 +246,18 @@ func (c *cancellingResolver) LookupTXT(ctx context.Context, name string) ([]stri
 	c.calls++
 	c.cancel()
 	return nil, c.err
+}
+
+func TestGatedLookupAddrUsesIP(t *testing.T) {
+	inner := &stubResolver{}
+	gate := &stubGate{}
+	ip := netip.MustParseAddr("192.0.2.10")
+	names, err := Gated{Gate: gate, Inner: inner}.LookupAddr(context.Background(), ip)
+	if err != nil || len(names) != 1 {
+		t.Fatalf("LookupAddr = %v, %v", names, err)
+	}
+	// The gate sees the IP, so IP exclusions apply to reverse lookups.
+	if len(gate.allowed) != 1 || gate.allowed[0].IP != ip {
+		t.Errorf("gate saw %+v, want the IP %s", gate.allowed, ip)
+	}
 }

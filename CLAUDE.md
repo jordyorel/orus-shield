@@ -7,8 +7,8 @@ attention to French-speaking Africa (local payment methods, French-first reports
 
 Status: roadmap steps 1 to 5 are done (finding schema, Module interface, gated DNS
 resolver and dialer, email and TLS modules, PostgreSQL storage and queue, gate, worker,
-orusctl, ownership verification). Next: step 6, the ports module, which first requires
-closing the rule 1 gap described below.
+orusctl, ownership verification), plus per-IP ownership for active modules (step 6a).
+Next: step 6b, the ports module.
 
 ## How to work on this repo
 
@@ -91,13 +91,12 @@ These are the product. A breach of them is a bug, never a trade-off.
    active module runs on it. The record must stay published: it is re-checked before active
    scans when the last check is over 24 hours old, and verification is revoked if it is gone.
    Passive modules may run on unverified domains, but only public, read-only checks.
-   **Known gap, to solve before step 6:** a DNS TXT record proves control of the domain,
-   not ownership of the IPs it points to. A customer on shared hosting, a parking page or
-   behind a CDN (Cloudflare proxy, GitHub Pages...) passes verification, and an active scan
-   would then hit the provider's infrastructure. Real case seen on the lab domain: a fresh
-   Porkbun domain points to Porkbun's parking servers until those records are deleted.
-   Active modules must not run against such IPs (for example: exclude known CDN/hosting
-   ranges, or require server-level verification).
+   **Per-IP ownership (closes the gap of DNS-only verification):** a TXT record proves
+   control of the domain, not of the IPs it points to (shared hosting, CDN, a registrar's
+   parking page such as Porkbun's for a fresh domain). Active modules therefore receive an
+   `ownership.IPGate`: they may only connect to IPs with forward-confirmed reverse DNS (PTR
+   under the verified domain, resolving back to the same IP). Only an IP's real holder can
+   set its PTR. Refused IPs are skipped like exclusions and written to the audit log.
 2. **Respect exclusions.** Customer exclusions (paths, IPs, ports) are checked before every
    request, not only at job start.
 3. **Rate limiting is mandatory.** Every outbound request goes through the limiter, using the

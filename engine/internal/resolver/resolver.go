@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"strings"
 	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/module"
@@ -22,6 +23,9 @@ type Resolver interface {
 	LookupTXT(ctx context.Context, name string) ([]string, error)
 	LookupMX(ctx context.Context, name string) ([]*net.MX, error)
 	LookupIP(ctx context.Context, host string) ([]netip.Addr, error)
+	// LookupAddr returns the reverse DNS (PTR) names of ip, without the
+	// trailing dot.
+	LookupAddr(ctx context.Context, ip netip.Addr) ([]string, error)
 }
 
 var (
@@ -98,6 +102,20 @@ func (s *System) LookupIP(ctx context.Context, host string) ([]netip.Addr, error
 	return limit(addrs), nil
 }
 
+// LookupAddr returns the PTR names of ip, lowercased, without trailing dot.
+func (s *System) LookupAddr(ctx context.Context, ip netip.Addr) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, s.timeout)
+	defer cancel()
+	names, err := s.r.LookupAddr(ctx, ip.String())
+	if err != nil {
+		return nil, wrapError(ip.String(), err)
+	}
+	for i, n := range names {
+		names[i] = strings.TrimSuffix(strings.ToLower(n), ".")
+	}
+	return limit(names), nil
+}
+
 // Gated wraps a Resolver and calls Gate before every lookup attempt.
 type Gated struct {
 	Gate  module.Gate
@@ -153,7 +171,28 @@ func isTemporary(err error) bool {
 	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
+// LookupAddr looks up the PTR names of ip through the gate. The gate sees
+// the IP, so customer IP exclusions apply to reverse lookups too.
+func (g Gated) LookupAddr(ctx context.Context, ip netip.Addr) ([]string, error) {
+	var names []string
+	var err error
+	for range MaxAttempts {
+		if err := g.allowDest(ctx, ip.String(), module.Destination{IP: ip}); err != nil {
+			return nil, err
+		}
+		names, err = g.Inner.LookupAddr(ctx, ip)
+		if err == nil || !isTemporary(err) || ctx.Err() != nil {
+			return names, err
+		}
+	}
+	return nil, err
+}
+
 func (g Gated) allow(ctx context.Context, name string) error {
+	return g.allowDest(ctx, name, module.Destination{Host: name})
+}
+
+func (g Gated) allowDest(ctx context.Context, name string, dest module.Destination) error {
 	if g.Gate == nil {
 		return fmt.Errorf("lookup %s: %w", name, ErrNoGate)
 	}
@@ -161,7 +200,7 @@ func (g Gated) allow(ctx context.Context, name string) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("lookup %s: %w", name, err)
 	}
-	if err := g.Gate.Allow(ctx, module.Destination{Host: name}); err != nil {
+	if err := g.Gate.Allow(ctx, dest); err != nil {
 		return fmt.Errorf("lookup %s: gate refused: %w", name, err)
 	}
 	return nil

@@ -16,6 +16,7 @@ const (
 	ActionModuleRefused = "module.refused"
 	ActionScanFinished  = "scan.finished"
 	ActionScanFailed    = "scan.failed"
+	ActionIPNotVerified = "ip.not_verified"
 )
 
 // AuditEntry is one line of the audit log (security rule 4).

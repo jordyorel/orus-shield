@@ -11,12 +11,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"sync"
 	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
 	"github.com/jordyorel/orus-shield/engine/internal/gate"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
+	"github.com/jordyorel/orus-shield/engine/internal/ownership"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
@@ -31,10 +33,13 @@ type Store interface {
 	AppendAudit(ctx context.Context, e store.AuditEntry) error
 }
 
-// Rechecker confirms, right before active modules run, that the target is
-// still verified (see ownership.Verifier.Recheck).
-type Rechecker interface {
+// Ownership enforces security rule 1 for active modules (see package
+// ownership): Recheck confirms the domain is still verified, IPGate wraps
+// the scan's gate so active modules can only reach IPs proven to belong to
+// the customer.
+type Ownership interface {
 	Recheck(ctx context.Context, t store.Target, g module.Gate, actor string) (bool, error)
+	IPGate(inner module.Gate, domain string, onRefuse ownership.RefuseFunc) module.Gate
 }
 
 // Config tunes a worker. Zero values get the defaults below.
@@ -66,16 +71,16 @@ const (
 type Worker struct {
 	store   Store
 	modules *module.Registry
-	recheck Rechecker
+	owner   Ownership
 	cfg     Config
 	log     *slog.Logger
 	now     func() time.Time
 }
 
-// New returns a worker. modules is the set of checks it can run; recheck
-// confirms ownership before active modules (nil: active modules are always
+// New returns a worker. modules is the set of checks it can run; owner
+// enforces ownership for active modules (nil: active modules are always
 // refused).
-func New(st Store, modules *module.Registry, recheck Rechecker, cfg Config, log *slog.Logger) *Worker {
+func New(st Store, modules *module.Registry, owner Ownership, cfg Config, log *slog.Logger) *Worker {
 	if cfg.ID == "" {
 		cfg.ID = "worker"
 	}
@@ -91,7 +96,7 @@ func New(st Store, modules *module.Registry, recheck Rechecker, cfg Config, log 
 	if cfg.MaxAttempts <= 0 {
 		cfg.MaxAttempts = defaultMaxAttempts
 	}
-	return &Worker{store: st, modules: modules, recheck: recheck, cfg: cfg, log: log.With("worker", cfg.ID), now: time.Now}
+	return &Worker{store: st, modules: modules, owner: owner, cfg: cfg, log: log.With("worker", cfg.ID), now: time.Now}
 }
 
 // Run processes scans until ctx is cancelled, then returns nil. A scan in
@@ -159,6 +164,20 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 	}
 	mt := module.Target{Domain: target.Domain, Verified: w.stillVerified(scanCtx, sc, target, g, log)}
 
+	// Active modules get a stricter gate, built on first use: it only lets
+	// them reach IPs whose ownership is proven (rule 1, per IP).
+	var activeGate module.Gate
+	gateFor := func(id string) module.Gate {
+		m, ok := w.modules.Get(id)
+		if !ok || m.Info().Kind != module.KindActive {
+			return g
+		}
+		if activeGate == nil {
+			activeGate = w.activeGate(scanCtx, sc, target, g, log)
+		}
+		return activeGate
+	}
+
 	result := store.ScanResult{
 		ScanID: sc.ID, Attempt: sc.Attempt, WorkerID: w.cfg.ID,
 		Failed: make(map[string]string),
@@ -168,7 +187,7 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 			break
 		}
 		start := time.Now()
-		findings, err := w.runModule(scanCtx, id, mt, g)
+		findings, err := w.runModule(scanCtx, id, mt, gateFor(id))
 		var refused *refusedError
 		switch {
 		case errors.As(err, &refused):
@@ -213,10 +232,10 @@ func (w *Worker) stillVerified(ctx context.Context, sc store.Scan, t store.Targe
 	if !t.Verified() || !w.wantsActive(sc.Modules) {
 		return t.Verified()
 	}
-	if w.recheck == nil {
+	if w.owner == nil {
 		return false
 	}
-	ok, err := w.recheck.Recheck(ctx, t, g, w.cfg.ID)
+	ok, err := w.owner.Recheck(ctx, t, g, w.cfg.ID)
 	if err != nil {
 		log.Warn("ownership re-check failed, active modules refused for this scan", "err", err)
 		return false
@@ -225,6 +244,30 @@ func (w *Worker) stillVerified(ctx context.Context, sc store.Scan, t store.Targe
 		log.Warn("ownership no longer verified, active modules refused")
 	}
 	return ok
+}
+
+// activeGate returns the gate for active modules: g restricted to verified
+// IPs. Each refused IP is logged and written to the audit log once.
+func (w *Worker) activeGate(ctx context.Context, sc store.Scan, t store.Target, g module.Gate, log *slog.Logger) module.Gate {
+	if w.owner == nil {
+		return refuseAll{}
+	}
+	return w.owner.IPGate(g, t.Domain, func(ip netip.Addr, reason string) {
+		log.Warn("IP refused for active scan", "ip", ip, "reason", reason)
+		if err := w.store.AppendAudit(ctx, store.AuditEntry{
+			Actor: w.cfg.ID, Action: store.ActionIPNotVerified, Target: t.Domain,
+			Details: map[string]any{"scan_id": sc.ID, "ip": ip.String(), "reason": reason},
+		}); err != nil {
+			log.Error("audit IP refusal", "err", err)
+		}
+	})
+}
+
+// refuseAll is the active gate when no ownership checker is configured.
+type refuseAll struct{}
+
+func (refuseAll) Allow(context.Context, module.Destination) error {
+	return fmt.Errorf("no ownership checker: %w", module.ErrExcluded)
 }
 
 // wantsActive reports whether one of the requested modules is active.

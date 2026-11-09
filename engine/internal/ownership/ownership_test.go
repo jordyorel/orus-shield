@@ -69,9 +69,12 @@ func (f *fakeStore) AppendAudit(ctx context.Context, e store.AuditEntry) error {
 	return nil
 }
 
-// fakeDNS answers TXT lookups from a map; other names are NXDOMAIN.
+// fakeDNS answers TXT, A/AAAA and PTR lookups from maps; anything else is
+// NXDOMAIN.
 type fakeDNS struct {
 	txt   map[string][]string
+	ips   map[string][]netip.Addr
+	ptr   map[netip.Addr][]string
 	err   error // returned for every lookup when set
 	calls []string
 }
@@ -92,7 +95,25 @@ func (d *fakeDNS) LookupMX(ctx context.Context, name string) ([]*net.MX, error) 
 }
 
 func (d *fakeDNS) LookupIP(ctx context.Context, host string) ([]netip.Addr, error) {
-	return nil, resolver.ErrNotFound
+	d.calls = append(d.calls, "A "+host)
+	if d.err != nil {
+		return nil, d.err
+	}
+	if a, ok := d.ips[host]; ok {
+		return a, nil
+	}
+	return nil, fmt.Errorf("lookup %s: %w", host, resolver.ErrNotFound)
+}
+
+func (d *fakeDNS) LookupAddr(ctx context.Context, ip netip.Addr) ([]string, error) {
+	d.calls = append(d.calls, "PTR "+ip.String())
+	if d.err != nil {
+		return nil, d.err
+	}
+	if n, ok := d.ptr[ip]; ok {
+		return n, nil
+	}
+	return nil, fmt.Errorf("lookup %s: %w", ip, resolver.ErrNotFound)
 }
 
 type allowAll struct{ calls int }

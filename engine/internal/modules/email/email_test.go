@@ -42,6 +42,10 @@ func (f *fakeDNS) LookupTXT(ctx context.Context, name string) ([]string, error) 
 	return records, nil
 }
 
+func (f *fakeDNS) LookupAddr(ctx context.Context, ip netip.Addr) ([]string, error) {
+	return nil, fmt.Errorf("lookup %s: %w", ip, resolver.ErrNotFound)
+}
+
 func (f *fakeDNS) LookupMX(ctx context.Context, name string) ([]*net.MX, error) {
 	f.calls = append(f.calls, name)
 	if err := f.fail[name]; err != nil {
