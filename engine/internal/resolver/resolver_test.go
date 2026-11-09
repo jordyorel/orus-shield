@@ -159,3 +159,86 @@ func TestLimit(t *testing.T) {
 		t.Errorf("len(limit(2 records)) = %d, want 2", got)
 	}
 }
+
+// flakyResolver fails its first `failures` TXT lookups with err.
+type flakyResolver struct {
+	stubResolver
+	failures int
+	err      error
+}
+
+func (f *flakyResolver) LookupTXT(ctx context.Context, name string) ([]string, error) {
+	f.calls = append(f.calls, "TXT "+name)
+	if len(f.calls) <= f.failures {
+		return nil, f.err
+	}
+	return []string{"v=spf1 -all"}, nil
+}
+
+func TestGatedRetries(t *testing.T) {
+	timeout := &net.DNSError{Err: "i/o timeout", Name: "example.com", IsTimeout: true}
+	servfail := &net.DNSError{Err: "server misbehaving", Name: "example.com", IsTemporary: true}
+	notFound := wrapError("example.com", &net.DNSError{Err: "no such host", IsNotFound: true})
+	permanent := errors.New("malformed answer")
+
+	tests := []struct {
+		name      string
+		failures  int
+		err       error
+		wantErr   error // nil: success expected
+		wantCalls int
+	}{
+		{"one timeout then success", 1, timeout, nil, 2},
+		{"two servfails then success", 2, servfail, nil, 3},
+		{"timeouts on every attempt", 10, timeout, timeout, MaxAttempts},
+		{"not found is never retried", 10, notFound, ErrNotFound, 1},
+		{"permanent error is not retried", 10, permanent, permanent, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inner := &flakyResolver{failures: tt.failures, err: tt.err}
+			gate := &stubGate{}
+			_, err := Gated{Gate: gate, Inner: inner}.LookupTXT(context.Background(), "example.com")
+			if tt.wantErr == nil && err != nil {
+				t.Fatalf("LookupTXT = %v, want success", err)
+			}
+			if tt.wantErr != nil && !errors.Is(err, tt.wantErr) {
+				t.Fatalf("LookupTXT = %v, want %v", err, tt.wantErr)
+			}
+			if len(inner.calls) != tt.wantCalls {
+				t.Errorf("resolver called %d times, want %d", len(inner.calls), tt.wantCalls)
+			}
+			// Every attempt goes through the gate (rate limit, exclusions).
+			if len(gate.allowed) != len(inner.calls) {
+				t.Errorf("gate saw %d requests for %d attempts", len(gate.allowed), len(inner.calls))
+			}
+		})
+	}
+}
+
+func TestGatedRetryStopsOnCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	timeout := &net.DNSError{Err: "i/o timeout", IsTimeout: true}
+	inner := &cancellingResolver{cancel: cancel, err: timeout}
+	_, err := Gated{Gate: &stubGate{}, Inner: inner}.LookupTXT(ctx, "example.com")
+	if err == nil {
+		t.Fatal("LookupTXT = nil, want error")
+	}
+	if inner.calls != 1 {
+		t.Errorf("resolver called %d times after cancel, want 1", inner.calls)
+	}
+}
+
+// cancellingResolver cancels the scan during its first lookup, then fails.
+type cancellingResolver struct {
+	stubResolver
+	cancel context.CancelFunc
+	err    error
+	calls  int
+}
+
+func (c *cancellingResolver) LookupTXT(ctx context.Context, name string) ([]string, error) {
+	c.calls++
+	c.cancel()
+	return nil, c.err
+}

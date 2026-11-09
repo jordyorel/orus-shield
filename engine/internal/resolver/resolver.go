@@ -37,8 +37,14 @@ var (
 // from the target and are untrusted input (security rule 7).
 const MaxRecords = 32
 
-// DefaultTimeout bounds a single lookup, on top of the caller's context.
-const DefaultTimeout = 5 * time.Second
+// DefaultTimeout bounds one lookup attempt, on top of the caller's context.
+// Gated retries temporary failures, so one attempt can stay short.
+const DefaultTimeout = 3 * time.Second
+
+// MaxAttempts is how many times Gated tries a lookup that fails with a
+// temporary error (timeout, SERVFAIL). DNS runs over UDP: one lost packet
+// must not fail a whole module.
+const MaxAttempts = 3
 
 // System resolves names with Go's own DNS client.
 type System struct {
@@ -92,34 +98,59 @@ func (s *System) LookupIP(ctx context.Context, host string) ([]netip.Addr, error
 	return limit(addrs), nil
 }
 
-// Gated wraps a Resolver and calls Gate before every lookup.
+// Gated wraps a Resolver and calls Gate before every lookup attempt.
 type Gated struct {
 	Gate  module.Gate
 	Inner Resolver
 }
 
-// LookupTXT asks the gate, then looks up the TXT records of name.
+// LookupTXT looks up the TXT records of name through the gate.
 func (g Gated) LookupTXT(ctx context.Context, name string) ([]string, error) {
-	if err := g.allow(ctx, name); err != nil {
-		return nil, err
-	}
-	return g.Inner.LookupTXT(ctx, name)
+	return lookup(ctx, g, name, g.Inner.LookupTXT)
 }
 
-// LookupMX asks the gate, then looks up the MX records of name.
+// LookupMX looks up the MX records of name through the gate.
 func (g Gated) LookupMX(ctx context.Context, name string) ([]*net.MX, error) {
-	if err := g.allow(ctx, name); err != nil {
-		return nil, err
-	}
-	return g.Inner.LookupMX(ctx, name)
+	return lookup(ctx, g, name, g.Inner.LookupMX)
 }
 
-// LookupIP asks the gate, then looks up the addresses of host.
+// LookupIP looks up the addresses of host through the gate.
 func (g Gated) LookupIP(ctx context.Context, host string) ([]netip.Addr, error) {
-	if err := g.allow(ctx, host); err != nil {
-		return nil, err
+	return lookup(ctx, g, host, g.Inner.LookupIP)
+}
+
+// lookup asks the gate, runs fn, and retries temporary failures up to
+// MaxAttempts times. Each attempt goes through the gate again, so retries
+// respect exclusions and the rate limit like any other request (rule 3).
+// "Not found" is an answer, not a failure: it is never retried.
+func lookup[T any](ctx context.Context, g Gated, name string, fn func(context.Context, string) (T, error)) (T, error) {
+	var zero T
+	var err error
+	for range MaxAttempts {
+		if err := g.allow(ctx, name); err != nil {
+			return zero, err
+		}
+		var v T
+		v, err = fn(ctx, name)
+		if err == nil || !isTemporary(err) || ctx.Err() != nil {
+			return v, err
+		}
 	}
-	return g.Inner.LookupIP(ctx, host)
+	return zero, err
+}
+
+// isTemporary reports DNS failures worth retrying: timeouts and server
+// failures. A cancelled context is never temporary.
+func isTemporary(err error) bool {
+	if errors.Is(err, ErrNotFound) || errors.Is(err, context.Canceled) {
+		return false
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return dnsErr.IsTimeout || dnsErr.IsTemporary
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
 func (g Gated) allow(ctx context.Context, name string) error {
