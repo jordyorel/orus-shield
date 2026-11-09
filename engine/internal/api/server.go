@@ -92,6 +92,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/logout", s.withSession(s.logout))
 	mux.HandleFunc("GET /api/v1/auth/me", s.withSession(s.me))
 	mux.HandleFunc("POST /api/v1/auth/setup-password", s.setupPassword)
+	s.orgRoutes(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
 	})
