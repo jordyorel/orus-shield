@@ -18,7 +18,7 @@ type stubDialer struct {
 func (s *stubDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	s.addrs = append(s.addrs, network+" "+address)
 	client, server := net.Pipe()
-	server.Close()
+	_ = server.Close()
 	return client, nil
 }
 
@@ -49,7 +49,7 @@ func TestGatedDialsTheApprovedIP(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Dial: %v", err)
 			}
-			conn.Close()
+			_ = conn.Close()
 			if len(gate.seen) != 1 || gate.seen[0] != tt.dest {
 				t.Errorf("gate saw %+v, want exactly %+v", gate.seen, tt.dest)
 			}

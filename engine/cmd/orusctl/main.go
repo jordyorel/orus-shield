@@ -167,7 +167,7 @@ func (c cli) run(ctx context.Context, args []string) error {
 func parse(fs *flag.FlagSet, args []string, minArgs int) ([]string, error) {
 	fs.SetOutput(io.Discard)
 	if err := fs.Parse(args); err != nil {
-		return nil, fmt.Errorf("%w: %s: %v", errUsage, fs.Name(), err)
+		return nil, fmt.Errorf("%w: %s: %w", errUsage, fs.Name(), err)
 	}
 	if fs.NArg() < minArgs {
 		return nil, fmt.Errorf("%w: %s: missing argument", errUsage, fs.Name())

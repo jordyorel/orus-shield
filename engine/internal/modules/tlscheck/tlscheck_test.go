@@ -124,7 +124,7 @@ func serveTLS(t *testing.T, cert tls.Certificate, minVersion uint16) string {
 	return serve(t, func(c net.Conn) {
 		tc := tls.Server(c, cfg)
 		_ = tc.Handshake() // failures are what some tests expect
-		tc.Close()
+		_ = tc.Close()
 	})
 }
 
@@ -135,7 +135,7 @@ func servePlain(t *testing.T) string {
 		buf := make([]byte, 1024)
 		_, _ = c.Read(buf)
 		_, _ = c.Write([]byte("HTTP/1.1 400 Bad Request\r\n\r\n"))
-		c.Close()
+		_ = c.Close()
 	})
 }
 
@@ -147,7 +147,7 @@ func serve(t *testing.T, handle func(net.Conn)) string {
 	}
 	var wg sync.WaitGroup
 	t.Cleanup(func() {
-		ln.Close()
+		_ = ln.Close()
 		wg.Wait()
 	})
 	wg.Add(1)
@@ -297,7 +297,7 @@ func TestInfo(t *testing.T) {
 }
 
 func TestRunScenarios(t *testing.T) {
-	rsa1024, err := rsa.GenerateKey(rand.Reader, 1024)
+	rsa1024, err := rsa.GenerateKey(rand.Reader, 1024) //nolint:gosec // G403: the weak key is what the test checks
 	if err != nil {
 		t.Fatalf("generate RSA key: %v", err)
 	}

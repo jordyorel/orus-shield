@@ -102,6 +102,15 @@ func (g *allowAll) Allow(ctx context.Context, dest module.Destination) error {
 	return nil
 }
 
+func mustInstructions(t *testing.T, v *Verifier) Instructions {
+	t.Helper()
+	in, err := v.Instructions(context.Background(), "t1", "x")
+	if err != nil {
+		t.Fatalf("Instructions: %v", err)
+	}
+	return in
+}
+
 func newVerifier() (*Verifier, *fakeStore, *fakeDNS) {
 	st := &fakeStore{target: store.Target{
 		ID: "t1", Domain: "example.com", RatePerSec: 50, Exclusions: json.RawMessage("{}"),
@@ -189,7 +198,7 @@ func TestVerifyRejects(t *testing.T) {
 	})
 	t.Run("expired token", func(t *testing.T) {
 		v, st, dns := newVerifier()
-		in, _ := v.Instructions(ctx, "t1", "x")
+		in := mustInstructions(t, v)
 		publish(dns, in)
 		past := time.Now().Add(-time.Minute)
 		st.target.VerifyTokenExpiresAt = &past
@@ -199,7 +208,7 @@ func TestVerifyRejects(t *testing.T) {
 	})
 	t.Run("another token published", func(t *testing.T) {
 		v, st, dns := newVerifier()
-		in, _ := v.Instructions(ctx, "t1", "x")
+		in := mustInstructions(t, v)
 		dns.txt[in.RecordName] = []string{RecordValue("someone-elses-token")}
 		if err := v.Verify(ctx, "t1", "x"); !errors.Is(err, ErrRecordMissing) || st.target.Verified() {
 			t.Errorf("Verify = %v, verified %v; want ErrRecordMissing", err, st.target.Verified())
@@ -207,7 +216,7 @@ func TestVerifyRejects(t *testing.T) {
 	})
 	t.Run("token at the apex instead of _orus-verify", func(t *testing.T) {
 		v, _, dns := newVerifier()
-		in, _ := v.Instructions(ctx, "t1", "x")
+		in := mustInstructions(t, v)
 		dns.txt["example.com"] = []string{in.RecordValue}
 		if err := v.Verify(ctx, "t1", "x"); !errors.Is(err, ErrRecordMissing) {
 			t.Errorf("Verify = %v, want ErrRecordMissing", err)
@@ -215,7 +224,7 @@ func TestVerifyRejects(t *testing.T) {
 	})
 	t.Run("dns failure is an error, not a refusal", func(t *testing.T) {
 		v, st, dns := newVerifier()
-		v.Instructions(ctx, "t1", "x")
+		mustInstructions(t, v)
 		dns.err = &net.DNSError{Err: "server misbehaving"}
 		err := v.Verify(ctx, "t1", "x")
 		if err == nil || errors.Is(err, ErrRecordMissing) {
@@ -227,7 +236,7 @@ func TestVerifyRejects(t *testing.T) {
 	})
 	t.Run("excluded verification name", func(t *testing.T) {
 		v, st, _ := newVerifier()
-		v.Instructions(ctx, "t1", "x")
+		mustInstructions(t, v)
 		st.target.Exclusions = json.RawMessage(`{"hosts": ["_orus-verify.example.com"]}`)
 		if err := v.Verify(ctx, "t1", "x"); !errors.Is(err, module.ErrExcluded) {
 			t.Errorf("Verify = %v, want ErrExcluded", err)
@@ -261,7 +270,7 @@ func TestRecheck(t *testing.T) {
 	verified := func(t *testing.T, checkedAgo time.Duration) (*Verifier, *fakeStore, *fakeDNS) {
 		t.Helper()
 		v, st, dns := newVerifier()
-		in, _ := v.Instructions(ctx, "t1", "x")
+		in := mustInstructions(t, v)
 		publish(dns, in)
 		if err := v.Verify(ctx, "t1", "x"); err != nil {
 			t.Fatal(err)

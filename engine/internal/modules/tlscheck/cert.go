@@ -205,5 +205,7 @@ func describe(dest module.Destination, version uint16, leaf *x509.Certificate) s
 }
 
 func addrPort(dest module.Destination) string {
-	return netip.AddrPortFrom(dest.IP, uint16(dest.Port)).String()
+	// This module only ever connects to httpsPort; using the constant avoids
+	// converting an arbitrary int to uint16.
+	return netip.AddrPortFrom(dest.IP, httpsPort).String()
 }

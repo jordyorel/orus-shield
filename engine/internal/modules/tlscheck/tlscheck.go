@@ -186,7 +186,7 @@ func (p prober) handshake(ctx context.Context, dest module.Destination, cfg *tls
 	if err != nil {
 		return tls.ConnectionState{}, err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }() // read-only probe: a close error changes nothing
 	tconn := tls.Client(conn, cfg)
 	if err := tconn.HandshakeContext(ctx); err != nil {
 		return tls.ConnectionState{}, fmt.Errorf("%w with %s: %w", errHandshake, dest.Host, err)
@@ -203,7 +203,7 @@ func probeConfig(host string, maxVersion uint16) *tls.Config {
 		// purpose: we want to complete it with broken certificates so we can
 		// describe what is wrong. certIssues verifies the chain afterwards.
 		// No application data is ever sent on these connections.
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: true, //nolint:gosec // G402: deliberate, see comment above
 		// Accept old versions and every cipher suite Go knows, so legacy
 		// servers still complete the handshake and can be reported.
 		MinVersion:   tls.VersionTLS10,

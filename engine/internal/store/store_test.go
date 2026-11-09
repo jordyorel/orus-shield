@@ -23,6 +23,11 @@ func newTestStore(t *testing.T) *Store {
 	t.Helper()
 	base := os.Getenv("ORUS_TEST_DATABASE_URL")
 	if base == "" {
+		// In CI a missing database is a configuration error: skipping would
+		// let the pipeline pass without running any integration test.
+		if os.Getenv("CI") == "true" {
+			t.Fatal("ORUS_TEST_DATABASE_URL must be set in CI")
+		}
 		t.Skip("ORUS_TEST_DATABASE_URL not set; skipping PostgreSQL integration test")
 	}
 	ctx := context.Background()
@@ -59,7 +64,7 @@ func newTestStore(t *testing.T) *Store {
 		if _, err := admin.Exec(ctx, "DROP SCHEMA "+schema+" CASCADE"); err != nil {
 			t.Errorf("drop schema: %v", err)
 		}
-		admin.Close(ctx)
+		_ = admin.Close(ctx)
 	})
 	if err := s.Migrate(ctx); err != nil {
 		t.Fatalf("Migrate: %v", err)

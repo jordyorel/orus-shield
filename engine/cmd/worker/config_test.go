@@ -12,7 +12,7 @@ func env(m map[string]string) func(string) string {
 
 func TestLoadConfig(t *testing.T) {
 	c, err := loadConfig(env(map[string]string{
-		"ORUS_DATABASE_URL":   "postgres://u:p@localhost/orus",
+		"ORUS_DATABASE_URL":   "postgres://localhost/orus",
 		"ORUS_WORKER_ID":      "worker:a",
 		"ORUS_WORKER_LEASE":   "10m",
 		"ORUS_MODULE_TIMEOUT": "90s",
@@ -21,7 +21,7 @@ func TestLoadConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadConfig: %v", err)
 	}
-	if c.databaseURL != "postgres://u:p@localhost/orus" || c.worker.ID != "worker:a" ||
+	if c.databaseURL != "postgres://localhost/orus" || c.worker.ID != "worker:a" ||
 		c.worker.Lease != 10*time.Minute || c.worker.ModuleTimeout != 90*time.Second ||
 		c.worker.PollInterval != 500*time.Millisecond {
 		t.Errorf("config = %+v", c)
