@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 )
@@ -82,6 +83,10 @@ func (o *Org) CreateTarget(ctx context.Context, nt NewTarget) (Target, error) {
 		`INSERT INTO targets (org_id, domain, exclusions, rate_per_sec) VALUES ($1, $2, $3, $4)
 		 RETURNING `+targetColumns,
 		o.orgID, domain, exclusions, rate))
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation: domain already in this organization
+		return Target{}, fmt.Errorf("create target %s: %w", domain, ErrExists)
+	}
 	if err != nil {
 		return Target{}, fmt.Errorf("create target %s: %w", domain, err)
 	}

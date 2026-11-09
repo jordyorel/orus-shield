@@ -25,13 +25,16 @@ type env struct {
 	st      *store.Store
 	handler http.Handler
 	now     time.Time
+	dns     *fakeDNS
 }
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	st := storetest.New(t)
 	e := &env{t: t, st: st, now: time.Now()}
-	srv, err := New(st, Config{Now: func() time.Time { return e.now }}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	e.dns = &fakeDNS{txt: map[string][]string{}}
+	srv, err := New(st, Config{Now: func() time.Time { return e.now }, DNS: e.dns, Modules: []string{"email", "tls"}},
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -14,8 +14,9 @@ row-level security), the findings lifecycle (`fixed_at`, `finding_events` histor
 asset inventory (`module.Result` with findings and assets, `assets` table) and the check
 catalog with evaluated checks and posture score (`check_status`, `posture_snapshots`,
 package `posture`) and CDN / WAF detection (passive `cdn` module, asset details) are done;
-framework mappings (CIS Controls v8) wait for Jordy's review. Next: API endpoints for
-screens 1 to 3 (with users and authentication).
+framework mappings (CIS Controls v8) wait for Jordy's review. The HTTP API with
+invitation-only accounts, sessions and the screen 1 to 3 endpoints is done
+(`engine/cmd/api`, `engine/internal/api`). Next: TOTP MFA, then the dashboard.
 
 ## How to work on this repo
 
@@ -55,7 +56,10 @@ Planned layout (create folders only when they are needed):
 ```
 engine/
   cmd/worker/        worker entrypoint
-  cmd/orusctl/       development CLI (targets, scans, findings, audit) until the API exists
+  cmd/orusctl/       admin and development CLI (orgs, users, targets, scans, findings, audit)
+  cmd/api/           HTTP API entrypoint
+  internal/api/      HTTP handlers: auth, org-scoped reads and writes (handlers get a *store.Org)
+  internal/password/ argon2id password hashing
   internal/module/   the Module interface and the registry
   internal/modules/  one package per check (email, tls, ports, cdn, ...)
   internal/finding/  finding schema and validation
@@ -71,10 +75,12 @@ engine/
   internal/worker/   claims scans, runs modules, records results
   internal/modules/all/  the list of shipped modules
 deploy/              local infrastructure files (PostgreSQL init)
-api/
 web/
 docs/
 ```
+
+The API lives in the engine module, not in a top-level `api/` module: Go `internal/`
+packages cannot be imported from another module, and the store must stay internal.
 
 ### Module contract (target shape, to be refined before the first module)
 
@@ -151,7 +157,14 @@ set -a; . ./.env; set +a
 cd engine && go test -race ./...    # integration tests run when ORUS_TEST_DATABASE_URL is set
 go run ./cmd/worker                 # in one terminal
 go run ./cmd/orusctl target add <domain> && go run ./cmd/orusctl scan <domain>
+go run ./cmd/api                    # API on 127.0.0.1:8080
+go run ./cmd/orusctl user add -role admin you@example.com   # prints a one-time setup token
 ```
+
+Accounts are invitation-only: `orusctl user add` creates the account and prints a setup
+token; the user sets their password with `POST /api/v1/auth/setup-password`. Session
+cookies are `Secure`: browsers accept them on `localhost`, anywhere else the API must be
+behind HTTPS.
 
 orusctl works in one organization at a time: `-org NAME|ID`, else `ORUS_ORG`, else
 `Default` (created by migration 0003, which also holds every pre-existing target).

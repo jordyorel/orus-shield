@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
@@ -36,6 +37,12 @@ type Config struct {
 	TrustedOrigins []string
 	// Now is the clock; tests replace it.
 	Now func() time.Time
+	// DNS is the resolver used for ownership verification; nil means the
+	// system resolver. Tests use a fake one (rule 6).
+	DNS resolver.Resolver
+	// Modules are the module IDs a scan may request; a scan without a list
+	// runs them all.
+	Modules []string
 }
 
 const (
@@ -66,6 +73,12 @@ func New(st *store.Store, cfg Config, log *slog.Logger) (*Server, error) {
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
+	}
+	if cfg.DNS == nil {
+		cfg.DNS = resolver.NewSystem()
+	}
+	if len(cfg.Modules) == 0 {
+		return nil, errors.New("api: no modules configured")
 	}
 	return &Server{auth: st.Auth(), org: st.Org, cfg: cfg, log: log}, nil
 }

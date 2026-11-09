@@ -65,6 +65,7 @@ func (s *Server) orgRoutes(mux *http.ServeMux) {
 	read("/targets/{target}/findings/{finding}/history", s.targetOnly(s.findingHistory))
 	read("/targets/{target}/posture", s.targetOnly(s.posture))
 	read("/targets/{target}/checks", s.targetOnly(s.checks))
+	s.writeRoutes(mux)
 }
 
 // targetHandler runs with a target of the caller's organization.

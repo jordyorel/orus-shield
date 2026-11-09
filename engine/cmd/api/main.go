@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/api"
+	"github.com/jordyorel/orus-shield/engine/internal/modules/all"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
@@ -45,7 +46,15 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
-	srv, err := api.New(st, api.Config{TrustedOrigins: cfg.trustedOrigins}, log)
+	reg, err := all.Registry()
+	if err != nil {
+		return err
+	}
+	var modules []string
+	for _, m := range reg.All() {
+		modules = append(modules, m.Info().ID)
+	}
+	srv, err := api.New(st, api.Config{TrustedOrigins: cfg.trustedOrigins, Modules: modules}, log)
 	if err != nil {
 		return err
 	}
