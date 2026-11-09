@@ -114,7 +114,7 @@ func checkDMARC(ctx context.Context, dns resolver.Resolver, domain string, recei
 		}
 	}
 	if tags["rua"] == "" {
-		issues = append(issues, issue{
+		i := issue{
 			checkID:     CheckDMARCNoReporting,
 			asset:       asset,
 			severity:    finding.SeverityLow,
@@ -123,7 +123,16 @@ func checkDMARC(ctx context.Context, dns resolver.Resolver, domain string, recei
 			evidence:    record,
 			remediation: []string{"Add rua=mailto:<address> to receive aggregate reports."},
 			references:  []string{refDMARC},
-		})
+		}
+		// Without mail, reports only tell who tried to spoof the domain;
+		// the policy already blocks them. Useful to know, not a problem to
+		// fix: reporting it as one would teach customers to ignore reports.
+		if !receivesMail {
+			i.severity = finding.SeverityInfo
+			i.description = "The domain handles no mail and its DMARC policy already blocks spoofed messages. Adding a rua= address would also tell you who tries to send mail in its name."
+			i.remediation = []string{"Optional: add rua=mailto:<address> to receive reports about spoofing attempts."}
+		}
+		issues = append(issues, i)
 	}
 	return issues, nil
 }

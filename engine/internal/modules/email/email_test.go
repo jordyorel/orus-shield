@@ -441,3 +441,36 @@ func TestFindingsAreValid(t *testing.T) {
 		}
 	}
 }
+
+// Missing DMARC reporting matters for a domain that handles mail; for one
+// without mail it is only information.
+func TestNoReportingSeverityDependsOnMail(t *testing.T) {
+	tests := []struct {
+		name   string
+		withMX bool
+		want   finding.Severity
+	}{
+		{"domain with mail", true, finding.SeverityLow},
+		{"domain without mail", false, finding.SeverityInfo},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dns := goodDNS(t)
+			dns.txt["_dmarc.example.com"] = []string{"v=DMARC1; p=reject"}
+			if !tt.withMX {
+				delete(dns.mx, "example.com")
+			}
+			findings, err := run(t, dns, "example.com")
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			i := slices.IndexFunc(findings, func(f finding.Finding) bool { return f.CheckID == CheckDMARCNoReporting })
+			if i < 0 {
+				t.Fatalf("no %s finding in %v", CheckDMARCNoReporting, checkIDs(findings))
+			}
+			if findings[i].Severity != tt.want {
+				t.Errorf("severity = %s, want %s", findings[i].Severity, tt.want)
+			}
+		})
+	}
+}
