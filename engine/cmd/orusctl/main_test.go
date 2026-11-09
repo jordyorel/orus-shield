@@ -110,6 +110,28 @@ func (f *fakeAdmin) CreateOrganization(ctx context.Context, name, actor string) 
 	return store.Organization{ID: "o-2", Name: name}, nil
 }
 
+func (f *fakeAdmin) CreateUser(ctx context.Context, email string) (store.User, error) {
+	f.created = append(f.created, "user "+email)
+	return store.User{ID: "u-1", Email: email}, nil
+}
+
+func (f *fakeAdmin) UserByEmail(ctx context.Context, email string) (store.User, error) {
+	if email != "alice@example.com" {
+		return store.User{}, store.ErrNotFound
+	}
+	return store.User{ID: "u-1", Email: email}, nil
+}
+
+func (f *fakeAdmin) SetMembership(ctx context.Context, userID, orgID, role, actor string) error {
+	f.created = append(f.created, "member "+userID+" "+orgID+" "+role+" "+actor)
+	return nil
+}
+
+func (f *fakeAdmin) IssueSetupToken(ctx context.Context, userID string, ttl time.Duration, actor string) (string, error) {
+	f.created = append(f.created, "token "+userID)
+	return "secret-setup-token", nil
+}
+
 func (f *fakeAdmin) ListOrganizations(ctx context.Context) ([]store.Organization, error) {
 	return []store.Organization{{ID: "o-1", Name: "Default", CreatedAt: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC)}}, nil
 }
@@ -515,5 +537,41 @@ func TestPosture(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output does not contain %q:\n%s", want, out.String())
 		}
+	}
+}
+
+func TestUserAdd(t *testing.T) {
+	c, _, _, out := newCLIWithOrgs()
+	if err := c.run(context.Background(), []string{"user", "add", "-org", "Acme", "-role", "admin", "alice@example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(c.admin.(*fakeAdmin).created, "; ")
+	if got != "user alice@example.com; member u-1 o-2 admin cli:jordy; token u-1" {
+		t.Errorf("calls = %s", got)
+	}
+	if !strings.Contains(out.String(), "secret-setup-token") || !strings.Contains(out.String(), "admin of Acme") {
+		t.Errorf("output = %q", out.String())
+	}
+	if err := c.run(context.Background(), []string{"user", "add", "-role", "owner", "bob@example.com"}); !errors.Is(err, errUsage) {
+		t.Errorf("unknown role = %v, want errUsage", err)
+	}
+}
+
+func TestUserResetAndMember(t *testing.T) {
+	c, _, _, out := newCLIWithOrgs()
+	if err := c.run(context.Background(), []string{"user", "reset", "alice@example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "secret-setup-token") {
+		t.Errorf("output = %q", out.String())
+	}
+	if err := c.run(context.Background(), []string{"user", "member", "-role", "viewer", "alice@example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.admin.(*fakeAdmin).created; got[len(got)-1] != "member u-1 o-1 viewer cli:jordy" {
+		t.Errorf("calls = %v", got)
+	}
+	if err := c.run(context.Background(), []string{"user", "reset", "nobody@example.com"}); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("unknown user = %v, want ErrNotFound", err)
 	}
 }

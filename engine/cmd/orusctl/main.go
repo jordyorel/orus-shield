@@ -14,6 +14,9 @@
 //
 //	orusctl org add [-as NAME] <name>
 //	orusctl org list
+//	orusctl user add [-org ORG] [-role admin|viewer] [-as NAME] <email>
+//	orusctl user member [-org ORG] [-role admin|viewer] [-as NAME] <email>
+//	orusctl user reset [-as NAME] <email>
 //	orusctl target add [-org ORG] [-rate N] [-exclusions JSON] <domain>
 //	orusctl target show [-org ORG] <domain>
 //	orusctl target verify-token [-org ORG] [-as NAME] <domain>
@@ -55,6 +58,9 @@ import (
 const usage = `usage:
   orusctl org add [-as NAME] <name>
   orusctl org list
+  orusctl user add [-org ORG] [-role admin|viewer] <email>     (prints a one-time setup token)
+  orusctl user member [-org ORG] [-role admin|viewer] <email>  (adds to another org or changes role)
+  orusctl user reset <email>                                   (new setup token: password reset)
   orusctl target add [-org ORG] [-rate N] [-exclusions JSON] <domain>
   orusctl target show [-org ORG] <domain>
   orusctl target verify-token [-org ORG] [-as NAME] <domain>   (prints the DNS record to publish)
@@ -80,7 +86,14 @@ const defaultOrg = "Default"
 type Admin interface {
 	CreateOrganization(ctx context.Context, name, actor string) (store.Organization, error)
 	ListOrganizations(ctx context.Context) ([]store.Organization, error)
+	CreateUser(ctx context.Context, email string) (store.User, error)
+	UserByEmail(ctx context.Context, email string) (store.User, error)
+	SetMembership(ctx context.Context, userID, orgID, role, actor string) error
+	IssueSetupToken(ctx context.Context, userID string, ttl time.Duration, actor string) (string, error)
 }
+
+// setupTokenTTL is how long a new user has to choose a password.
+const setupTokenTTL = 24 * time.Hour
 
 // OrgStore is the part of store.Org orusctl uses: everything about targets
 // goes through an org-scoped handle, like the API.
@@ -205,6 +218,19 @@ func (c cli) run(ctx context.Context, args []string) error {
 			return c.orgList(ctx, rest[1:])
 		}
 		return fmt.Errorf("%w: unknown org subcommand %q", errUsage, rest[0])
+	case "user":
+		if len(rest) == 0 {
+			return fmt.Errorf("%w: user needs a subcommand (add, member, reset)", errUsage)
+		}
+		switch rest[0] {
+		case "add":
+			return c.userAdd(ctx, rest[1:])
+		case "member":
+			return c.userMember(ctx, rest[1:])
+		case "reset":
+			return c.userReset(ctx, rest[1:])
+		}
+		return fmt.Errorf("%w: unknown user subcommand %q", errUsage, rest[0])
 	case "target":
 		if len(rest) == 0 {
 			return fmt.Errorf("%w: target needs a subcommand (add, show, verify-token, verify)", errUsage)
@@ -277,6 +303,86 @@ func (c cli) orgList(ctx context.Context, args []string) error {
 		fmt.Fprintf(w, "%s\t%s\t%s\n", o.ID, o.Name, o.CreatedAt.Format(time.RFC3339))
 	}
 	return w.Flush()
+}
+
+// userFlags parses -org, -role and -as for the user commands.
+func (c cli) userFlags(name string, args []string) (orgRef, role, actor string, pos []string, err error) {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	o := c.orgFlag(fs)
+	r := fs.String("role", store.RoleViewer, "admin (manage targets and scans) or viewer (read only)")
+	a := fs.String("as", c.defaultActor, "requester recorded in the audit log")
+	pos, err = parse(fs, args, 1)
+	return *o, *r, *a, pos, err
+}
+
+func (c cli) userAdd(ctx context.Context, args []string) error {
+	orgRef, role, actor, pos, err := c.userFlags("user add", args)
+	if err != nil {
+		return err
+	}
+	if role != store.RoleAdmin && role != store.RoleViewer {
+		return fmt.Errorf("%w: -role must be admin or viewer", errUsage)
+	}
+	org, _, _, err := c.openOrg(ctx, orgRef)
+	if err != nil {
+		return err
+	}
+	u, err := c.admin.CreateUser(ctx, pos[0])
+	if err != nil {
+		return err
+	}
+	if err := c.admin.SetMembership(ctx, u.ID, org.ID, role, actor); err != nil {
+		return err
+	}
+	fmt.Fprintf(c.out, "user %s created, %s of %s\n", u.Email, role, org.Name)
+	return c.printSetupToken(ctx, u, actor)
+}
+
+func (c cli) userMember(ctx context.Context, args []string) error {
+	orgRef, role, actor, pos, err := c.userFlags("user member", args)
+	if err != nil {
+		return err
+	}
+	org, _, _, err := c.openOrg(ctx, orgRef)
+	if err != nil {
+		return err
+	}
+	u, err := c.admin.UserByEmail(ctx, pos[0])
+	if err != nil {
+		return err
+	}
+	if err := c.admin.SetMembership(ctx, u.ID, org.ID, role, actor); err != nil {
+		return err
+	}
+	fmt.Fprintf(c.out, "%s is now %s of %s\n", u.Email, role, org.Name)
+	return nil
+}
+
+func (c cli) userReset(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("user reset", flag.ContinueOnError)
+	actor := fs.String("as", c.defaultActor, "requester recorded in the audit log")
+	pos, err := parse(fs, args, 1)
+	if err != nil {
+		return err
+	}
+	u, err := c.admin.UserByEmail(ctx, pos[0])
+	if err != nil {
+		return err
+	}
+	return c.printSetupToken(ctx, u, *actor)
+}
+
+// printSetupToken issues a setup token and tells how to use it. The token
+// is shown once; only its hash is stored.
+func (c cli) printSetupToken(ctx context.Context, u store.User, actor string) error {
+	token, err := c.admin.IssueSetupToken(ctx, u.ID, setupTokenTTL, actor)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(c.out, "one-time setup token for %s (valid %s, shown only once):\n  %s\n", u.Email, setupTokenTTL, token)
+	fmt.Fprintln(c.out, "send it to the user over a trusted channel; they set their password with")
+	fmt.Fprintln(c.out, `  POST /api/v1/auth/setup-password {"token": "...", "password": "..."}`)
+	return nil
 }
 
 func (c cli) targetAdd(ctx context.Context, args []string) error {
