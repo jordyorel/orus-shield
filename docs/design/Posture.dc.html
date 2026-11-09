@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Posture et conformité — Orus Shield</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#EEF3F9}
+a{color:#0C5DA5}a:hover{color:#0A4A84}
+</style>
+</helmet>
+<div style="font-family: Inter, system-ui, sans-serif; color: #0E1116; background: #EEF3F9; min-height: 100vh; display: flex; flex-wrap: wrap">
+
+<aside style="flex: 1 1 240px; max-width: 100%; background: #0E1116; color: #C9D3DB; padding: 24px 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 28px">
+<a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #E6EDF3; padding: 0 8px">
+<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#2DD4BF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.7-7 9-4-1.3-7-4.5-7-9V6l7-3z"></path><path d="M9 12l2 2 4-4"></path></svg>
+<span style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 18px">Orus Shield</span>
+</a>
+<nav aria-label="Application" style="display: flex; flex-direction: column; gap: 4px; font-size: 15px">
+<a href="Dashboard.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg>Vue d'ensemble</a>
+<a href="Surface.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="5"></circle><circle cx="12" cy="12" r="1"></circle></svg>Surface d'attaque</a>
+<a href="Priorisation.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h5"></path></svg>Priorisation</a>
+<a href="Issues.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 3l9 16H3L12 3z"></path><path d="M12 10v4M12 17v.5"></path></svg>Vulnérabilités</a>
+<a href="Posture.dc.html" aria-current="page" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #FFFFFF; background: #1C262F"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"></path><path d="M12 17l4-5"></path></svg>Posture et conformité</a>
+<a href="Gouvernance.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"></rect><path d="M9 4V3h6v1M9 13l2 2 4-4"></path></svg>Gouvernance</a>
+<a href="Assets.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c2.5 3 2.5 15 0 18M12 3c-2.5 3-2.5 15 0 18"></path></svg>Actifs</a>
+<a href="Scans.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>Scans</a>
+<a href="Settings.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"></path></svg>Paramètres</a>
+</nav>
+</aside>
+
+<main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box">
+<header style="background: #FFFFFF; border-bottom: 1px solid #DDE3EA; padding: 18px 36px 0">
+<div style="display: flex; align-items: center; gap: 10px">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3D4752" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.7-7 9-4-1.3-7-4.5-7-9V6l7-3z"></path></svg>
+<h1 style="margin: 0; font-size: 22px; font-weight: 500">Posture et conformité</h1>
+</div>
+<div role="group" aria-label="Vues" style="margin-top: 14px; display: flex; gap: 8px">
+<button type="button" onClick="{{showHome}}" aria-pressed="{{homePressed}}" style="{{homeTab}}">Accueil</button>
+<button type="button" onClick="{{showInv}}" aria-pressed="{{invPressed}}" style="{{invTab}}">Inventaire des ressources</button>
+</div>
+</header>
+
+<div style="padding: 28px 36px 48px">
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px">
+<div style="background: #FFFFFF; border: 1px solid #DDE3EA; border-radius: 12px; padding: 22px 24px">
+<p style="margin: 0; font-size: 18px; font-weight: 500">Menaces</p>
+<p style="margin: 14px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 40px; font-weight: 600">7</p>
+<div style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap"><span style="font-size: 12px; font-weight: 600; color: #FFFFFF; background: #A3201A; padding: 4px 8px; border-radius: 4px">2 CRITIQUES</span><span style="font-size: 12px; font-weight: 600; color: #FFFFFF; background: #C8322B; padding: 4px 8px; border-radius: 4px">5 ÉLEVÉES</span><span style="font-size: 12px; color: #3D4752; background: #EEF1F4; padding: 4px 8px; border-radius: 4px">+16</span></div>
+<a href="Priorisation.dc.html" style="display: inline-block; margin-top: 18px; font-size: 15px; text-decoration: none">Voir les menaces ›</a>
+</div>
+<div style="background: #FFFFFF; border: 1px solid #DDE3EA; border-radius: 12px; padding: 22px 24px">
+<p style="margin: 0; font-size: 18px; font-weight: 500">Mauvaises configurations</p>
+<p style="margin: 14px 0 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap"><span style="font-family: 'Space Grotesk', sans-serif; font-size: 40px; font-weight: 600">31</span><span style="font-size: 18px; color: #5B6570">/ 212</span><span style="font-size: 13px; font-weight: 600; color: #A3201A; background: #FDE7E5; padding: 3px 8px; border-radius: 4px">↘ −6</span></p>
+<div style="margin-top: 12px; height: 12px; background: #E3E7EC"><div style="width: 15%; height: 12px; background: #D9302A"></div></div>
+<a href="Issues.dc.html" style="display: inline-block; margin-top: 18px; font-size: 15px; text-decoration: none">Voir les ressources ›</a>
+</div>
+<div style="background: #FFFFFF; border: 1px solid #DDE3EA; border-radius: 12px; padding: 22px 24px">
+<p style="margin: 0; font-size: 18px; font-weight: 500">Score de posture</p>
+<p style="margin: 14px 0 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap"><span style="font-family: 'Space Grotesk', sans-serif; font-size: 40px; font-weight: 600">74 %</span><span style="font-size: 13px; font-weight: 600; color: #1B6B33; background: #E3F4E7; padding: 3px 8px; border-radius: 4px">↗ +16 PTS</span></p>
+<div style="margin-top: 12px; height: 12px; background: #E3E7EC"><div style="width: 74%; height: 12px; background: #2EA44F"></div></div>
+<a href="Dashboard.dc.html" style="display: inline-block; margin-top: 18px; font-size: 15px; text-decoration: none">Voir le détail ›</a>
+</div>
+<div style="background: #FFFFFF; border: 1px solid #DDE3EA; border-radius: 12px; padding: 22px 24px">
+<p style="margin: 0; font-size: 18px; font-weight: 500">Couverture</p>
+<div style="margin-top: 18px; display: flex; flex-direction: column; gap: 14px; font-size: 15px">
+<div style="display: flex; justify-content: space-between; gap: 8px"><span style="color: #3D4752">Comptes SaaS et cloud</span><span><span style="font-weight: 600">1</span> / 2</span></div>
+<div style="display: flex; justify-content: space-between; gap: 8px"><span style="color: #3D4752">Actifs</span><span><span style="font-weight: 600">14</span> / 17</span></div>
+</div>
+<a href="Surface.dc.html" style="display: inline-block; margin-top: 18px; font-size: 15px; text-decoration: none">Configurer ›</a>
+</div>
+</div>
+
+<section style="margin-top: 28px; background: #E6EEF8; border: 1px solid #B9CDE4; border-radius: 16px; padding: 32px 36px">
+<h2 style="margin: 0 auto; max-width: 760px; text-align: center; font-size: 28px; line-height: 1.3; font-weight: 600">Comprenez ce qui est à risque, et où se concentrent les attaques</h2>
+<div style="margin-top: 28px; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px">
+<sc-for list="{{cats}}" as="c" hint-placeholder-count="8">
+<button type="button" onClick="{{c.pick}}" aria-pressed="{{c.pressed}}" style="{{c.style}}">
+<span style="display: block; font-size: 15px; font-weight: 500; letter-spacing: 0.04em; color: #3D4752">{{c.name}}</span>
+<span style="display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; margin-top: 16px">
+<span><span style="font-family: 'Space Grotesk', sans-serif; font-size: 40px; font-weight: 600; color: #0E1116">{{c.count}}</span> <span style="font-size: 14px; color: #5B6570">{{c.unit}}</span></span>
+<span style="{{c.badgeStyle}}">{{c.badge}}</span>
+</span>
+</button>
+</sc-for>
+</div>
+<div style="margin-top: 20px; background: #FFFFFF; border: 1px solid #DDE3EA; border-radius: 12px; padding: 20px 24px">
+<p style="margin: 0; font-size: 16px; font-weight: 600">{{sel.name}} : principaux contrôles en échec</p>
+<ul style="margin: 12px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 15px; color: #1F2A33">
+<sc-for list="{{sel.checks}}" as="k" hint-placeholder-count="3"><li>{{k}}</li></sc-for>
+</ul>
+</div>
+</section>
+
+<section style="margin-top: 28px; background: #FFFFFF; border: 1px solid #DDE3EA; border-radius: 16px; padding: 36px">
+<h2 style="margin: 0; text-align: center; font-size: 30px; font-weight: 600">Vos rapports de conformité</h2>
+<p style="margin: 10px auto 0; max-width: 720px; text-align: center; font-size: 17px; color: #3D4752">Des rapports continus, tenus à jour par Orus Shield, pour atteindre et garder la conformité.</p>
+<div style="margin-top: 32px; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px">
+<sc-for list="{{reports}}" as="r" hint-placeholder-count="4">
+<div style="border: 1px solid #DDE3EA; border-radius: 12px; overflow: hidden">
+<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 20px 22px">
+<div style="display: flex; gap: 14px; align-items: center">
+<span aria-hidden="true" style="width: 44px; height: 44px; border-radius: 10px; background: #E6EEF8; color: #0C447C; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px">{{r.abbr}}</span>
+<div><p style="margin: 0; font-size: 20px; font-weight: 600">{{r.name}}</p><p style="margin: 2px 0 0; font-size: 14px; color: #5B6570">{{r.ver}}</p></div>
+</div>
+<button type="button" onClick="{{r.star}}" aria-pressed="{{r.starred}}" aria-label="{{r.starAria}}" style="width: 44px; height: 44px; padding: 0; background: transparent; border: 0; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" fill="{{r.starFill}}" stroke="#C9A100" stroke-width="1.2" stroke-linejoin="round"></path></svg></button>
+</div>
+<div style="background: #F6F8FA; border-top: 1px solid #DDE3EA; padding: 18px 22px">
+<p style="margin: 0; text-align: center; font-size: 16px; color: #1F2A33">Évaluation des règles</p>
+<div style="margin-top: 12px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid #DDE3EA; background: #FFFFFF">
+<div style="padding: 14px; text-align: center; border-right: 1px solid #DDE3EA"><p style="margin: 0; font-size: 13px; font-weight: 600; color: #1B7A3A">RÉUSSIS</p><p style="margin: 4px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 38px; font-weight: 600; color: #1B8A3F">{{r.pass}}</p></div>
+<div style="padding: 14px; text-align: center"><p style="margin: 0; font-size: 13px; font-weight: 600; color: #B42318">ÉCHOUÉS</p><p style="margin: 4px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 38px; font-weight: 600; color: #C8322B">{{r.fail}}</p></div>
+</div>
+<a href="Settings.dc.html" style="display: block; margin-top: 16px; text-align: center; font-size: 16px; text-decoration: none">Voir le rapport</a>
+</div>
+</div>
+</sc-for>
+</div>
+<div style="margin-top: 28px; text-align: center"><a href="Settings.dc.html" style="display: inline-block; padding: 12px 18px; border: 1px solid #8B96A3; border-radius: 6px; color: #0E1116; text-decoration: none; font-size: 15px">Voir tous les rapports de conformité</a></div>
+</section>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { tab: 'home', cat: 'id', stars: { iso: true, pci: true, data: true } };
+  }
+  renderVals() {
+    const s = this.state;
+    const tabOn = 'min-height: 44px; padding: 0 4px; margin-right: 14px; font: inherit; font-size: 15px; color: #0E1116; background: transparent; border: 0; border-bottom: 3px solid #0C5DA5; cursor: pointer';
+    const tabOff = 'min-height: 44px; padding: 0 4px; margin-right: 14px; font: inherit; font-size: 15px; color: #5B6570; background: transparent; border: 0; border-bottom: 3px solid transparent; cursor: pointer';
+    const defs = [
+      ['mail', 'EMAILS', 3, 'domaines', 2, ['DMARC en mode surveillance (p=none)', 'Aucune clé DKIM trouvée pour un sélecteur courant']],
+      ['web', 'WEB', 4, 'sites', 8, ['En-têtes de sécurité manquants sur le portail', 'WordPress et une extension obsolètes', 'Formulaire de connexion sans limite de tentatives']],
+      ['tls', 'TLS ET CERTIFICATS', 7, 'certificats', 2, ['Certificat du portail expirant dans 9 jours', 'TLS 1.0 et 1.1 acceptés sur le serveur de messagerie']],
+      ['dns', 'DNS', 9, 'domaines', 1, ['Sous-domaine pointant vers un service supprimé (risque de prise de contrôle)']],
+      ['id', 'IDENTITÉS ET ACCÈS', 42, 'comptes', 18, ['18 comptes sans double authentification, dont 2 administrateurs', 'Partage externe de fichiers autorisé pour tous', '4 comptes inactifs depuis plus de 90 jours']],
+      ['net', 'RÉSEAU ET PORTS', 6, 'adresses IP', 3, ['Bureau à distance (3389) exposé sur internet', 'Serveur SSH avec une version vulnérable']],
+      ['cloud', 'CLOUD', 0, 'comptes', 0, ['Aucun compte cloud connecté : connectez AWS, Azure ou Google Cloud']],
+      ['leak', 'FUITES DE DONNÉES', 3, 'adresses', 0, ['3 adresses présentes dans une fuite publique : mots de passe à changer']]
+    ];
+    const cats = defs.map(([id, name, count, unit, risks, checks]) => {
+      const sel = s.cat === id;
+      const badge = risks > 0 ? risks + ' RISQUES' : (id === 'cloud' ? 'À CONNECTER' : 'OK');
+      const badgeStyle = risks > 0 ? 'font-size: 12px; font-weight: 600; color: #FFFFFF; background: ' + (risks >= 5 ? '#A3201A' : '#C8322B') + '; padding: 4px 8px; border-radius: 4px' : (id === 'cloud' ? 'font-size: 12px; font-weight: 600; color: #6B4A00; background: #F5C542; padding: 4px 8px; border-radius: 4px' : 'font-size: 12px; font-weight: 600; color: #FFFFFF; background: #1B8A3F; padding: 4px 8px; border-radius: 4px');
+      return {
+        name, count, unit, badge, badgeStyle, pressed: sel ? 'true' : 'false',
+        style: 'text-align: left; font: inherit; padding: 22px 24px; background: #FFFFFF; border-radius: 12px; cursor: pointer; border: ' + (sel ? '2px solid #0C5DA5' : '2px solid #DDE3EA'),
+        pick: () => this.setState({ cat: id }), id, checks
+      };
+    });
+    const sel = cats.find((c) => c.id === s.cat);
+    const reports = [
+      ['iso', 'ISO', 'ISO 27001', 'v2022', 31, 19],
+      ['pci', 'PCI', 'PCI DSS', 'v4.0.1', 24, 26],
+      ['data', 'DP', 'Protection des données', 'RGPD et lois africaines', 22, 9],
+      ['cis', 'CIS', 'CIS Microsoft 365', 'v4.0', 14, 11]
+    ].map(([id, abbr, name, ver, pass, fail]) => {
+      const on = !!s.stars[id];
+      return {
+        abbr, name, ver, pass, fail, starred: on ? 'true' : 'false', starFill: on ? '#F2C200' : 'none',
+        starAria: (on ? 'Retirer ' : 'Ajouter ') + name + (on ? ' des favoris' : ' aux favoris'),
+        star: () => this.setState({ stars: { ...s.stars, [id]: !on } })
+      };
+    });
+    return {
+      homeTab: s.tab === 'home' ? tabOn : tabOff, invTab: s.tab === 'inv' ? tabOn : tabOff,
+      homePressed: s.tab === 'home' ? 'true' : 'false', invPressed: s.tab === 'inv' ? 'true' : 'false',
+      showHome: () => this.setState({ tab: 'home' }), showInv: () => this.setState({ tab: 'inv' }),
+      cats, sel, reports
+    };
+  }
+}
+</script>
+</body>
+</html>

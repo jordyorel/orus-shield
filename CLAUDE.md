@@ -152,7 +152,8 @@ product's own domain for it.
 4. Worker, queue and storage. (done)
 5. Ownership verification (DNS TXT). (done)
 6. Ports module (active, verified targets only).
-7. API, then dashboard (design mockups exist on the project canvas).
+7. API, then dashboard. Mockups are in `docs/design/` (see its README); how each screen
+   maps to engine data, and the backend work it needs, is in `docs/ui-adaptation.md`.
 
 ## External tools: plan and status
 
