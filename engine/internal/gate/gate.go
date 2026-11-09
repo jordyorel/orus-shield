@@ -227,3 +227,14 @@ func (g *Gate) Allow(ctx context.Context, dest module.Destination) error {
 	}
 	return nil
 }
+
+// FromTarget builds the gate of a target from its stored exclusions and
+// rate. It fails closed: unreadable exclusions or an invalid rate are an
+// error, never "no exclusions".
+func FromTarget(exclusions json.RawMessage, ratePerSec float64) (*Gate, error) {
+	rules, err := ParseExclusions(exclusions)
+	if err != nil {
+		return nil, err
+	}
+	return New(rules, ratePerSec)
+}

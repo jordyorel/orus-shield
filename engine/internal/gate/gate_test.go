@@ -205,3 +205,15 @@ func TestGateImplementsModuleGate(t *testing.T) {
 		t.Error("New with rate 0 = nil, want error")
 	}
 }
+
+func TestFromTarget(t *testing.T) {
+	if _, err := FromTarget(json.RawMessage(`{"ports": [8443]}`), 5); err != nil {
+		t.Errorf("FromTarget(valid) = %v", err)
+	}
+	if _, err := FromTarget(json.RawMessage(`{"ip": []}`), 5); err == nil {
+		t.Error("FromTarget(bad exclusions) = nil, want error")
+	}
+	if _, err := FromTarget(json.RawMessage(`{}`), 0); err == nil {
+		t.Error("FromTarget(rate 0) = nil, want error")
+	}
+}
