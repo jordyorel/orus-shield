@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Surface d'attaque — Orus Shield</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F6F7F5}
+a{color:#0F766E}a:hover{color:#115E59}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<template id="page-template">
+
+<div style="font-family: Inter, system-ui, sans-serif; color: #0E1116; background: #F6F7F5; min-height: 100vh; display: flex; flex-wrap: wrap">
+
+<aside style="flex: 1 1 240px; max-width: 100%; background: #0E1116; color: #C9D3DB; padding: 24px 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 28px">
+<a href="index.html" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #E6EDF3; padding: 0 8px">
+<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#2DD4BF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.7-7 9-4-1.3-7-4.5-7-9V6l7-3z"></path><path d="M9 12l2 2 4-4"></path></svg>
+<span style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 18px">Orus Shield</span>
+</a>
+<nav aria-label="Application" style="display: flex; flex-direction: column; gap: 4px; font-size: 15px">
+<a href="dashboard.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg>Vue d'ensemble</a>
+<a href="surface.html" aria-current="page" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #FFFFFF; background: #1C262F"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="5"></circle><circle cx="12" cy="12" r="1"></circle></svg>Surface d'attaque</a>
+<a href="priorisation.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h5"></path></svg>Priorisation</a>
+<a href="issues.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 3l9 16H3L12 3z"></path><path d="M12 10v4M12 17v.5"></path></svg>Vulnérabilités</a>
+<a href="posture.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"></path><path d="M12 17l4-5"></path></svg>Posture et conformité</a>
+<a href="gouvernance.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"></rect><path d="M9 4V3h6v1M9 13l2 2 4-4"></path></svg>Gouvernance</a>
+<a href="assets.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c2.5 3 2.5 15 0 18M12 3c-2.5 3-2.5 15 0 18"></path></svg>Actifs</a>
+<a href="scans.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>Scans</a>
+<a href="settings.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"></path></svg>Paramètres</a>
+</nav>
+</aside>
+
+<main style="flex: 999 1 560px; min-width: 0; padding: 28px 36px 48px; box-sizing: border-box">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px">
+<div>
+<p style="margin: 0; font-size: 14px; color: #5B6570">Microfinance Exemple SA</p>
+<h1 style="margin: 4px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 32px; letter-spacing: -0.02em">Surface d'attaque</h1>
+</div>
+<a href="assets.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; background: #0C5DA5; color: #FFFFFF; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 15px">Ajouter un actif</a>
+</div>
+
+<section style="margin-top: 24px; background: #0E1116; color: #E6EDF3; border-radius: 18px; padding: 28px">
+<div style="display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-end">
+<div style="flex: 2 1 360px; min-width: 0">
+<p style="margin: 0; font-size: 15px; color: #9AA7B2">Votre surface d'attaque</p>
+<div style="margin-top: 14px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap">
+<p style="margin: 0"><span style="font-family: 'Space Grotesk', sans-serif; font-size: 30px; font-weight: 600">11</span> <span style="font-size: 14px; color: #9AA7B2">actifs exposés sur internet</span></p>
+<p style="margin: 0"><span style="font-family: 'Space Grotesk', sans-serif; font-size: 30px; font-weight: 600">3</span> <span style="font-size: 14px; color: #9AA7B2">services cloud et SaaS</span></p>
+</div>
+<div style="margin-top: 12px; display: flex; height: 10px; border-radius: 5px; overflow: hidden; gap: 3px">
+<div style="flex: 11; background: #84CAFF"></div><div style="flex: 3; background: #5B8DEF"></div>
+</div>
+</div>
+<div style="flex: 1 1 140px"><p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 30px; font-weight: 600">14</p><p style="margin: 4px 0 0; font-size: 14px; color: #9AA7B2">Actifs surveillés</p></div>
+<div style="flex: 1 1 140px"><p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 30px; font-weight: 600">42</p><p style="margin: 4px 0 0; font-size: 14px; color: #9AA7B2">Identités</p></div>
+<div style="flex: 1 1 140px"><p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 30px; font-weight: 600">4</p><p style="margin: 4px 0 0; font-size: 14px; color: #9AA7B2">Administrateurs</p></div>
+</div>
+</section>
+
+<div style="margin-top: 28px; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap">
+<h2 style="margin: 0; font-size: 19px; font-weight: 600">Actions prioritaires</h2>
+<a href="priorisation.html" style="font-size: 14px; font-weight: 600">Voir la priorisation</a>
+</div>
+<div style="margin-top: 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px">
+<div style="background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 22px"><p style="margin: 0"><span style="font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 600">3</span> <span style="font-size: 15px; font-weight: 600">actifs découverts non surveillés</span></p><p style="margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: #5B6570">Des sous-domaines et une adresse IP semblent vous appartenir. Ajoutez-les pour les scanner.</p><a href="assets.html" style="display: inline-block; margin-top: 12px; font-size: 14px; font-weight: 600">Examiner</a></div>
+<div style="background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 22px"><p style="margin: 0"><span style="font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 600">1</span> <span style="font-size: 15px; font-weight: 600">domaine non vérifié</span></p><p style="margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: #5B6570">Les scans actifs (ports, applications) sont bloqués tant que la propriété n'est pas prouvée.</p><a href="assets.html" style="display: inline-block; margin-top: 12px; font-size: 14px; font-weight: 600">Vérifier le domaine</a></div>
+<div style="background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 22px"><p style="margin: 0"><span style="font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 600">2</span> <span style="font-size: 15px; font-weight: 600">administrateurs sans double authentification</span></p><p style="margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: #5B6570">Les comptes les plus puissants sont protégés par un simple mot de passe.</p><a href="issues.html" style="display: inline-block; margin-top: 12px; font-size: 14px; font-weight: 600">Corriger</a></div>
+</div>
+
+<div style="margin-top: 28px; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap">
+<h2 style="margin: 0; font-size: 19px; font-weight: 600">Couverture</h2>
+<p style="margin: 0; font-size: 14px; color: #5B6570">Connectez au moins une source par catégorie</p>
+</div>
+<div style="margin-top: 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px">
+<div style="background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 22px; display: flex; gap: 20px; align-items: center">
+<svg width="104" height="104" viewBox="0 0 120 120" role="img" aria-label="{{coverageAria}}">
+<circle cx="60" cy="60" r="48" fill="none" stroke="#EEF1F4" stroke-width="12"></circle>
+<circle cx="60" cy="60" r="48" fill="none" stroke="#0C5DA5" stroke-width="12" stroke-linecap="round" stroke-dasharray="{{coverageDash}}" transform="rotate(-90 60 60)"></circle>
+<text x="60" y="68" text-anchor="middle" fill="#0E1116" font-family="Space Grotesk, sans-serif" font-size="26" font-weight="600">{{coverageLabel}}</text>
+</svg>
+<div>
+<p style="margin: 0; font-size: 16px; font-weight: 600">Sources recommandées</p>
+<p style="margin: 6px 0 0; font-size: 14px; line-height: 1.5; color: #5B6570">Catégories sans source : {{missing}}</p>
+</div>
+</div>
+<template data-for="groups" data-as="g">
+<div style="background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 22px">
+<p style="margin: 0; font-size: 16px; font-weight: 600">{{g.name}}</p>
+<div style="margin-top: 12px; display: flex; flex-direction: column; gap: 10px">
+<template data-for="g.items" data-as="i">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 10px">
+<div style="display: flex; align-items: center; gap: 10px; min-width: 0"><span style="{{i.badgeStyle}}">{{i.badge}}</span><span style="font-size: 14px">{{i.name}}</span></div>
+<button type="button" onClick="{{i.act}}" aria-label="{{i.aria}}" style="{{i.btnStyle}}">{{i.btn}}</button>
+</div>
+</template>
+</div>
+</div>
+</template>
+</div>
+
+<div style="margin-top: 28px; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap">
+<h2 style="margin: 0; font-size: 19px; font-weight: 600">Actifs externes</h2>
+<a href="assets.html" style="font-size: 14px; font-weight: 600">Tout voir</a>
+</div>
+<div style="margin-top: 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px">
+<div style="background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 22px"><p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 600">9</p><p style="margin: 4px 0 0; font-size: 15px; font-weight: 600">Domaines</p><p style="margin: 4px 0 0; font-size: 13px; color: #5B6570">Domaines et sous-domaines accessibles</p></div>
+<div style="background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 22px"><p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 600">6</p><p style="margin: 4px 0 0; font-size: 15px; font-weight: 600">Adresses IP</p><p style="margin: 4px 0 0; font-size: 13px; color: #5B6570">Hôtes joignables depuis internet</p></div>
+<div style="background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 22px"><p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 600">7</p><p style="margin: 4px 0 0; font-size: 15px; font-weight: 600">Certificats</p><p style="margin: 4px 0 0; font-size: 13px; color: #5B6570">dont 1 expire dans moins de 30 jours</p></div>
+<div style="background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 22px"><p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 600">12</p><p style="margin: 4px 0 0; font-size: 15px; font-weight: 600">Services exposés</p><p style="margin: 4px 0 0; font-size: 13px; color: #5B6570">Ports ouverts sur vos adresses IP</p></div>
+</div>
+
+<section style="margin-top: 16px; background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 22px">
+<h2 style="margin: 0; font-size: 17px; font-weight: 600">Changements récents</h2>
+<div style="margin-top: 8px; display: flex; flex-direction: column">
+<div style="display: flex; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid #EEF1F4; flex-wrap: wrap"><span style="font-size: 14px"><span style="font-weight: 600; color: #B42318">Nouveau port ouvert</span> · 3389 (bureau à distance) sur 196.x.x.24</span><span style="font-size: 13px; color: #5B6570">il y a 2 j</span></div>
+<div style="display: flex; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid #EEF1F4; flex-wrap: wrap"><span style="font-size: 14px"><span style="font-weight: 600">Nouveau sous-domaine</span> · test.microfinance.cg, trouvé dans les certificats publics</span><span style="font-size: 13px; color: #5B6570">il y a 4 j</span></div>
+<div style="display: flex; justify-content: space-between; gap: 12px; padding: 14px 0; flex-wrap: wrap"><span style="font-size: 14px"><span style="font-weight: 600; color: #067647">Corrigé</span> · protection DMARC activée sur microfinance.cg</span><span style="font-size: 13px; color: #5B6570">il y a 6 j</span></div>
+</div>
+</section>
+</main>
+</div>
+</template>
+<script>
+// Minimal runtime for the Orus Shield prototype pages: renders a template with
+// {{holes}}, data-for / data-if blocks and on* event bindings, and re-renders on setState.
+(function () {
+  var comp = null, tpl = null, root = null;
+  var HOLE = /\{\{\s*([^}]+?)\s*\}\}/g;
+  function lookup(path, scope) {
+    path = path.trim();
+    if (path === 'true') return true;
+    if (path === 'false') return false;
+    if (/^-?\d+(\.\d+)?$/.test(path)) return Number(path);
+    var parts = path.split('.'), v = scope;
+    for (var i = 0; i < parts.length; i++) { if (v == null) return undefined; v = v[parts[i]]; }
+    return v;
+  }
+  function interp(str, scope) {
+    return str.replace(HOLE, function (_, p) { var v = lookup(p, scope); return v == null ? '' : String(v); });
+  }
+  function eventFor(el, name) {
+    if (name === 'onclick') return 'click';
+    if (name === 'onchange') {
+      var t = (el.getAttribute('type') || '').toLowerCase();
+      return el.tagName === 'INPUT' && t !== 'checkbox' && t !== 'radio' ? 'input' : 'change';
+    }
+    return name.slice(2);
+  }
+  function processAttrs(el, scope) {
+    var attrs = Array.prototype.slice.call(el.attributes);
+    attrs.forEach(function (a) {
+      var name = a.name, val = a.value;
+      if (name.indexOf('on') === 0 && /^\{\{[^}]+\}\}$/.test(val.trim())) {
+        el.removeAttribute(name);
+        var fn = lookup(val.trim().slice(2, -2), scope);
+        if (typeof fn === 'function') el.addEventListener(eventFor(el, name), fn);
+        return;
+      }
+      if (val.indexOf('{{') === -1) return;
+      var whole = /^\{\{[^}]+\}\}$/.test(val.trim());
+      var v = whole ? lookup(val.trim().slice(2, -2), scope) : interp(val, scope);
+      if (name === 'value' && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+        el.removeAttribute('value');
+        el.__value = v == null ? '' : String(v);
+        return;
+      }
+      if (v === false || v == null) el.removeAttribute(name); else el.setAttribute(name, String(v));
+    });
+  }
+  function processChildren(parent, scope) {
+    var kids = Array.prototype.slice.call(parent.childNodes);
+    kids.forEach(function (n) { processNode(n, scope); });
+  }
+  function processNode(n, scope) {
+    if (n.nodeType === 3) {
+      if (n.nodeValue.indexOf('{{') !== -1) n.nodeValue = interp(n.nodeValue, scope);
+      return;
+    }
+    if (n.nodeType !== 1) return;
+    if (n.tagName === 'TEMPLATE' && (n.hasAttribute('data-for') || n.hasAttribute('data-if'))) {
+      var frag = document.createDocumentFragment();
+      if (n.hasAttribute('data-for')) {
+        var list = lookup(n.getAttribute('data-for'), scope) || [];
+        var as = n.getAttribute('data-as');
+        list.forEach(function (item, i) {
+          var s = Object.create(scope); s[as] = item; s.$index = i;
+          var c = n.content.cloneNode(true); processChildren(c, s); frag.appendChild(c);
+        });
+      } else if (lookup(n.getAttribute('data-if'), scope)) {
+        var c2 = n.content.cloneNode(true); processChildren(c2, scope); frag.appendChild(c2);
+      }
+      n.parentNode.replaceChild(frag, n);
+      return;
+    }
+    processAttrs(n, scope);
+    processChildren(n, scope);
+  }
+  function render() {
+    var active = document.activeElement, id = active && active.id, sel = null;
+    if (id && active.selectionStart != null) { try { sel = [active.selectionStart, active.selectionEnd]; } catch (e) { sel = null; } }
+    var frag = tpl.content.cloneNode(true);
+    processChildren(frag, comp.renderVals());
+    root.replaceChildren(frag);
+    root.querySelectorAll('input, textarea').forEach(function (el) { if (el.__value !== undefined) el.value = el.__value; });
+    if (id) {
+      var again = document.getElementById(id);
+      if (again) { again.focus(); if (sel) { try { again.setSelectionRange(sel[0], sel[1]); } catch (e) { /* not a text field */ } } }
+    }
+  }
+  window.DCLogic = function DCLogic(props) { this.props = props || {}; this.state = {}; };
+  window.DCLogic.prototype.setState = function (patch) {
+    var p = typeof patch === 'function' ? patch(this.state, this.props) : patch;
+    this.state = Object.assign({}, this.state, p);
+    render();
+  };
+  window.DCLogic.prototype.forceUpdate = function () { render(); };
+  window.mountPrototype = function (Component) {
+    tpl = document.getElementById('page-template');
+    root = document.getElementById('app');
+    comp = new Component({});
+    render();
+  };
+})();
+
+</script>
+<script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { ready: { txt: true, m365: true, email: true, tls: true, whatsapp: true }, error: { ports: true } };
+  }
+  renderVals() {
+    const s = this.state;
+    const defs = [
+      ['DNS et domaines', [['txt', 'Vérification TXT Orus'], ['cloudflare', 'Cloudflare']]],
+      ['Identités', [['m365', 'Microsoft 365'], ['gws', 'Google Workspace']]],
+      ['Cloud', [['aws', 'AWS'], ['azure', 'Azure'], ['gcp', 'Google Cloud']]],
+      ['Modules de scan', [['email', 'Emails'], ['tls', 'TLS et certificats'], ['ports', 'Ports et services']]],
+      ['Alertes', [['whatsapp', 'WhatsApp Business'], ['slack', 'Slack']]]
+    ];
+    const pill = (c, b) => 'font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 6px; color: ' + c + '; background: ' + b;
+    const btnBase = 'min-height: 36px; padding: 0 12px; font: inherit; font-size: 13px; border-radius: 8px; cursor: pointer; ';
+    let covered = 0;
+    const missing = [];
+    const groups = defs.map(([name, items]) => {
+      let any = false;
+      const out = items.map(([id, label]) => {
+        const ready = !!s.ready[id];
+        const err = !ready && !!s.error[id];
+        if (ready) any = true;
+        return {
+          name: label,
+          badge: ready ? 'Prêt' : (err ? 'Bloqué' : 'Disponible'),
+          badgeStyle: ready ? pill('#067647', '#DCFAE6') : (err ? pill('#B42318', '#FEE4E2') : pill('#475467', '#EAECF0')),
+          btn: ready ? 'Configurer' : (err ? 'Résoudre' : 'Connecter'),
+          aria: (ready ? 'Configurer ' : (err ? 'Résoudre ' : 'Connecter ')) + label,
+          btnStyle: btnBase + (ready ? 'color: #0E1116; background: #FFFFFF; border: 1px solid #D5DAE1' : 'color: #FFFFFF; background: #0C5DA5; border: 1px solid #0C5DA5'),
+          act: () => this.setState({ ready: { ...s.ready, [id]: true } })
+        };
+      });
+      if (any) covered += 1; else missing.push(name.toLowerCase());
+      return { name, items: out };
+    });
+    const len = 2 * Math.PI * 48;
+    return {
+      groups,
+      coverageLabel: covered + '/5',
+      coverageAria: 'Couverture : ' + covered + ' catégories sur 5',
+      coverageDash: Math.round(len * covered / 5) + ' ' + Math.round(len),
+      missing: missing.length ? missing.join(', ') : 'aucune'
+    };
+  }
+}
+mountPrototype(Component);
+</script>
+</body>
+</html>
