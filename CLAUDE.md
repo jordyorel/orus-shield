@@ -5,7 +5,8 @@ company exposes on the internet, checks it, scores it, and turns each finding in
 prioritized, plain-language action plan. The market is international, with particular
 attention to French-speaking Africa (local payment methods, French-first reports).
 
-Status: foundation only. No code has been written yet.
+Status: roadmap steps 1 and 2 are done (finding schema, Module interface, gated DNS
+resolver, email module). Next: step 3, the TLS/certificate module.
 
 ## How to work on this repo
 
@@ -48,6 +49,7 @@ engine/
   internal/module/   the Module interface and the registry
   internal/modules/  one package per check (email, tls, ports, ...)
   internal/finding/  finding schema and validation
+  internal/resolver/ DNS lookups for modules, gated (exclusions + rate limit) per scan
 api/
 web/
 docs/
@@ -103,8 +105,8 @@ These are the product. A breach of them is a bug, never a trade-off.
 
 ## Roadmap
 
-1. Finding schema and Module interface, with tests.
-2. Email module: SPF, DKIM, DMARC (passive).
+1. Finding schema and Module interface, with tests. (done)
+2. Email module: SPF, DKIM, DMARC (passive). (done)
 3. TLS/certificate module (passive).
 4. Worker, queue and storage.
 5. Ownership verification (DNS TXT).
