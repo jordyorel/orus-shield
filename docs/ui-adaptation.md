@@ -5,7 +5,7 @@ This document tells Claude Code how to connect the four "advanced panel" mockups
 prioritization, posture and compliance, governance) to what the engine actually produces. It is a plan, not a spec to implement in one go: follow
 CLAUDE.md (one step at a time, design first, tests first, stop for review).
 
-## What exists today (after roadmap step 5)
+## What exists today (after roadmap step 6)
 
 - `targets`: one row per registered domain, with ownership verification (`verified_at`,
   `verify_token`, `verify_checked_at`), exclusions and rate.
@@ -14,7 +14,8 @@ CLAUDE.md (one step at a time, design first, tests first, stop for review).
   (open, fixed, accepted_risk), `first_seen`, `last_seen`, full JSON in `data`.
 - `audit_log`: append-only record of actions.
 - Modules: `email` (SPF, DKIM, DMARC) and `tlscheck` (certificates, protocol versions),
-  both passive. Check IDs such as `dmarc-policy-none`, `tls-cert-expiring-soon`.
+  both passive; `ports` (exposed network services), active, which only reaches IPs whose
+  ownership is proven by forward-confirmed reverse DNS (`ownership.IPGate`). Check IDs such as `dmarc-policy-none`, `tls-cert-expiring-soon`.
 - `orusctl`: target add/show/verify-token/verify, scan, status, findings, audit.
 
 What does not exist yet: organizations and users, an asset inventory, a record of checks
@@ -77,9 +78,9 @@ Backend work needed:
   facing, actively exploited, protections, asset criticality (set by the customer);
   output = score 0 to 10, level, and the list of factors applied. Store raw severity and
   real risk side by side. Deterministic and unit-tested.
-- **CDN and hosting detection** (known IP ranges and response headers). Build it once and
-  use it twice: it closes the rule 1 gap before the ports module, and it feeds the
-  "Protections" column.
+- **CDN and hosting detection** (known IP ranges and response headers). It feeds the
+  "Protections" column. (It is no longer needed for rule 1: per-IP reverse DNS
+  verification already keeps active modules off shared hosting and CDNs.)
 - **KEV ingestion**: a periodic job that downloads the CISA KEV catalog and stores it;
   findings with a matching CVE get the "actively exploited" factor.
 - Until context factors exist: show the table sorted by severity, hide the funnel.
@@ -127,7 +128,7 @@ findings), `controls`, `policies`. The heat map and risk register read from it.
 2. Findings lifecycle: `fixed_at` / status history.
 3. Asset inventory and the Module contract change for observed assets.
 4. Check catalog and evaluated checks; posture score and snapshots.
-5. CDN and hosting detection (also unblocks roadmap step 6, the ports module).
+5. CDN and hosting detection (for the "Protections" column).
 6. API endpoints for screens 1 to 3, scoped by organization, with tests.
 7. Contextual risk function, then KEV ingestion once CVE-producing modules exist.
 8. Discovery module and connectors.

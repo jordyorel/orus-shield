@@ -7,8 +7,9 @@ attention to French-speaking Africa (local payment methods, French-first reports
 
 Status: roadmap steps 1 to 5 are done (finding schema, Module interface, gated DNS
 resolver and dialer, email and TLS modules, PostgreSQL storage and queue, gate, worker,
-orusctl, ownership verification), plus per-IP ownership for active modules (step 6a).
-Next: step 6b, the ports module.
+orusctl, ownership verification, per-IP ownership and the ports module). The ports module
+still needs a real-world test on a server Jordy owns. Next: step 7, following the order in
+`docs/ui-adaptation.md` (organizations first).
 
 ## How to work on this repo
 
@@ -150,7 +151,7 @@ product's own domain for it.
 3. TLS/certificate module (passive). (done)
 4. Worker, queue and storage. (done)
 5. Ownership verification (DNS TXT). (done)
-6. Ports module (active, verified targets only).
+6. Ports module (active, verified targets only). (done; real-world test on a VPS pending)
 7. API, then dashboard. Mockups are in `docs/design/` (see its README); how each screen
    maps to engine data, and the backend work it needs, is in `docs/ui-adaptation.md`.
 
