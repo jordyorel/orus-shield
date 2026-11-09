@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Paramètres — Orus Shield</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F6F7F5}
+a{color:#0F766E}a:hover{color:#115E59}
+input[type=checkbox]{accent-color:#0F766E;width:18px;height:18px}
+</style>
+</helmet>
+<div style="font-family: Inter, system-ui, sans-serif; color: #0E1116; background: #F6F7F5; min-height: 100vh; display: flex; flex-wrap: wrap">
+
+<aside style="flex: 1 1 240px; max-width: 100%; background: #0E1116; color: #C9D3DB; padding: 24px 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 28px">
+<a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #E6EDF3; padding: 0 8px">
+<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#2DD4BF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.7-7 9-4-1.3-7-4.5-7-9V6l7-3z"></path><path d="M9 12l2 2 4-4"></path></svg>
+<span style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 18px">Orus Shield</span>
+</a>
+<nav aria-label="Application" style="display: flex; flex-direction: column; gap: 4px; font-size: 15px">
+<a href="Dashboard.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg>Vue d'ensemble</a>
+<a href="Surface.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="5"></circle><circle cx="12" cy="12" r="1"></circle></svg>Surface d'attaque</a>
+<a href="Priorisation.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h5"></path></svg>Priorisation</a>
+<a href="Issues.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 3l9 16H3L12 3z"></path><path d="M12 10v4M12 17v.5"></path></svg>Vulnérabilités</a>
+<a href="Posture.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0"></path><path d="M12 17l4-5"></path></svg>Posture et conformité</a>
+<a href="Gouvernance.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"></rect><path d="M9 4V3h6v1M9 13l2 2 4-4"></path></svg>Gouvernance</a>
+<a href="Assets.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c2.5 3 2.5 15 0 18M12 3c-2.5 3-2.5 15 0 18"></path></svg>Actifs</a>
+<a href="Scans.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #B8C4CE"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>Scans</a>
+<a href="Settings.dc.html" aria-current="page" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; text-decoration: none; color: #FFFFFF; background: #1C262F"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"></path></svg>Paramètres</a>
+</nav>
+</aside>
+
+<main style="flex: 999 1 560px; min-width: 0; padding: 28px 36px 48px; box-sizing: border-box">
+<p style="margin: 0; font-size: 14px; color: #5B6570">Microfinance Exemple SA</p>
+<h1 style="margin: 4px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 32px; letter-spacing: -0.02em">Paramètres</h1>
+
+<div role="group" aria-label="Sections" style="margin-top: 20px; display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid #E3E7EC">
+<sc-for list="{{tabs}}" as="t" hint-placeholder-count="6">
+<button type="button" onClick="{{t.pick}}" aria-pressed="{{t.pressed}}" style="{{t.style}}">{{t.label}}</button>
+</sc-for>
+</div>
+
+<sc-if value="{{isNotif}}" hint-placeholder-val="{{ true }}">
+<section style="margin-top: 20px; background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 24px">
+<h2 style="margin: 0; font-size: 17px; font-weight: 600">Règles d'alerte</h2>
+<p style="margin: 6px 0 0; font-size: 14px; color: #5B6570">Choisissez quel canal reçoit quelles alertes.</p>
+<div style="margin-top: 16px; overflow-x: auto">
+<table style="width: 100%; min-width: 560px; border-collapse: collapse; font-size: 14px">
+<thead><tr style="text-align: left; color: #5B6570; font-size: 13px"><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #E3E7EC">Gravité</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #E3E7EC">Email</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #E3E7EC">WhatsApp</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #E3E7EC">Slack</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #E3E7EC">SMS</th></tr></thead>
+<tbody>
+<tr><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4; font-weight: 500">Critique</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4"><input type="checkbox" checked aria-label="Critique par email"></td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4"><input type="checkbox" checked aria-label="Critique par WhatsApp"></td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4"><input type="checkbox" aria-label="Critique par Slack"></td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4"><input type="checkbox" checked aria-label="Critique par SMS"></td></tr>
+<tr><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4; font-weight: 500">Élevée</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4"><input type="checkbox" checked aria-label="Élevée par email"></td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4"><input type="checkbox" checked aria-label="Élevée par WhatsApp"></td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4"><input type="checkbox" aria-label="Élevée par Slack"></td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4"><input type="checkbox" aria-label="Élevée par SMS"></td></tr>
+<tr><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4; font-weight: 500">Moyenne</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4"><input type="checkbox" checked aria-label="Moyenne par email"></td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4"><input type="checkbox" aria-label="Moyenne par WhatsApp"></td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4"><input type="checkbox" aria-label="Moyenne par Slack"></td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4"><input type="checkbox" aria-label="Moyenne par SMS"></td></tr>
+<tr><td style="padding: 14px 8px; font-weight: 500">Résumé hebdomadaire</td><td style="padding: 14px 8px"><input type="checkbox" checked aria-label="Résumé par email"></td><td style="padding: 14px 8px"><input type="checkbox" checked aria-label="Résumé par WhatsApp"></td><td style="padding: 14px 8px"><input type="checkbox" aria-label="Résumé par Slack"></td><td style="padding: 14px 8px"><input type="checkbox" aria-label="Résumé par SMS"></td></tr>
+</tbody>
+</table>
+</div>
+<div style="margin-top: 18px; display: flex; flex-wrap: wrap; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 6px; flex: 1 1 240px"><label for="quiet" style="font-size: 13px; font-weight: 500">Heures calmes (sauf critiques)</label><select id="quiet" style="height: 44px; padding: 0 12px; font: inherit; font-size: 15px; border: 1px solid #D5DAE1; border-radius: 10px; background: #FFFFFF; color: #0E1116"><option>22:00 – 07:00</option><option>Aucune</option></select></div>
+<div style="display: flex; flex-direction: column; gap: 6px; flex: 1 1 240px"><label for="lang" style="font-size: 13px; font-weight: 500">Langue des alertes</label><select id="lang" style="height: 44px; padding: 0 12px; font: inherit; font-size: 15px; border: 1px solid #D5DAE1; border-radius: 10px; background: #FFFFFF; color: #0E1116"><option>Français</option><option>English</option></select></div>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{isInteg}}" hint-placeholder-val="{{ false }}">
+<div style="margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px">
+<sc-for list="{{integrations}}" as="g" hint-placeholder-count="6">
+<div style="background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 22px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 8px"><p style="margin: 0; font-size: 16px; font-weight: 600">{{g.name}}</p><span style="{{g.badgeStyle}}">{{g.badge}}</span></div>
+<p style="margin: 0; font-size: 14px; line-height: 1.5; color: #5B6570">{{g.desc}}</p>
+<button type="button" onClick="{{g.toggle}}" style="{{g.btnStyle}}">{{g.btn}}</button>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{isTeam}}" hint-placeholder-val="{{ false }}">
+<section style="margin-top: 20px; background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 24px">
+<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px"><h2 style="margin: 0; font-size: 17px; font-weight: 600">Membres</h2><button type="button" style="min-height: 44px; padding: 0 16px; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; background: #0C5DA5; border: 0; border-radius: 10px; cursor: pointer">Inviter un membre</button></div>
+<div style="margin-top: 12px; overflow-x: auto">
+<table style="width: 100%; min-width: 560px; border-collapse: collapse; font-size: 14px">
+<thead><tr style="text-align: left; color: #5B6570; font-size: 13px"><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #E3E7EC">Nom</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #E3E7EC">Rôle</th><th style="padding: 12px 8px; font-weight: 500; border-bottom: 1px solid #E3E7EC">Double authentification</th></tr></thead>
+<tbody>
+<tr><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4"><p style="margin: 0; font-weight: 500">Jordy Konda</p><p style="margin: 2px 0 0; font-size: 13px; color: #5B6570">Propriétaire</p></td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4">Administrateur</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4; color: #067647">Activée</td></tr>
+<tr><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4"><p style="margin: 0; font-weight: 500">Responsable informatique</p><p style="margin: 2px 0 0; font-size: 13px; color: #5B6570">it@microfinance.cg</p></td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4">Analyste</td><td style="padding: 14px 8px; border-bottom: 1px solid #EEF1F4; color: #067647">Activée</td></tr>
+<tr><td style="padding: 14px 8px"><p style="margin: 0; font-weight: 500">Direction générale</p><p style="margin: 2px 0 0; font-size: 13px; color: #5B6570">dg@microfinance.cg</p></td><td style="padding: 14px 8px">Direction (rapports seulement)</td><td style="padding: 14px 8px; color: #B42318">Désactivée</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{isReports}}" hint-placeholder-val="{{ false }}">
+<section style="margin-top: 20px; background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+<h2 style="margin: 0; font-size: 17px; font-weight: 600">Rapports automatiques</h2>
+<label style="display: flex; gap: 12px; align-items: flex-start; font-size: 15px"><input type="checkbox" checked><span><span style="font-weight: 600">Rapport mensuel pour la direction</span><br><span style="font-size: 14px; color: #5B6570">Score, évolution et priorités, sans jargon technique.</span></span></label>
+<label style="display: flex; gap: 12px; align-items: flex-start; font-size: 15px"><input type="checkbox" checked><span><span style="font-weight: 600">Rapport technique après chaque scan</span><br><span style="font-size: 14px; color: #5B6570">Détails, preuves et étapes de correction.</span></span></label>
+<label style="display: flex; gap: 12px; align-items: flex-start; font-size: 15px"><input type="checkbox"><span><span style="font-weight: 600">Rapport de conformité trimestriel</span><br><span style="font-size: 14px; color: #5B6570">Correspondance avec ISO 27001 et PCI-DSS, pour vos partenaires et auditeurs.</span></span></label>
+<div style="display: flex; flex-wrap: wrap; gap: 10px"><button type="button" style="min-height: 44px; padding: 0 16px; font: inherit; font-size: 14px; font-weight: 600; color: #FFFFFF; background: #0C5DA5; border: 0; border-radius: 10px; cursor: pointer">Générer le rapport maintenant</button><button type="button" style="min-height: 44px; padding: 0 16px; font: inherit; font-size: 14px; color: #0E1116; background: #FFFFFF; border: 1px solid #D5DAE1; border-radius: 10px; cursor: pointer">Ajouter votre logo</button></div>
+</section>
+</sc-if>
+
+<sc-if value="{{isApi}}" hint-placeholder-val="{{ false }}">
+<section style="margin-top: 20px; background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 24px">
+<h2 style="margin: 0; font-size: 17px; font-weight: 600">Clés d'API</h2>
+<p style="margin: 6px 0 0; font-size: 14px; color: #5B6570">Pour intégrer les résultats dans vos propres outils.</p>
+<div style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+<code style="flex: 1 1 320px; padding: 12px 14px; background: #0E1116; color: #D1E9FF; border-radius: 10px; font-family: 'JetBrains Mono', monospace; font-size: 13px">{{apiKey}}</code>
+<button type="button" onClick="{{toggleKey}}" style="min-height: 44px; padding: 0 16px; font: inherit; font-size: 14px; color: #0E1116; background: #FFFFFF; border: 1px solid #D5DAE1; border-radius: 10px; cursor: pointer">{{keyBtn}}</button>
+<button type="button" style="min-height: 44px; padding: 0 16px; font: inherit; font-size: 14px; color: #B42318; background: #FFFFFF; border: 1px solid #F3C4BF; border-radius: 10px; cursor: pointer">Régénérer</button>
+</div>
+<pre style="margin: 18px 0 0; padding: 16px; background: #F6F8FA; border-radius: 10px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.6; overflow-x: auto; color: #1F2A33">curl https://api.orus-shield.example/v1/issues?severity=critical \
+  -H "Authorization: Bearer $ORUS_API_KEY"</pre>
+</section>
+</sc-if>
+
+<sc-if value="{{isBilling}}" hint-placeholder-val="{{ false }}">
+<div style="margin-top: 20px; display: flex; flex-wrap: wrap; gap: 16px">
+<section style="flex: 1 1 320px; min-width: 0; background: #0E1116; color: #E6EDF3; border-radius: 16px; padding: 24px">
+<p style="margin: 0; font-size: 13px; color: #9AA7B2">Offre actuelle</p>
+<p style="margin: 6px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 600">PME · $[PRIX] USD / mois</p>
+<p style="margin: 6px 0 0; font-size: 13px; color: #9AA7B2">Facturé en USD. Les paiements Mobile Money sont convertis au taux du jour.</p>
+<p style="margin: 16px 0 6px; font-size: 14px">Actifs : 14 sur 10 inclus</p>
+<div style="height: 8px; background: #22303A; border-radius: 4px"><div style="width: 100%; height: 8px; background: #FDB022; border-radius: 4px"></div></div>
+<p style="margin: 8px 0 0; font-size: 13px; color: #FEC84B">4 actifs au-delà de l'offre : passez à l'offre supérieure ou retirez des actifs.</p>
+</section>
+<section style="flex: 1 1 320px; min-width: 0; background: #FFFFFF; border: 1px solid #E3E7EC; border-radius: 16px; padding: 24px">
+<h2 style="margin: 0; font-size: 17px; font-weight: 600">Moyen de paiement</h2>
+<div style="margin-top: 14px; display: flex; flex-direction: column; gap: 10px">
+<sc-for list="{{payments}}" as="m" hint-placeholder-count="7">
+<button type="button" onClick="{{m.pick}}" aria-pressed="{{m.pressed}}" style="{{m.style}}">{{m.label}}</button>
+</sc-for>
+</div>
+</section>
+</div>
+</sc-if>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { tab: 'notif', connected: { whatsapp: true, email: true }, showKey: false, pay: 'card' };
+  }
+  renderVals() {
+    const s = this.state;
+    const on = 'min-height: 44px; padding: 0 16px; font: inherit; font-size: 15px; font-weight: 600; color: #0E1116; background: transparent; border: 0; border-bottom: 2px solid #0C5DA5; margin-bottom: -1px; cursor: pointer';
+    const off = 'min-height: 44px; padding: 0 16px; font: inherit; font-size: 15px; color: #5B6570; background: transparent; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer';
+    const tabs = [['notif', 'Notifications'], ['integ', 'Intégrations'], ['team', 'Équipe'], ['reports', 'Rapports'], ['api', 'API'], ['billing', 'Abonnement']].map(([id, label]) => ({
+      label, pressed: s.tab === id ? 'true' : 'false', style: s.tab === id ? on : off, pick: () => this.setState({ tab: id })
+    }));
+    const integrations = [
+      ['whatsapp', 'WhatsApp Business', 'Alertes critiques et résumé hebdomadaire sur WhatsApp.'],
+      ['email', 'Email', 'Alertes et rapports envoyés à vos équipes.'],
+      ['slack', 'Slack', 'Publie les nouvelles vulnérabilités dans un canal.'],
+      ['teams', 'Microsoft Teams', 'Notifications dans vos équipes Teams.'],
+      ['jira', 'Jira', 'Crée un ticket pour chaque vulnérabilité à corriger.'],
+      ['webhook', 'Webhook', 'Envoie chaque événement à votre propre système.']
+    ].map(([id, name, desc]) => {
+      const c = !!s.connected[id];
+      return {
+        name, desc,
+        badge: c ? 'Connecté' : 'Non connecté',
+        badgeStyle: c ? 'font-size: 12px; font-weight: 600; color: #067647; background: #DCFAE6; padding: 3px 8px; border-radius: 6px' : 'font-size: 12px; font-weight: 600; color: #475467; background: #EAECF0; padding: 3px 8px; border-radius: 6px',
+        btn: c ? 'Configurer' : 'Connecter',
+        btnStyle: 'align-self: flex-start; min-height: 40px; padding: 0 14px; font: inherit; font-size: 14px; border-radius: 10px; cursor: pointer; ' + (c ? 'color: #0E1116; background: #FFFFFF; border: 1px solid #D5DAE1' : 'color: #FFFFFF; background: #0C5DA5; border: 1px solid #0C5DA5'),
+        toggle: () => this.setState({ connected: { ...s.connected, [id]: true } })
+      };
+    });
+    const pOn = 'text-align: left; font: inherit; font-size: 15px; min-height: 52px; padding: 0 16px; border-radius: 12px; cursor: pointer; background: #F1F6FB; border: 2px solid #0C5DA5; color: #0E1116; font-weight: 600';
+    const pOff = 'text-align: left; font: inherit; font-size: 15px; min-height: 52px; padding: 0 16px; border-radius: 12px; cursor: pointer; background: #FFFFFF; border: 2px solid #E3E7EC; color: #0E1116';
+    const payments = [['card', 'Carte bancaire (Visa, Mastercard)'], ['paypal', 'PayPal'], ['mtn', 'MTN Mobile Money'], ['airtel', 'Airtel Money'], ['orange', 'Orange Money'], ['mpesa', 'M-Pesa'], ['wave', 'Wave']].map(([id, label]) => ({
+      label, pressed: s.pay === id ? 'true' : 'false', style: s.pay === id ? pOn : pOff, pick: () => this.setState({ pay: id })
+    }));
+    return {
+      tabs, integrations, payments,
+      isNotif: s.tab === 'notif', isInteg: s.tab === 'integ', isTeam: s.tab === 'team',
+      isReports: s.tab === 'reports', isApi: s.tab === 'api', isBilling: s.tab === 'billing',
+      apiKey: s.showKey ? 'orus_live_7Hq2kP9xL4mW8nV3cR6tY1zB' : 'orus_live_••••••••••••••••••••1zB',
+      keyBtn: s.showKey ? 'Masquer' : 'Afficher',
+      toggleKey: () => this.setState({ showKey: !s.showKey })
+    };
+  }
+}
+</script>
+</body>
+</html>
