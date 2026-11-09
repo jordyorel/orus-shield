@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orus Shield — site public</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B1015}
+a{color:#2DD4BF}a:hover{color:#5EEAD4}
+input::placeholder{color:#6B7782}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<template id="page-template">
+
+<div style="font-family: Inter, system-ui, sans-serif; color: #E6EDF3; background: #0B1015; min-height: 100vh">
+
+<header style="max-width: 1200px; margin: 0 auto; padding: 24px 32px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
+<a href="#top" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #E6EDF3">
+<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2DD4BF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.7-7 9-4-1.3-7-4.5-7-9V6l7-3z"></path><path d="M9 12l2 2 4-4"></path></svg>
+<span style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 20px; letter-spacing: -0.01em">Orus Shield</span>
+</a>
+<nav aria-label="Navigation principale" style="display: flex; flex-wrap: wrap; align-items: center; gap: 28px; font-size: 15px">
+<a href="#features" style="color: #B8C4CE; text-decoration: none">Fonctionnalités</a>
+<a href="#how" style="color: #B8C4CE; text-decoration: none">Comment ça marche</a>
+<a href="#pricing" style="color: #B8C4CE; text-decoration: none">Tarifs</a>
+<a href="dashboard.html" style="color: #E6EDF3; text-decoration: none">Se connecter</a>
+<a href="#scan" style="background: #2DD4BF; color: #04201C; text-decoration: none; font-weight: 600; padding: 12px 18px; border-radius: 10px">Essai gratuit</a>
+</nav>
+</header>
+
+<section id="top" style="max-width: 1200px; margin: 0 auto; padding: 72px 32px 96px; display: flex; flex-wrap: wrap; gap: 56px; align-items: center">
+<div style="flex: 1 1 520px; min-width: 0">
+<p style="margin: 0 0 20px; display: inline-block; font-size: 13px; color: #5EEAD4; border: 1px solid #1F3A38; background: #0F1F1E; padding: 6px 12px; border-radius: 999px">Audit de sécurité continu, propulsé par l'IA</p>
+<h1 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 60px; line-height: 1.04; letter-spacing: -0.03em">Voyez votre entreprise comme un attaquant la voit.</h1>
+<p style="margin: 24px 0 0; font-size: 19px; line-height: 1.6; color: #A9B6C1; max-width: 560px">Orus Shield surveille en continu vos domaines, vos emails, vos sites et vos comptes cloud. Notre IA traduit chaque faille en action concrète, en français, classée par priorité.</p>
+<form id="scan" style="margin-top: 36px; display: flex; flex-wrap: wrap; gap: 12px; max-width: 560px">
+<label for="domain" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Votre nom de domaine</label>
+<input id="domain" type="text" value="{{domain}}" onChange="{{onDomain}}" placeholder="votre-entreprise.cg" style="flex: 1 1 260px; min-width: 0; height: 52px; box-sizing: border-box; padding: 0 16px; font: inherit; font-size: 16px; color: #E6EDF3; background: #121A21; border: 1px solid #2A3741; border-radius: 12px">
+<button type="button" onClick="{{runScan}}" style="height: 52px; padding: 0 22px; font: inherit; font-weight: 600; font-size: 16px; color: #04201C; background: #2DD4BF; border: 0; border-radius: 12px; cursor: pointer">Lancer le scan gratuit</button>
+</form>
+<p style="margin: 12px 0 0; font-size: 13px; color: #8693A0">Vérifications passives uniquement. Le scan complet démarre après vérification de la propriété du domaine.</p>
+
+<template data-if="showResult">
+<div style="margin-top: 24px; max-width: 560px; background: #121A21; border: 1px solid #22303A; border-radius: 16px; padding: 20px 22px">
+<div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap">
+<p style="margin: 0; font-weight: 600">Résultat rapide pour {{shownDomain}}</p>
+<p style="margin: 0; font-size: 13px; color: #8693A0">3 points à corriger</p>
+</div>
+<div style="margin-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 14px">
+<div style="display: flex; gap: 10px; align-items: center"><span style="font-size: 12px; font-weight: 600; color: #FDA29B; background: #3A1714; padding: 3px 8px; border-radius: 6px">Critique</span><span>Aucune politique DMARC : vos emails peuvent être usurpés</span></div>
+<div style="display: flex; gap: 10px; align-items: center"><span style="font-size: 12px; font-weight: 600; color: #FEC84B; background: #3A2A0B; padding: 3px 8px; border-radius: 6px">Élevé</span><span>Le certificat HTTPS expire dans 9 jours</span></div>
+<div style="display: flex; gap: 10px; align-items: center"><span style="font-size: 12px; font-weight: 600; color: #B8C4CE; background: #1F2A33; padding: 3px 8px; border-radius: 6px">Moyen</span><span>En-têtes de sécurité manquants sur le site web</span></div>
+</div>
+<a href="assets.html" style="display: inline-block; margin-top: 16px; font-size: 14px; font-weight: 600">Vérifier mon domaine pour le scan complet →</a>
+</div>
+</template>
+</div>
+
+<div style="flex: 1 1 420px; min-width: 0">
+<div style="background: #121A21; border: 1px solid #22303A; border-radius: 20px; padding: 28px">
+<div style="display: flex; align-items: center; gap: 24px; flex-wrap: wrap">
+<svg width="132" height="132" viewBox="0 0 120 120" role="img" aria-label="Score de sécurité 74 sur 100">
+<circle cx="60" cy="60" r="50" fill="none" stroke="#1F2A33" stroke-width="10"></circle>
+<circle cx="60" cy="60" r="50" fill="none" stroke="#2DD4BF" stroke-width="10" stroke-linecap="round" stroke-dasharray="232 314" transform="rotate(-90 60 60)"></circle>
+<text x="60" y="66" text-anchor="middle" fill="#E6EDF3" font-family="Space Grotesk, sans-serif" font-size="30" font-weight="600">74</text>
+</svg>
+<div>
+<p style="margin: 0; font-size: 13px; color: #8693A0">Score de sécurité</p>
+<p style="margin: 4px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 600">Bon, à renforcer</p>
+<p style="margin: 6px 0 0; font-size: 14px; color: #5EEAD4">+16 points en 30 jours</p>
+</div>
+</div>
+<div style="margin-top: 24px; border-top: 1px solid #1F2A33; padding-top: 18px; display: flex; flex-direction: column; gap: 14px; font-size: 14px">
+<p style="margin: 0; font-size: 12px; color: #8693A0; letter-spacing: 0.06em; text-transform: uppercase">Cette semaine</p>
+<div style="display: flex; justify-content: space-between; gap: 12px"><span>Double authentification sur 18 comptes</span><span style="color: #FDA29B">À faire</span></div>
+<div style="display: flex; justify-content: space-between; gap: 12px"><span>Fermer l'accès bureau à distance exposé</span><span style="color: #FDA29B">À faire</span></div>
+<div style="display: flex; justify-content: space-between; gap: 12px"><span>Protection DMARC des emails</span><span style="color: #5EEAD4">Corrigé</span></div>
+</div>
+</div>
+</div>
+</section>
+
+<section id="features" style="background: #F6F7F5; color: #0E1116">
+<div style="max-width: 1200px; margin: 0 auto; padding: 96px 32px">
+<p style="margin: 0; font-size: 14px; font-weight: 600; color: #0F766E">Ce que nous vérifions</p>
+<h2 style="margin: 12px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 42px; line-height: 1.1; letter-spacing: -0.02em; max-width: 720px">Toute votre exposition, dans un seul tableau de bord.</h2>
+<div style="margin-top: 48px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px">
+<template data-for="features" data-as="f">
+<div style="background: #FFFFFF; border: 1px solid #E4E7E3; border-radius: 16px; padding: 28px">
+<div style="width: 40px; height: 40px; border-radius: 10px; background: #E6F4F1; display: flex; align-items: center; justify-content: center">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0F766E" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v4l2.5 2"></path></svg>
+</div>
+<h3 style="margin: 18px 0 0; font-size: 18px; font-weight: 600">{{f.title}}</h3>
+<p style="margin: 8px 0 0; font-size: 15px; line-height: 1.6; color: #4B5560">{{f.text}}</p>
+</div>
+</template>
+</div>
+</div>
+</section>
+
+<section id="how" style="background: #F6F7F5; color: #0E1116; border-top: 1px solid #E4E7E3">
+<div style="max-width: 1200px; margin: 0 auto; padding: 96px 32px">
+<p style="margin: 0; font-size: 14px; font-weight: 600; color: #0F766E">Comment ça marche</p>
+<h2 style="margin: 12px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 42px; line-height: 1.1; letter-spacing: -0.02em">Opérationnel en dix minutes.</h2>
+<div style="margin-top: 48px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 32px">
+<div><p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 40px; color: #0F766E">01</p><h3 style="margin: 8px 0 0; font-size: 20px; font-weight: 600">Ajoutez vos domaines</h3><p style="margin: 8px 0 0; font-size: 15px; line-height: 1.6; color: #4B5560">Nous découvrons automatiquement vos sous-domaines, serveurs et services exposés sur internet.</p></div>
+<div><p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 40px; color: #0F766E">02</p><h3 style="margin: 8px 0 0; font-size: 20px; font-weight: 600">Prouvez la propriété</h3><p style="margin: 8px 0 0; font-size: 15px; line-height: 1.6; color: #4B5560">Un enregistrement TXT dans votre DNS. Personne ne peut scanner un domaine qui ne lui appartient pas.</p></div>
+<div><p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 40px; color: #0F766E">03</p><h3 style="margin: 8px 0 0; font-size: 20px; font-weight: 600">Recevez votre plan d'action</h3><p style="margin: 8px 0 0; font-size: 15px; line-height: 1.6; color: #4B5560">Un score, les priorités de la semaine, et les étapes exactes pour corriger chaque problème.</p></div>
+</div>
+</div>
+</section>
+
+<section style="max-width: 1200px; margin: 0 auto; padding: 96px 32px; display: flex; flex-wrap: wrap; gap: 56px; align-items: center">
+<div style="flex: 1 1 440px; min-width: 0">
+<p style="margin: 0; font-size: 14px; font-weight: 600; color: #2DD4BF">Intelligence artificielle</p>
+<h2 style="margin: 12px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 42px; line-height: 1.1; letter-spacing: -0.02em">Une IA qui explique. Pas une IA qui invente.</h2>
+<p style="margin: 20px 0 0; font-size: 17px; line-height: 1.7; color: #A9B6C1">Nos scanners établissent les faits. L'IA les interprète pour votre contexte : pourquoi c'est grave pour vous, quoi faire en premier, et comment le corriger, étape par étape.</p>
+<div style="margin-top: 28px; display: flex; flex-direction: column; gap: 12px; font-size: 15px; color: #C9D3DB">
+<span>— Priorisation selon votre secteur et vos actifs critiques</span>
+<span>— Rapports pour la direction, en langage clair</span>
+<span>— Assistant : « Sommes-nous exposés à la faille dont parle la presse ? »</span>
+</div>
+</div>
+<div style="flex: 1 1 440px; min-width: 0; background: #121A21; border: 1px solid #22303A; border-radius: 20px; padding: 28px">
+<div style="display: flex; gap: 10px; align-items: center"><span style="font-size: 12px; font-weight: 600; color: #FDA29B; background: #3A1714; padding: 3px 8px; border-radius: 6px">Critique</span><span style="font-size: 15px; font-weight: 600">Bureau à distance (RDP) exposé sur internet</span></div>
+<p style="margin: 18px 0 0; font-size: 13px; color: #8693A0">Explication</p>
+<p style="margin: 6px 0 0; font-size: 15px; line-height: 1.65; color: #D5DEE5">Le serveur 196.x.x.24 accepte des connexions bureau à distance depuis n'importe où. C'est la porte d'entrée la plus utilisée par les rançongiciels. Pour une microfinance, une attaque bloquerait les opérations de guichet.</p>
+<p style="margin: 18px 0 0; font-size: 13px; color: #8693A0">Correction recommandée</p>
+<p style="margin: 6px 0 0; font-size: 15px; line-height: 1.65; color: #D5DEE5">1. Bloquer le port 3389 sur le pare-feu. 2. Passer par un VPN pour l'accès à distance. 3. Activer la double authentification.</p>
+</div>
+</section>
+
+<section id="pricing" style="background: #F6F7F5; color: #0E1116">
+<div style="max-width: 1200px; margin: 0 auto; padding: 96px 32px">
+<p style="margin: 0; font-size: 14px; font-weight: 600; color: #0F766E">Tarifs</p>
+<h2 style="margin: 12px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 42px; line-height: 1.1; letter-spacing: -0.02em">Simples et sans engagement.</h2>
+<p style="margin: 14px 0 0; font-size: 16px; line-height: 1.6; color: #4B5560; max-width: 640px">Prix en dollars américains. Payez par carte, PayPal ou Mobile Money : MTN, Airtel, Orange Money, M-Pesa, Wave.</p>
+<div style="margin-top: 48px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; align-items: stretch">
+<div style="background: #FFFFFF; border: 1px solid #E4E7E3; border-radius: 18px; padding: 32px; display: flex; flex-direction: column; gap: 16px">
+<h3 style="margin: 0; font-size: 18px; font-weight: 600">Découverte</h3>
+<p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 40px; font-weight: 600">Gratuit</p>
+<p style="margin: 0; font-size: 15px; color: #4B5560; line-height: 1.6">1 domaine, vérifications passives, rapport mensuel.</p>
+<a href="#scan" style="margin-top: auto; text-align: center; text-decoration: none; color: #0E1116; border: 1px solid #C9CFCA; border-radius: 10px; padding: 14px; font-weight: 600">Commencer</a>
+</div>
+<div style="background: #0E1116; color: #E6EDF3; border-radius: 18px; padding: 32px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; justify-content: space-between; align-items: center"><h3 style="margin: 0; font-size: 18px; font-weight: 600">PME</h3><span style="font-size: 12px; font-weight: 600; color: #04201C; background: #2DD4BF; padding: 4px 10px; border-radius: 999px">Recommandé</span></div>
+<p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 40px; font-weight: 600">$[PRIX]<span style="font-size: 16px; color: #8693A0"> USD / mois</span></p>
+<p style="margin: 0; font-size: 15px; color: #A9B6C1; line-height: 1.6">Jusqu'à 10 actifs, scans hebdomadaires, Microsoft 365 et Google Workspace, alertes WhatsApp, assistant IA.</p>
+<a href="#scan" style="margin-top: auto; text-align: center; text-decoration: none; color: #04201C; background: #2DD4BF; border-radius: 10px; padding: 14px; font-weight: 600">Essai gratuit 14 jours</a>
+</div>
+<div style="background: #FFFFFF; border: 1px solid #E4E7E3; border-radius: 18px; padding: 32px; display: flex; flex-direction: column; gap: 16px">
+<h3 style="margin: 0; font-size: 18px; font-weight: 600">Entreprise</h3>
+<p style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 40px; font-weight: 600">Sur devis</p>
+<p style="margin: 0; font-size: 15px; color: #4B5560; line-height: 1.6">Actifs illimités, agent réseau interne, conformité, tests d'intrusion par nos experts.</p>
+<a href="#top" style="margin-top: auto; text-align: center; text-decoration: none; color: #0E1116; border: 1px solid #C9CFCA; border-radius: 10px; padding: 14px; font-weight: 600">Nous contacter</a>
+</div>
+</div>
+</div>
+</section>
+
+<footer style="max-width: 1200px; margin: 0 auto; padding: 48px 32px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; font-size: 14px; color: #8693A0">
+<span>© Orus Shield</span>
+<span style="display: flex; gap: 24px; flex-wrap: wrap"><a href="#top" style="color: #8693A0; text-decoration: none">Confidentialité</a><a href="#top" style="color: #8693A0; text-decoration: none">Conditions</a><a href="#top" style="color: #8693A0; text-decoration: none">Contact</a></span>
+</footer>
+</div>
+</template>
+<script>
+// Minimal runtime for the Orus Shield prototype pages: renders a template with
+// {{holes}}, data-for / data-if blocks and on* event bindings, and re-renders on setState.
+(function () {
+  var comp = null, tpl = null, root = null;
+  var HOLE = /\{\{\s*([^}]+?)\s*\}\}/g;
+  function lookup(path, scope) {
+    path = path.trim();
+    if (path === 'true') return true;
+    if (path === 'false') return false;
+    if (/^-?\d+(\.\d+)?$/.test(path)) return Number(path);
+    var parts = path.split('.'), v = scope;
+    for (var i = 0; i < parts.length; i++) { if (v == null) return undefined; v = v[parts[i]]; }
+    return v;
+  }
+  function interp(str, scope) {
+    return str.replace(HOLE, function (_, p) { var v = lookup(p, scope); return v == null ? '' : String(v); });
+  }
+  function eventFor(el, name) {
+    if (name === 'onclick') return 'click';
+    if (name === 'onchange') {
+      var t = (el.getAttribute('type') || '').toLowerCase();
+      return el.tagName === 'INPUT' && t !== 'checkbox' && t !== 'radio' ? 'input' : 'change';
+    }
+    return name.slice(2);
+  }
+  function processAttrs(el, scope) {
+    var attrs = Array.prototype.slice.call(el.attributes);
+    attrs.forEach(function (a) {
+      var name = a.name, val = a.value;
+      if (name.indexOf('on') === 0 && /^\{\{[^}]+\}\}$/.test(val.trim())) {
+        el.removeAttribute(name);
+        var fn = lookup(val.trim().slice(2, -2), scope);
+        if (typeof fn === 'function') el.addEventListener(eventFor(el, name), fn);
+        return;
+      }
+      if (val.indexOf('{{') === -1) return;
+      var whole = /^\{\{[^}]+\}\}$/.test(val.trim());
+      var v = whole ? lookup(val.trim().slice(2, -2), scope) : interp(val, scope);
+      if (name === 'value' && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+        el.removeAttribute('value');
+        el.__value = v == null ? '' : String(v);
+        return;
+      }
+      if (v === false || v == null) el.removeAttribute(name); else el.setAttribute(name, String(v));
+    });
+  }
+  function processChildren(parent, scope) {
+    var kids = Array.prototype.slice.call(parent.childNodes);
+    kids.forEach(function (n) { processNode(n, scope); });
+  }
+  function processNode(n, scope) {
+    if (n.nodeType === 3) {
+      if (n.nodeValue.indexOf('{{') !== -1) n.nodeValue = interp(n.nodeValue, scope);
+      return;
+    }
+    if (n.nodeType !== 1) return;
+    if (n.tagName === 'TEMPLATE' && (n.hasAttribute('data-for') || n.hasAttribute('data-if'))) {
+      var frag = document.createDocumentFragment();
+      if (n.hasAttribute('data-for')) {
+        var list = lookup(n.getAttribute('data-for'), scope) || [];
+        var as = n.getAttribute('data-as');
+        list.forEach(function (item, i) {
+          var s = Object.create(scope); s[as] = item; s.$index = i;
+          var c = n.content.cloneNode(true); processChildren(c, s); frag.appendChild(c);
+        });
+      } else if (lookup(n.getAttribute('data-if'), scope)) {
+        var c2 = n.content.cloneNode(true); processChildren(c2, scope); frag.appendChild(c2);
+      }
+      n.parentNode.replaceChild(frag, n);
+      return;
+    }
+    processAttrs(n, scope);
+    processChildren(n, scope);
+  }
+  function render() {
+    var active = document.activeElement, id = active && active.id, sel = null;
+    if (id && active.selectionStart != null) { try { sel = [active.selectionStart, active.selectionEnd]; } catch (e) { sel = null; } }
+    var frag = tpl.content.cloneNode(true);
+    processChildren(frag, comp.renderVals());
+    root.replaceChildren(frag);
+    root.querySelectorAll('input, textarea').forEach(function (el) { if (el.__value !== undefined) el.value = el.__value; });
+    if (id) {
+      var again = document.getElementById(id);
+      if (again) { again.focus(); if (sel) { try { again.setSelectionRange(sel[0], sel[1]); } catch (e) { /* not a text field */ } } }
+    }
+  }
+  window.DCLogic = function DCLogic(props) { this.props = props || {}; this.state = {}; };
+  window.DCLogic.prototype.setState = function (patch) {
+    var p = typeof patch === 'function' ? patch(this.state, this.props) : patch;
+    this.state = Object.assign({}, this.state, p);
+    render();
+  };
+  window.DCLogic.prototype.forceUpdate = function () { render(); };
+  window.mountPrototype = function (Component) {
+    tpl = document.getElementById('page-template');
+    root = document.getElementById('app');
+    comp = new Component({});
+    render();
+  };
+})();
+
+</script>
+<script>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { domain: '', shown: '', show: false };
+  }
+  renderVals() {
+    return {
+      domain: this.state.domain,
+      onDomain: (e) => this.setState({ domain: e.target.value }),
+      runScan: () => this.setState({ show: true, shown: this.state.domain.trim() || 'votre-entreprise.cg' }),
+      showResult: this.state.show,
+      shownDomain: this.state.shown,
+      features: [
+        { title: 'Surface d’attaque', text: 'Sous-domaines, serveurs, ports ouverts et services oubliés, découverts automatiquement.' },
+        { title: 'Emails', text: 'SPF, DKIM et DMARC pour empêcher l’usurpation de votre adresse.' },
+        { title: 'Sites et applications web', text: 'Certificats, en-têtes de sécurité, CMS obsolètes, failles applicatives courantes.' },
+        { title: 'Microsoft 365 et Google', text: 'Double authentification, comptes administrateurs, fichiers partagés publiquement.' },
+        { title: 'Fuites de données', text: 'Adresses et identifiants de votre entreprise retrouvés dans des fuites connues.' },
+        { title: 'Usage de l’IA', text: 'Outils d’IA utilisés par vos équipes, clés d’API exposées, chatbots vulnérables.' }
+      ]
+    };
+  }
+}
+mountPrototype(Component);
+</script>
+</body>
+</html>
