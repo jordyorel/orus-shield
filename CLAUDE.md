@@ -5,8 +5,9 @@ company exposes on the internet, checks it, scores it, and turns each finding in
 prioritized, plain-language action plan. The market is international, with particular
 attention to French-speaking Africa (local payment methods, French-first reports).
 
-Status: roadmap steps 1 to 3 are done (finding schema, Module interface, gated DNS
-resolver and dialer, email and TLS modules). Next: step 4, worker, queue and storage.
+Status: roadmap steps 1 to 4 are done (finding schema, Module interface, gated DNS
+resolver and dialer, email and TLS modules, PostgreSQL storage and queue, gate, worker,
+orusctl). Next: step 5, ownership verification.
 
 ## How to work on this repo
 
@@ -46,11 +47,17 @@ Planned layout (create folders only when they are needed):
 ```
 engine/
   cmd/worker/        worker entrypoint
+  cmd/orusctl/       development CLI (targets, scans, findings, audit) until the API exists
   internal/module/   the Module interface and the registry
   internal/modules/  one package per check (email, tls, ports, ...)
   internal/finding/  finding schema and validation
   internal/resolver/ DNS lookups for modules, gated (exclusions + rate limit) per scan
   internal/dialer/   TCP connections for modules, to gate-approved IPs only
+  internal/gate/     per-scan module.Gate: customer exclusions + rate limiter
+  internal/store/    PostgreSQL: targets, scan queue, findings lifecycle, audit log
+  internal/worker/   claims scans, runs modules, records results
+  internal/modules/all/  the list of shipped modules
+deploy/              local infrastructure files (PostgreSQL init)
 api/
 web/
 docs/
@@ -80,6 +87,11 @@ These are the product. A breach of them is a bug, never a trade-off.
 1. **No active scan without verified ownership.** A target must be verified (DNS TXT record
    `_orus-verify.<domain>`) before any active module runs on it. Passive modules may run on
    unverified domains, but only public, read-only checks.
+   **Known gap, to solve before step 6:** a DNS TXT record proves control of the domain,
+   not ownership of the IPs it points to. A customer on shared hosting or behind a CDN
+   (Cloudflare proxy, GitHub Pages...) passes verification, and an active scan would then
+   hit the provider's infrastructure. Active modules must not run against such IPs (for
+   example: exclude known CDN/hosting ranges, or require server-level verification).
 2. **Respect exclusions.** Customer exclusions (paths, IPs, ports) are checked before every
    request, not only at job start.
 3. **Rate limiting is mandatory.** Every outbound request goes through the limiter, using the
@@ -104,12 +116,27 @@ These are the product. A breach of them is a bug, never a trade-off.
 - Structured logging with `log/slog`; never log secrets or full customer data.
 - Keep packages small and internal (`internal/`) unless they are a deliberate public API.
 
+## Local development
+
+```
+cp .env.example .env            # then set a password (never commit .env)
+docker-compose up -d            # PostgreSQL 18 on 127.0.0.1:55432 (ORUS_PG_PORT)
+set -a; . ./.env; set +a
+cd engine && go test -race ./...    # integration tests run when ORUS_TEST_DATABASE_URL is set
+go run ./cmd/worker                 # in one terminal
+go run ./cmd/orusctl target add <domain> && go run ./cmd/orusctl scan <domain>
+```
+
+Only scan domains you own, even passively. For TLS test cases, badssl.com subdomains are
+built for that purpose. The test lab domain is deliberately misconfigured: never reuse the
+product's own domain for it.
+
 ## Roadmap
 
 1. Finding schema and Module interface, with tests. (done)
 2. Email module: SPF, DKIM, DMARC (passive). (done)
 3. TLS/certificate module (passive). (done)
-4. Worker, queue and storage.
+4. Worker, queue and storage. (done)
 5. Ownership verification (DNS TXT).
 6. Ports module (active, verified targets only).
 7. API, then dashboard (design mockups exist on the project canvas).
@@ -121,9 +148,9 @@ tools below before the roadmap step listed for it.
 
 | Tool | Role | Decision | When |
 |---|---|---|---|
-| PostgreSQL | Main database: customers, assets, scans, findings (`JSONB`) | Adopt | Step 4 |
-| Docker / Compose | Local dev environment; isolation of heavy scanners | Adopt | Step 4 |
-| Queue | Scan jobs for workers | Start with PostgreSQL (`SELECT ... FOR UPDATE SKIP LOCKED`); no extra service | Step 4 |
+| PostgreSQL | Main database: customers, assets, scans, findings (`JSONB`) | Adopted: PostgreSQL 18 (uuidv7), driver pgx v5 (MIT) | Step 4 |
+| Docker / Compose | Local dev environment; isolation of heavy scanners | Adopted for local dev (`docker-compose.yml`) | Step 4 |
+| Queue | Scan jobs for workers | Adopted: PostgreSQL (`SELECT ... FOR UPDATE SKIP LOCKED`), leases + fencing; no extra service | Step 4 |
 | Redis or Valkey | Shared rate limiting and cache across workers | Defer until several workers run; check Redis's current license first, prefer Valkey (BSD) if in doubt | After step 4 |
 | Nuclei | Template-based vulnerability detection (Go, MIT) | Adopt as a library, wrapped in a module | After step 6 |
 | OWASP ZAP | Deep web application testing ("Deep" scan profile) | Adopt later, run in Docker, driven through its API | After step 7 |
