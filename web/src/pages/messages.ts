@@ -29,6 +29,10 @@ export const PASSWORD_MIN_LENGTH = 12;
 
 /** fallback is the message of an error a page does not handle itself. */
 export function fallback(e: unknown): string {
-  if (e instanceof ApiError) return e.status === 429 ? msg.rateLimited : msg.unexpected;
-  return msg.offline;
+  if (!(e instanceof ApiError)) return msg.offline; // network error
+  if (e.status === 429) return msg.rateLimited;
+  // 502 to 504: a proxy (Vite in development, the reverse proxy in
+  // production) could not reach the API.
+  if (e.status >= 502 && e.status <= 504) return msg.offline;
+  return msg.unexpected;
 }

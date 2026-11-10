@@ -99,6 +99,15 @@ describe("App", () => {
     expect((await screen.findByRole("alert")).textContent).toBe("Adresse e-mail ou mot de passe incorrect.");
   });
 
+  it("says when the API cannot be reached", async () => {
+    mockApi({ "GET /auth/me": fail(401), "POST /auth/login": fail(502) });
+    start("/login");
+    fireEvent.change(await screen.findByLabelText("Adresse e-mail"), { target: { value: "a@acme.example" } });
+    fireEvent.change(screen.getByLabelText("Mot de passe"), { target: { value: "correct horse battery staple" } });
+    fireEvent.click(screen.getByRole("button", { name: "Se connecter" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/Le serveur ne répond pas/);
+  });
+
   it("sends an admin without a second factor to enrolment", async () => {
     mockApi({ "GET /auth/me": ok(adminNoMfa) });
     start("/orgs/" + ORG);
