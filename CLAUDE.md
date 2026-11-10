@@ -23,9 +23,10 @@ for admins (packages `totp` and `seal`); the authentication flows live in packag
 the previous period, new assets, rule-based priorities); `GET /orgs/{org}/findings` lists
 every target's findings. The dashboard is a React + TypeScript app in `web/` that consumes
 the API (an earlier server-rendered Go version was dropped on 2026-11-10 in favor of
-React): sign-in, MFA, password setup, the overview and the vulnerabilities screen are done,
-the other menu entries show "Bientôt disponible". Finding texts are still the modules'
-English: French texts per check are the next step.
+React): sign-in, MFA, password setup, the overview, vulnerabilities and assets (add a domain,
+DNS TXT verification, first scan) screens are done,
+the other menu entries show "Bientôt disponible". Finding texts stay in the modules'
+English (decided 2026-11-10); the dashboard's own wording is French.
 
 ## How to work on this repo
 

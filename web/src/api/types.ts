@@ -144,3 +144,25 @@ export interface Scan {
   started_at: string | null;
   finished_at: string | null;
 }
+
+/** targetJSON */
+export interface Target {
+  id: string;
+  domain: string;
+  verified: boolean;
+  verified_at: string | null;
+  verify_checked_at: string | null;
+  rate_per_sec: number;
+  exclusions: unknown;
+  created_at: string;
+}
+
+/** instructionsJSON: the DNS record that proves ownership. */
+export interface Instructions {
+  domain: string;
+  record_name: string;
+  record_type: "TXT";
+  record_value: string;
+  expires_at: string | null;
+  verified: boolean;
+}

@@ -1,4 +1,4 @@
-import type { Finding, FindingStatus, List, Me, MfaChallenge, MfaSetup, Overview, RecoveryCodes, Scan } from "./types";
+import type { Finding, FindingStatus, Instructions, List, Me, MfaChallenge, MfaSetup, Overview, RecoveryCodes, Scan, Target } from "./types";
 
 /**
  * An error answered by the API. message is the API's English text, for
@@ -62,6 +62,12 @@ export const api = {
     ),
   startScan: (orgId: string, targetId: string, modules?: string[]) =>
     request<Scan>("POST", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/scans`, modules ? { modules } : {}),
+  createTarget: (orgId: string, domain: string) => request<Target>("POST", `${org(orgId)}/targets`, { domain }),
+  /** verificationInstructions issues a token if needed: it is a POST. */
+  verificationInstructions: (orgId: string, targetId: string) =>
+    request<Instructions>("POST", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/verification`),
+  verifyTarget: (orgId: string, targetId: string) =>
+    request<Target>("POST", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/verify`),
   scan: (orgId: string, scanId: string, signal?: AbortSignal) =>
     request<Scan>("GET", `${org(orgId)}/scans/${encodeURIComponent(scanId)}`, undefined, signal),
 };

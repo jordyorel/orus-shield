@@ -81,6 +81,11 @@ function OverviewContent({ data, org, loading }: { data: Overview; org: Membersh
       <section className="card empty">
         <h2>Aucun domaine surveillé</h2>
         <p>Ajoutez le domaine de votre entreprise pour lancer la première analyse. Le score, les vulnérabilités et les actifs exposés s’afficheront ici.</p>
+        <p className="card-note">
+          <Link className="btn btn-primary" to={orgPath(org.org_id, "actifs")}>
+            Ajouter un domaine
+          </Link>
+        </p>
       </section>
     );
   }
