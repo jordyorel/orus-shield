@@ -55,7 +55,7 @@ func TestUpdateTarget(t *testing.T) {
 		"null exclusions":   map[string]any{"exclusions": nil, "rate_per_sec": 5},
 		"unknown key":       map[string]any{"exclusions": map[string]any{"domains": []string{"x"}}},
 		"zero rate":         map[string]any{"rate_per_sec": 0},
-		"rate above limit":  map[string]any{"rate_per_sec": 101},
+		"rate above limit":  map[string]any{"rate_per_sec": 201},
 		"exclusions string": map[string]any{"exclusions": "all"},
 	} {
 		if r := e.do("PATCH", path, a.session, body); r.status != http.StatusBadRequest {

@@ -37,6 +37,10 @@ func (s *Server) writeRoutes(mux *http.ServeMux) {
 	write("GET "+base+"/audit", s.auditLog)
 }
 
+// maxRatePerSec bounds a target's request rate, as the dashboard's slider
+// (5 to 200 per asset). The customer chooses within it (rule 3).
+const maxRatePerSec = 200
+
 // actor is how the caller appears in the audit log.
 func actor(req orgRequest) string { return "user:" + req.sess.Email }
 
@@ -61,8 +65,8 @@ func (s *Server) createTarget(w http.ResponseWriter, r *http.Request, req orgReq
 		writeError(w, http.StatusBadRequest, "invalid domain")
 		return
 	}
-	if body.RatePerSec < 0 || body.RatePerSec > 100 {
-		writeError(w, http.StatusBadRequest, "rate_per_sec must be between 0 (default) and 100")
+	if body.RatePerSec < 0 || body.RatePerSec > maxRatePerSec {
+		writeError(w, http.StatusBadRequest, "rate_per_sec must be between 0 (default) and 200")
 		return
 	}
 	t, err := req.org.CreateTarget(r.Context(), store.NewTarget{Domain: body.Domain, Exclusions: body.Exclusions, RatePerSec: body.RatePerSec})
@@ -113,8 +117,8 @@ func (s *Server) updateTarget(w http.ResponseWriter, r *http.Request, req orgReq
 			return
 		}
 	}
-	if body.RatePerSec != nil && (*body.RatePerSec <= 0 || *body.RatePerSec > 100) {
-		writeError(w, http.StatusBadRequest, "rate_per_sec must be greater than 0 and at most 100")
+	if body.RatePerSec != nil && (*body.RatePerSec <= 0 || *body.RatePerSec > maxRatePerSec) {
+		writeError(w, http.StatusBadRequest, "rate_per_sec must be greater than 0 and at most 200")
 		return
 	}
 	updated, err := req.org.UpdateTargetSettings(r.Context(), t.ID, store.TargetSettings{Exclusions: body.Exclusions, RatePerSec: body.RatePerSec})

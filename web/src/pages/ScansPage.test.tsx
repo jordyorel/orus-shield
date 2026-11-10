@@ -54,23 +54,46 @@ function start(role: "admin" | "viewer", routes: Record<string, Route> = {}) {
 }
 
 describe("ScansPage", () => {
-  it("shows the engine's modules, the profiles and the history", async () => {
+  it("reproduces the mockup: profiles, every module, planning, intensity, history", async () => {
     start("admin");
     expect(await screen.findByText("Sécurité des emails")).toBeTruthy();
-    expect(screen.getByText("4 modules actifs")).toBeTruthy();
+    for (const name of ["Rapide", "Standard", "Approfondi"]) expect(screen.getByRole("button", { name: new RegExp(name) })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Standard/ }).getAttribute("aria-pressed")).toBe("true");
-    // Modules the engine lacks are listed as coming, and cannot be enabled.
+    expect(screen.getByText("4 modules actifs")).toBeTruthy();
+    // The mockup's nine modules plus the engine's CDN module.
+    expect(document.querySelectorAll(".module")).toHaveLength(10);
     expect((screen.getByRole("button", { name: "Microsoft 365 : bientôt disponible" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Intrusif")).toBeTruthy();
+    for (const label of ["Fréquence", "Jour", "Heure"]) expect((screen.getByLabelText(label) as HTMLSelectElement).disabled).toBe(false);
+    expect(screen.getByLabelText("Requêtes par seconde, par actif")).toBeTruthy();
 
     const rows = within(screen.getByRole("table")).getAllByRole("row").slice(1);
     expect(rows[0]?.textContent).toContain("Standard");
     expect(rows[0]?.textContent).toContain("6 min");
     expect(rows[1]?.textContent).toContain("Rapide");
 
-    // The quick profile keeps the passive modules only.
+    // Profiles are clickable and change the modules.
     fireEvent.click(screen.getByRole("button", { name: /Rapide/ }));
     expect(screen.getByText("3 modules actifs")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Activer Ports et services" }).getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: /Approfondi/ }));
+    expect(screen.getByText(/Approfondi lance les mêmes modules que Standard/)).toBeTruthy();
+  });
+
+  it("groups a launch's scans and shows its real progress", async () => {
+    const at = new Date(2026, 10, 10, 9, 0).toISOString();
+    start("admin", {
+      [`GET ${base}/scans?limit=20`]: ok({
+        items: [
+          scan("a", "running", ["cdn", "email", "ports", "tls"], { created_at: at, domain: "acme.example" }),
+          scan("b", "done", ["cdn", "email", "ports", "tls"], { created_at: at, domain: "beta.example" }),
+        ],
+      }),
+    });
+    const rows = within(await screen.findByRole("table")).getAllByRole("row").slice(1);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.textContent).toContain("En cours · 50 %");
+    expect(within(rows[0]!).getAllByRole("cell")[2]?.textContent).toBe("2");
   });
 
   it("launches a scan of every domain and warns about active checks on unverified ones", async () => {
@@ -84,20 +107,20 @@ describe("ScansPage", () => {
     expect(calls.find((c) => c.key === `POST ${base}/targets/t1/scans`)?.body).toEqual({ modules: ["cdn", "email", "ports", "tls"] });
   });
 
-  it("saves a domain's intensity and exclusions", async () => {
+  it("saves intensity and exclusions for every domain", async () => {
     const calls = start("admin", {
       [`PATCH ${base}/targets/t1`]: (body) => ({ status: 200, json: { ...target("t1", "acme.example", true), ...(body as object) } }),
+      [`PATCH ${base}/targets/t2`]: (body) => ({ status: 200, json: { ...target("t2", "beta.example", false), ...(body as object) } }),
     });
     const excl = (await screen.findByLabelText("Exclusions")) as HTMLTextAreaElement;
     expect(excl.value).toBe("/admin\n3389");
     fireEvent.change(excl, { target: { value: "/admin\n3389\n192.0.2.10" } });
-    fireEvent.change(screen.getByLabelText(/Requêtes par seconde/), { target: { value: "20" } });
+    fireEvent.change(screen.getByLabelText("Requêtes par seconde, par actif"), { target: { value: "50" } });
     fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
     expect(await screen.findByText("Configuration enregistrée")).toBeTruthy();
-    expect(calls.find((c) => c.key.startsWith("PATCH"))?.body).toEqual({
-      rate_per_sec: 20,
-      exclusions: { ips: ["192.0.2.10"], ports: [3389], paths: ["/admin"], hosts: [] },
-    });
+    const patches = calls.filter((c) => c.key.startsWith("PATCH"));
+    expect(patches.map((c) => c.key)).toEqual([`PATCH ${base}/targets/t1`, `PATCH ${base}/targets/t2`]);
+    expect(patches[0]?.body).toEqual({ rate_per_sec: 50, exclusions: { ips: ["192.0.2.10"], ports: [3389], paths: ["/admin"], hosts: [] } });
   });
 
   it("refuses unreadable exclusions before sending them", async () => {
@@ -108,10 +131,15 @@ describe("ScansPage", () => {
     expect(calls.some((c) => c.key.startsWith("PATCH"))).toBe(false);
   });
 
-  it("lets a viewer read only", async () => {
+  it("shows a viewer the same screen, with the buttons inactive", async () => {
     start("viewer");
-    expect(await screen.findByText(/réservés aux administrateurs/)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Lancer maintenant" })).toBeNull();
-    expect(((await screen.findByLabelText("Exclusions")) as HTMLTextAreaElement).disabled).toBe(true);
+    await screen.findByText("Sécurité des emails");
+    const launch = screen.getByRole("button", { name: "Lancer maintenant" }) as HTMLButtonElement;
+    const save = screen.getByRole("button", { name: "Enregistrer" }) as HTMLButtonElement;
+    expect(launch.disabled && save.disabled).toBe(true);
+    expect(launch.title).toBe("Réservé aux administrateurs");
+    // Options stay clickable: they only change what is shown.
+    fireEvent.click(screen.getByRole("button", { name: /Rapide/ }));
+    expect(screen.getByText("3 modules actifs")).toBeTruthy();
   });
 });

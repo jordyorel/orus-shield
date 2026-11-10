@@ -8,32 +8,94 @@ import { plural } from "../format";
 import { navigate } from "../router";
 import { fallback } from "./messages";
 
-/** French names and descriptions of the engine's modules, by ID. */
-const MODULE_TEXT: Record<string, { name: string; desc: string }> = {
-  email: { name: "Sécurité des emails", desc: "SPF, DKIM, DMARC." },
-  tls: { name: "Certificats et TLS", desc: "Expiration, protocoles faibles, chaînes invalides." },
-  ports: { name: "Ports et services", desc: "Services exposés et configurations dangereuses. Uniquement sur les adresses dont la propriété est prouvée." },
-  cdn: { name: "CDN et protection web", desc: "Détection des CDN et des pare-feux applicatifs (WAF)." },
-};
+// The Scans screen of docs/design/Scans.dc.html. Every control of the mockup
+// is here and clickable; what the engine cannot do yet is marked
+// "Bientôt", never pretended.
 
-/** Modules of the mockup the engine does not have yet. */
-const UPCOMING = [
-  { name: "Découverte de la surface d’attaque", desc: "Sous-domaines, certificats publics, plages IP associées." },
-  { name: "Applications web", desc: "Injections, authentification, en-têtes, CMS obsolètes." },
-  { name: "Microsoft 365", desc: "Double authentification, administrateurs, partages externes." },
-  { name: "Fuites de données", desc: "Adresses et identifiants dans des fuites publiques." },
+type ProfileId = "quick" | "standard" | "deep";
+
+interface ProfileDef {
+  id: ProfileId;
+  name: string;
+  desc: string;
+  /** Module IDs the profile selects, from the engine's catalog. */
+  modules: (all: ModuleInfo[]) => string[];
+}
+
+const PROFILES: ProfileDef[] = [
+  { id: "quick", name: "Rapide", desc: "Vérifications passives uniquement, sans sonde.", modules: (all) => all.filter((m) => m.kind === "passive").map((m) => m.id) },
+  { id: "standard", name: "Standard", desc: "Tous les modules actifs, sans test intrusif.", modules: (all) => all.map((m) => m.id) },
+  { id: "deep", name: "Approfondi", desc: "Tous les ports, tests applicatifs étendus.", modules: (all) => all.map((m) => m.id) },
 ];
 
-type Profile = "quick" | "standard";
+/**
+ * The mockup's modules, in its order, mapped to the engine's module IDs.
+ * engine is null for a module the engine does not have yet.
+ */
+const MODULES: { engine: string | null; name: string; desc: string; tag?: "Intrusif" | "Nouveau" }[] = [
+  { engine: null, name: "Découverte de la surface d’attaque", desc: "Sous-domaines, certificats publics, plages IP associées." },
+  { engine: "ports", name: "Ports et services", desc: "Services exposés, versions et configurations dangereuses." },
+  { engine: null, name: "Applications web", desc: "Injections, authentification, en-têtes, CMS obsolètes." },
+  { engine: "email", name: "Sécurité des emails", desc: "SPF, DKIM, DMARC, serveurs de messagerie." },
+  { engine: "tls", name: "Certificats et TLS", desc: "Expiration, protocoles faibles, chaînes invalides." },
+  { engine: "cdn", name: "CDN et protection web", desc: "Détection des CDN et des pare-feux applicatifs (WAF)." },
+  { engine: null, name: "Microsoft 365", desc: "Double authentification, administrateurs, partages externes." },
+  { engine: null, name: "Fuites de données", desc: "Adresses et identifiants dans des fuites publiques." },
+  { engine: null, name: "Validation par agents IA", desc: "Tente d’exploiter les failles de façon contrôlée pour éliminer les faux positifs.", tag: "Intrusif" },
+  { engine: null, name: "Audit de l’usage de l’IA", desc: "Clés d’API exposées, chatbots vulnérables à l’injection de prompt.", tag: "Nouveau" },
+];
+
+const FREQUENCIES = ["Quotidienne", "Hebdomadaire", "Mensuelle", "Continue (surveillance)"];
+const DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+const HOURS = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, "0")}:00`);
 
 const POLL_MS = 3000;
+const ADMIN_ONLY = "Réservé aux administrateurs";
 
-function profileOf(modules: string[], all: ModuleInfo[]): string {
-  const passive = all.filter((m) => m.kind === "passive").map((m) => m.id);
-  const ids = [...modules].sort().join(",");
-  if (ids === all.map((m) => m.id).sort().join(",")) return "Standard";
-  if (ids === [...passive].sort().join(",")) return "Rapide";
+/** A launch: the scans "Lancer maintenant" queued together, one per domain. */
+interface Run {
+  key: string;
+  createdAt: string;
+  modules: string[];
+  scans: Scan[];
+}
+
+/** groupRuns puts together the scans one person requested within a minute with the same modules. */
+export function groupRuns(scans: Scan[]): Run[] {
+  const runs: Run[] = [];
+  for (const s of scans) {
+    const mods = [...s.modules].sort();
+    const last = runs[runs.length - 1];
+    const close = last && Math.abs(new Date(last.createdAt).getTime() - new Date(s.created_at).getTime()) < 60_000;
+    if (last && close && last.scans[0]?.requested_by === s.requested_by && last.modules.join() === mods.join()) {
+      last.scans.push(s);
+      if (s.created_at < last.createdAt) last.createdAt = s.created_at;
+    } else {
+      runs.push({ key: s.id, createdAt: s.created_at, modules: mods, scans: [s] });
+    }
+  }
+  return runs;
+}
+
+function profileName(modules: string[], all: ModuleInfo[]): string {
+  const ids = [...modules].sort().join();
+  if (ids === PROFILES[1]!.modules(all).sort().join()) return "Standard";
+  if (ids === PROFILES[0]!.modules(all).sort().join()) return "Rapide";
   return "Personnalisé";
+}
+
+/** runSeconds: from the first start to the last end, once every scan ended. */
+function runSeconds(r: Run): number | null {
+  if (r.scans.some((s) => !s.started_at || !s.finished_at)) return null;
+  const start = Math.min(...r.scans.map((s) => new Date(s.started_at!).getTime()));
+  const end = Math.max(...r.scans.map((s) => new Date(s.finished_at!).getTime()));
+  return (end - start) / 1000;
+}
+
+function durationText(sec: number): string {
+  if (sec < 60) return `${Math.max(1, Math.round(sec))} s`;
+  if (sec < 3600) return `${Math.round(sec / 60)} min`;
+  return `${Math.floor(sec / 3600)} h ${String(Math.round((sec % 3600) / 60)).padStart(2, "0")}`;
 }
 
 function when(iso: string): string {
@@ -42,27 +104,31 @@ function when(iso: string): string {
   return `${p(d.getDate())}/${p(d.getMonth() + 1)}, ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-function took(s: Scan): string {
-  if (!s.started_at || !s.finished_at) return "—";
-  const sec = (new Date(s.finished_at).getTime() - new Date(s.started_at).getTime()) / 1000;
-  if (sec < 60) return `${Math.max(1, Math.round(sec))} s`;
-  if (sec < 3600) return `${Math.round(sec / 60)} min`;
-  return `${Math.floor(sec / 3600)} h ${String(Math.round((sec % 3600) / 60)).padStart(2, "0")}`;
+function rateHint(r: number): string {
+  if (r <= 30) return "Doux : adapté aux serveurs fragiles ou aux connexions lentes.";
+  if (r <= 100) return "Équilibré : recommandé pour la plupart des PME.";
+  return "Rapide : à réserver aux infrastructures robustes.";
 }
 
-function rateHint(r: number): string {
-  if (r <= 5) return "Doux : adapté aux serveurs fragiles ou aux connexions lentes.";
-  if (r <= 30) return "Équilibré : recommandé pour la plupart des PME.";
-  return "Rapide : à réserver aux infrastructures robustes.";
+function timeZoneLabel(): string {
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const minutes = -new Date().getTimezoneOffset();
+  const sign = minutes >= 0 ? "+" : "−";
+  const h = Math.floor(Math.abs(minutes) / 60);
+  const m = Math.abs(minutes) % 60;
+  return `${tz} (UTC${sign}${h}${m ? ":" + String(m).padStart(2, "0") : ""})`;
 }
 
 export function ScansPage({ me, org }: { me: Me; org: Membership }) {
   const isAdmin = org.role === "admin";
-  const [modules, setModules] = useState<ModuleInfo[] | null>(null);
+  const [catalog, setCatalog] = useState<ModuleInfo[] | null>(null);
   const [targets, setTargets] = useState<Target[] | null>(null);
   const [scans, setScans] = useState<Scan[]>([]);
+  const [profile, setProfile] = useState<ProfileId>("standard");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [targetId, setTargetId] = useState("");
+  const [frequency, setFrequency] = useState("Hebdomadaire");
+  const [day, setDay] = useState("Dimanche");
+  const [hour, setHour] = useState("02:00");
   const [rate, setRate] = useState(5);
   const [exclusions, setExclusions] = useState("");
   const [error, setError] = useState("");
@@ -78,14 +144,15 @@ export function ScansPage({ me, org }: { me: Me; org: Membership }) {
     const ctrl = new AbortController();
     Promise.all([api.modules(org.org_id, ctrl.signal), api.targets(org.org_id, ctrl.signal), api.scans(org.org_id, ctrl.signal)])
       .then(([m, t, s]) => {
-        setModules(m.items);
+        setCatalog(m.items);
         setSelected(new Set(m.items.map((x) => x.id)));
         setTargets(t.items);
         setScans(s.items);
+        // One configuration for every domain, as in the mockup: shown from
+        // the first domain, applied to all on save.
         const first = t.items[0];
         if (first) {
-          setTargetId(first.id);
-          setRate(first.rate_per_sec);
+          setRate(Math.min(200, Math.max(5, Math.round(first.rate_per_sec / 5) * 5)));
           setExclusions(formatExclusions(first.exclusions));
         }
       })
@@ -108,18 +175,12 @@ export function ScansPage({ me, org }: { me: Me; org: Membership }) {
     return () => clearInterval(id);
   }, [active, loadScans]);
 
-  const pickTarget = (id: string) => {
-    const t = targets?.find((x) => x.id === id);
-    if (!t) return;
-    setTargetId(id);
-    setRate(t.rate_per_sec);
-    setExclusions(formatExclusions(t.exclusions));
-    setSavedMsg("");
-  };
+  const changed = () => setSavedMsg("");
 
-  const pickProfile = (p: Profile) => {
-    if (!modules) return;
-    setSelected(new Set(modules.filter((m) => p === "standard" || m.kind === "passive").map((m) => m.id)));
+  const pickProfile = (p: ProfileDef) => {
+    setProfile(p.id);
+    if (catalog) setSelected(new Set(p.modules(catalog)));
+    changed();
   };
 
   const toggle = (id: string) => {
@@ -127,24 +188,23 @@ export function ScansPage({ me, org }: { me: Me; org: Membership }) {
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setSelected(next);
+    changed();
   };
 
   const launch = async () => {
-    if (!targets || selected.size === 0) return;
+    if (!targets || targets.length === 0 || selected.size === 0) return;
     setBusy(true);
     setNotice(null);
     try {
       const mods = [...selected];
       for (const t of targets) await api.startScan(org.org_id, t.id, mods);
-      const activeMods = modules?.filter((m) => m.kind === "active" && selected.has(m.id)) ?? [];
+      const activeMods = catalog?.some((m) => m.kind === "active" && selected.has(m.id)) ?? false;
       const unverified = targets.filter((t) => !t.verified).map((t) => t.domain);
       setNotice({
-        kind: activeMods.length > 0 && unverified.length > 0 ? "warning" : "notice",
+        kind: activeMods && unverified.length > 0 ? "warning" : "notice",
         text:
           `${targets.length} ${plural(targets.length, "scan lancé", "scans lancés")}.` +
-          (activeMods.length > 0 && unverified.length > 0
-            ? ` Les vérifications actives ne s’exécuteront pas sur ${unverified.join(", ")} : propriété non vérifiée.`
-            : ""),
+          (activeMods && unverified.length > 0 ? ` Les vérifications actives ne s’exécuteront pas sur ${unverified.join(", ")} : propriété non vérifiée.` : ""),
       });
       await loadScans();
     } catch (err) {
@@ -155,6 +215,10 @@ export function ScansPage({ me, org }: { me: Me; org: Membership }) {
   };
 
   const save = async () => {
+    if (!targets || targets.length === 0) {
+      setNotice({ kind: "warning", text: "Ajoutez d’abord un domaine dans Actifs : l’intensité et les exclusions s’appliquent à vos domaines." });
+      return;
+    }
     const parsed = parseExclusions(exclusions);
     if (parsed.errors.length > 0) {
       setNotice({ kind: "error", text: `Exclusions illisibles : ${parsed.errors.join(", ")}. Un chemin (/admin), une adresse ou plage IP, un port ou un nom d’hôte par ligne.` });
@@ -163,8 +227,9 @@ export function ScansPage({ me, org }: { me: Me; org: Membership }) {
     setBusy(true);
     setNotice(null);
     try {
-      const t = await api.updateTarget(org.org_id, targetId, { rate_per_sec: rate, exclusions: parsed.value });
-      setTargets((ts) => ts?.map((x) => (x.id === t.id ? t : x)) ?? null);
+      const updated: Target[] = [];
+      for (const t of targets) updated.push(await api.updateTarget(org.org_id, t.id, { rate_per_sec: rate, exclusions: parsed.value }));
+      setTargets(updated);
       setSavedMsg("Configuration enregistrée");
     } catch (err) {
       setNotice({ kind: "error", text: err instanceof ApiError && err.status === 400 ? "Configuration refusée : vérifiez les exclusions et l’intensité." : fallback(err) });
@@ -173,51 +238,63 @@ export function ScansPage({ me, org }: { me: Me; org: Membership }) {
     }
   };
 
-  const allIds = modules?.map((m) => m.id).sort().join(",") ?? "";
-  const passiveIds = modules?.filter((m) => m.kind === "passive").map((m) => m.id).sort().join(",") ?? "";
-  const current = [...selected].sort().join(",");
-  const target = targets?.find((t) => t.id === targetId);
+  const runs = catalog ? groupRuns(scans) : [];
+  /** Average duration of the past launches with this profile's modules. */
+  const typical = (p: ProfileDef): string => {
+    if (!catalog) return "";
+    const ids = p.modules(catalog).sort().join();
+    const secs = runs.filter((r) => r.modules.join() === ids).map(runSeconds).filter((x): x is number => x !== null);
+    if (p.id === "deep") return "Tous les ports : bientôt";
+    if (secs.length === 0) return "Durée connue après un premier scan";
+    return `Environ ${durationText(secs.reduce((a, b) => a + b, 0) / secs.length)}`;
+  };
+  const distinctSettings =
+    targets && targets.length > 1 && new Set(targets.map((t) => `${t.rate_per_sec}|${JSON.stringify(t.exclusions)}`)).size > 1;
 
-  const actions = isAdmin && (
+  const actions = (
     <>
-      {savedMsg && <span className="saved" role="status">{savedMsg}</span>}
-      <button type="button" className="btn btn-secondary" disabled={busy || !targets?.length || selected.size === 0} onClick={() => void launch()}>
+      {savedMsg && (
+        <span className="saved" role="status">
+          {savedMsg}
+        </span>
+      )}
+      <button
+        type="button"
+        className="btn btn-secondary"
+        disabled={!isAdmin || busy || !targets?.length || selected.size === 0}
+        title={isAdmin ? undefined : ADMIN_ONLY}
+        onClick={() => void launch()}
+      >
         Lancer maintenant
       </button>
-      <button type="button" className="btn btn-primary" disabled={busy || !target} onClick={() => void save()}>
+      <button type="button" className="btn btn-primary" disabled={!isAdmin || busy} title={isAdmin ? undefined : ADMIN_ONLY} onClick={() => void save()}>
         Enregistrer
       </button>
     </>
   );
 
   return (
-    <AppShell me={me} org={org} section="scans" title="Configuration des scans" actions={actions || undefined}>
+    <AppShell me={me} org={org} section="scans" title="Configuration des scans" actions={actions}>
       {error && <Alert kind="error">{error}</Alert>}
       {notice && <Alert kind={notice.kind}>{notice.text}</Alert>}
-      {!isAdmin && <p className="small muted">Le lancement des scans et leur configuration sont réservés aux administrateurs.</p>}
-      {modules && targets && (
+      {catalog && targets && (
         <>
-          <section>
+          <section className="profiles-section">
             <h2>Profil de scan</h2>
             <div className="profiles">
-              <button type="button" className="profile" aria-pressed={current === passiveIds} disabled={!isAdmin} onClick={() => pickProfile("quick")}>
-                <span className="profile-name">Rapide</span>
-                <span className="profile-desc">Vérifications passives uniquement : données publiques, sans sonde.</span>
-                <span className="profile-time">
-                  {modules.filter((m) => m.kind === "passive").length} modules
-                </span>
-              </button>
-              <button type="button" className="profile" aria-pressed={current === allIds} disabled={!isAdmin} onClick={() => pickProfile("standard")}>
-                <span className="profile-name">Standard</span>
-                <span className="profile-desc">Tous les modules, dont les ports exposés, sans test intrusif.</span>
-                <span className="profile-time">{modules.length} modules</span>
-              </button>
-              <button type="button" className="profile" aria-pressed={false} disabled>
-                <span className="profile-name">Approfondi</span>
-                <span className="profile-desc">Tous les ports, tests applicatifs étendus.</span>
-                <span className="profile-time soon">Bientôt disponible</span>
-              </button>
+              {PROFILES.map((p) => (
+                <button key={p.id} type="button" className="profile" aria-pressed={profile === p.id} onClick={() => pickProfile(p)}>
+                  <span className="profile-name">{p.name}</span>
+                  <span className="profile-desc">{p.desc}</span>
+                  <span className="profile-time">{typical(p)}</span>
+                </button>
+              ))}
             </div>
+            {profile === "deep" && (
+              <p className="small muted profile-note">
+                Pour l’instant, Approfondi lance les mêmes modules que Standard : le scan de tous les ports et les tests applicatifs étendus arrivent bientôt.
+              </p>
+            )}
           </section>
 
           <div className="row">
@@ -227,36 +304,31 @@ export function ScansPage({ me, org }: { me: Me; org: Membership }) {
                 {selected.size} {plural(selected.size, "module actif", "modules actifs")}
               </p>
               <div className="modules">
-                {modules.map((m) => {
-                  const text = MODULE_TEXT[m.id] ?? { name: m.name || m.id, desc: "" };
-                  const on = selected.has(m.id);
+                {MODULES.map((m) => {
+                  const known = m.engine !== null && catalog.some((c) => c.id === m.engine);
+                  const on = known && selected.has(m.engine!);
                   return (
-                    <div className="module" key={m.id}>
+                    <div className={known ? "module" : "module upcoming"} key={m.name}>
                       <div>
                         <p className="module-name">
-                          {text.name} {m.kind === "active" && <span className="tag warn">Actif</span>}
+                          {m.name} {m.tag && <span className={m.tag === "Intrusif" ? "tag warn" : "tag new"}>{m.tag}</span>}{" "}
+                          {!known && <span className="tag accepted">Bientôt</span>}
                         </p>
-                        <p className="small muted">{text.desc}</p>
+                        <p className="small muted">{m.desc}</p>
                       </div>
-                      <button type="button" className="switch" aria-pressed={on} aria-label={(on ? "Désactiver " : "Activer ") + text.name} disabled={!isAdmin} onClick={() => toggle(m.id)}>
+                      <button
+                        type="button"
+                        className="switch"
+                        aria-pressed={on}
+                        aria-label={known ? (on ? "Désactiver " : "Activer ") + m.name : `${m.name} : bientôt disponible`}
+                        disabled={!known}
+                        onClick={() => known && toggle(m.engine!)}
+                      >
                         <span />
                       </button>
                     </div>
                   );
                 })}
-                {UPCOMING.map((m) => (
-                  <div className="module upcoming" key={m.name}>
-                    <div>
-                      <p className="module-name">
-                        {m.name} <span className="tag accepted">Bientôt</span>
-                      </p>
-                      <p className="small muted">{m.desc}</p>
-                    </div>
-                    <button type="button" className="switch" aria-pressed={false} aria-label={`${m.name} : bientôt disponible`} disabled>
-                      <span />
-                    </button>
-                  </div>
-                ))}
               </div>
             </section>
 
@@ -266,79 +338,60 @@ export function ScansPage({ me, org }: { me: Me; org: Membership }) {
                 <div className="stack plan">
                   <div className="field">
                     <label htmlFor="freq">Fréquence</label>
-                    <select id="freq" disabled>
-                      <option>Manuelle (bientôt automatique)</option>
+                    <select id="freq" value={frequency} onChange={(e) => (setFrequency(e.target.value), changed())}>
+                      {FREQUENCIES.map((f) => (
+                        <option key={f}>{f}</option>
+                      ))}
                     </select>
                   </div>
-                  <p className="small muted">
-                    La planification automatique arrive bientôt : pour l’instant, lancez les scans avec « Lancer maintenant ». Fuseau horaire :{" "}
-                    {Intl.DateTimeFormat().resolvedOptions().timeZone}.
-                  </p>
+                  <div className="two-cols">
+                    <div className="field">
+                      <label htmlFor="day">Jour</label>
+                      <select id="day" value={day} onChange={(e) => (setDay(e.target.value), changed())}>
+                        {DAYS.map((d) => (
+                          <option key={d}>{d}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label htmlFor="hour">Heure</label>
+                      <select id="hour" value={hour} onChange={(e) => (setHour(e.target.value), changed())}>
+                        {HOURS.map((h) => (
+                          <option key={h}>{h}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <p className="small muted">Fuseau horaire : {timeZoneLabel()}</p>
+                  <p className="small soon">Les scans planifiés démarreront automatiquement dès que le planificateur du moteur sera en place (bientôt).</p>
                 </div>
               </section>
 
               <section className="card">
                 <h2>Intensité</h2>
-                {targets.length === 0 ? (
-                  <p className="small muted card-note">Ajoutez un domaine dans Actifs pour régler son intensité et ses exclusions.</p>
-                ) : (
-                  <div className="stack plan">
-                    {targets.length > 1 && (
-                      <div className="field">
-                        <label htmlFor="target">Domaine</label>
-                        <select id="target" value={targetId} onChange={(e) => pickTarget(e.target.value)}>
-                          {targets.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.domain}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    <div className="field">
-                      <div className="bar-head">
-                        <label htmlFor="rate">Requêtes par seconde{targets.length === 1 ? ` (${targets[0]?.domain})` : ""}</label>
-                        <span className="strong">{rate}</span>
-                      </div>
-                      <input
-                        id="rate"
-                        type="range"
-                        min={1}
-                        max={100}
-                        step={1}
-                        value={rate}
-                        disabled={!isAdmin}
-                        onChange={(e) => {
-                          setRate(Number(e.target.value));
-                          setSavedMsg("");
-                        }}
-                      />
-                      <p className="hint">{rateHint(rate)}</p>
+                <div className="stack plan">
+                  <div className="field">
+                    <div className="bar-head">
+                      <label htmlFor="rate">Requêtes par seconde, par actif</label>
+                      <span className="strong">{rate}</span>
                     </div>
-                    <div className="field">
-                      <label htmlFor="excl">Exclusions</label>
-                      <textarea
-                        id="excl"
-                        rows={3}
-                        value={exclusions}
-                        disabled={!isAdmin}
-                        spellCheck={false}
-                        onChange={(e) => {
-                          setExclusions(e.target.value);
-                          setSavedMsg("");
-                        }}
-                      />
-                      <p className="hint">Chemins, adresses ou ports à ne jamais tester. Un par ligne : /admin, 192.0.2.10, 10.0.0.0/8, 3389, intranet.exemple.com.</p>
-                    </div>
+                    <input id="rate" type="range" min={5} max={200} step={5} value={rate} onChange={(e) => (setRate(Number(e.target.value)), changed())} />
+                    <p className="hint">{rateHint(rate)}</p>
                   </div>
-                )}
+                  <div className="field">
+                    <label htmlFor="excl">Exclusions</label>
+                    <textarea id="excl" rows={3} value={exclusions} spellCheck={false} onChange={(e) => (setExclusions(e.target.value), changed())} />
+                    <p className="hint">Chemins, adresses ou ports à ne jamais tester.</p>
+                  </div>
+                  {distinctSettings && <p className="small soon">Vos domaines ont des réglages différents : « Enregistrer » applique ceux-ci à tous.</p>}
+                </div>
               </section>
             </div>
           </div>
 
           <section className="card row-single">
             <h2>Historique</h2>
-            {scans.length === 0 ? (
+            {runs.length === 0 ? (
               <p className="small muted card-note">Aucun scan pour l’instant.</p>
             ) : (
               <div className="table-wrap">
@@ -347,34 +400,45 @@ export function ScansPage({ me, org }: { me: Me; org: Membership }) {
                     <tr>
                       <th scope="col">Date</th>
                       <th scope="col">Profil</th>
-                      <th scope="col">Actif</th>
+                      <th scope="col">Actifs</th>
                       <th scope="col">Durée</th>
                       <th scope="col">Nouvelles</th>
                       <th scope="col">Statut</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {scans.map((s) => (
-                      <tr key={s.id}>
-                        <td>{when(s.created_at)}</td>
-                        <td>{profileOf(s.modules, modules)}</td>
-                        <td className="name">{s.domain}</td>
-                        <td>{took(s)}</td>
-                        <td>{s.new_findings ?? "—"}</td>
-                        <td>
-                          {s.status === "done" && <span className="muted">Terminé</span>}
-                          {s.status === "failed" && <span className="stale">Échec</span>}
-                          {(s.status === "queued" || s.status === "running") && (
-                            <span className="progress">
-                              <span className="progress-bar" aria-hidden="true">
-                                <span />
+                    {runs.map((r) => {
+                      const ended = r.scans.filter((s) => s.status === "done" || s.status === "failed").length;
+                      const running = ended < r.scans.length;
+                      const failed = r.scans.filter((s) => s.status === "failed").length;
+                      const secs = runSeconds(r);
+                      const pct = Math.round((100 * ended) / r.scans.length);
+                      return (
+                        <tr key={r.key}>
+                          <td>{when(r.createdAt)}</td>
+                          <td>{profileName(r.modules, catalog)}</td>
+                          <td title={r.scans.map((s) => s.domain).join(", ")}>{r.scans.length}</td>
+                          <td>{secs === null ? "—" : durationText(secs)}</td>
+                          <td>{running ? "—" : r.scans.reduce((n, s) => n + (s.new_findings ?? 0), 0)}</td>
+                          <td>
+                            {running ? (
+                              <span className="progress">
+                                <span className="progress-bar" aria-hidden="true">
+                                  <span style={{ width: `${Math.max(pct, 4)}%` }} />
+                                </span>
+                                En cours · {pct} %
                               </span>
-                              {s.status === "queued" ? "En attente" : "En cours"}
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                            ) : failed === r.scans.length ? (
+                              <span className="stale">Échec</span>
+                            ) : (
+                              <span className="muted">
+                                Terminé{failed > 0 ? ` · ${failed} ${plural(failed, "échec", "échecs")}` : ""}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
