@@ -32,22 +32,9 @@ type orgHandler func(w http.ResponseWriter, r *http.Request, req orgRequest)
 func (s *Server) withOrg(minRole string, h orgHandler) http.HandlerFunc {
 	return s.withSession(func(w http.ResponseWriter, r *http.Request, sess store.Session, _ string) {
 		orgID := r.PathValue("org")
-		role, err := s.auth.Role(r.Context(), sess.UserID, orgID)
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "not found")
-			return
-		}
+		role, err := s.acct.Access(r.Context(), sess, orgID, minRole)
 		if err != nil {
-			s.internalError(w, r, err)
-			return
-		}
-		if role == store.RoleAdmin && !sess.MFA {
-			writeErrorCode(w, http.StatusForbidden, "mfa_required",
-				"two-factor authentication is required for administrators: enable it first")
-			return
-		}
-		if minRole == store.RoleAdmin && role != store.RoleAdmin {
-			writeError(w, http.StatusForbidden, "this action needs the admin role")
+			s.accountError(w, r, err, http.StatusUnauthorized)
 			return
 		}
 		org, err := s.org(orgID)

@@ -4,28 +4,20 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"time"
 
+	"github.com/jordyorel/orus-shield/engine/internal/account"
 	"github.com/jordyorel/orus-shield/engine/internal/password"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
-// sessionCookie is the session cookie's name. The __Host- prefix makes
-// browsers refuse it unless it is Secure, has Path=/ and no Domain: a
-// subdomain cannot set or overwrite it.
-const sessionCookie = "__Host-orus_session"
+// sessionCookie is the session cookie's name, shared with the dashboard.
+const sessionCookie = account.SessionCookie
 
-// Login rate limit: failures counted over loginWindow.
+// Aliases kept for the tests, which exercise the limit through the API.
 const (
-	loginWindow       = 15 * time.Minute
-	maxFailuresPerKey = 5  // per email
-	maxFailuresPerIP  = 20 // per client address
+	loginWindow       = account.LoginWindow
+	maxFailuresPerKey = account.MaxFailuresPerKey
 )
-
-// msgBadCredentials is the only answer to a failed login, whatever the
-// reason (unknown email, no password set, wrong password, disabled
-// account): the API never tells whether an account exists.
-const msgBadCredentials = "invalid email or password"
 
 type loginRequest struct {
 	Email    string `json:"email"`
@@ -48,138 +40,62 @@ type meResponse struct {
 	Orgs       []membershipJSON `json:"orgs"`
 }
 
+// accountError answers an error of package account. badCredentials is the
+// status of a wrong password: 401 at login, 403 when confirming a
+// sensitive action with an open session. Unknown errors are internal.
+func (s *Server) accountError(w http.ResponseWriter, r *http.Request, err error, badCredentials int) {
+	switch {
+	case errors.Is(err, account.ErrBadCredentials):
+		writeError(w, badCredentials, err.Error())
+	case errors.Is(err, account.ErrRateLimited):
+		w.Header().Set("Retry-After", strconv.Itoa(int(account.LoginWindow.Seconds())))
+		writeError(w, http.StatusTooManyRequests, err.Error())
+	case errors.Is(err, account.ErrBadCode):
+		writeError(w, badCredentials, err.Error())
+	case errors.Is(err, account.ErrChallengeExpired), errors.Is(err, account.ErrNoSession):
+		writeError(w, http.StatusUnauthorized, err.Error())
+	case errors.Is(err, account.ErrInvalidSetupToken),
+		errors.Is(err, password.ErrTooShort), errors.Is(err, password.ErrTooLong):
+		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, account.ErrMFAEnabled), errors.Is(err, account.ErrMFANotEnabled),
+		errors.Is(err, account.ErrNoMFASetup):
+		writeError(w, http.StatusConflict, err.Error())
+	case errors.Is(err, account.ErrNotMember):
+		writeError(w, http.StatusNotFound, "not found")
+	case errors.Is(err, account.ErrMFARequired):
+		writeErrorCode(w, http.StatusForbidden, "mfa_required", err.Error())
+	case errors.Is(err, account.ErrNeedAdmin):
+		writeError(w, http.StatusForbidden, err.Error())
+	default:
+		s.internalError(w, r, err)
+	}
+}
+
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if !decode(w, r, &req) {
 		return
 	}
-	u, ok := s.authenticate(w, r, req.Email, req.Password, http.StatusUnauthorized)
-	if !ok {
-		return
-	}
-	ctx := r.Context()
-	if u.MFAEnabled {
-		// The password is right, but no session yet: the client sends the
-		// code with this token to POST /auth/login/mfa.
-		challenge, err := s.auth.CreateMFAChallenge(ctx, u.ID, clientIP(r), s.cfg.Now().Add(mfaChallengeTTL))
-		if err != nil {
-			s.internalError(w, r, err)
-			return
-		}
-		if err := s.auth.Log(ctx, store.AuthEvent{UserID: u.ID, Email: u.Email, Action: store.AuthMFAChallenge, IP: clientIP(r)}); err != nil {
-			s.internalError(w, r, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, mfaChallengeResponse{MFARequired: true, MFAToken: challenge})
-		return
-	}
-
-	// A new token on every login: a token known before login (session
-	// fixation) is worthless.
-	expires := s.cfg.Now().Add(s.cfg.SessionMax)
-	token, err := s.auth.CreateSession(ctx, u.ID, clientIP(r), r.UserAgent(), expires)
+	res, err := s.acct.Login(r.Context(), req.Email, req.Password, account.ClientFrom(r))
 	if err != nil {
-		s.internalError(w, r, err)
+		s.accountError(w, r, err, http.StatusUnauthorized)
 		return
 	}
-	if err := s.auth.Log(ctx, store.AuthEvent{UserID: u.ID, Email: u.Email, Action: store.AuthLoginOK, IP: clientIP(r)}); err != nil {
-		s.internalError(w, r, err)
+	if res.MFAToken != "" {
+		// The client sends the code with this token to POST /auth/login/mfa.
+		writeJSON(w, http.StatusOK, mfaChallengeResponse{MFARequired: true, MFAToken: res.MFAToken})
 		return
 	}
-	setSessionCookie(w, token, expires)
-	s.writeMe(w, r, store.Session{UserID: u.ID, Email: u.Email})
-}
-
-// authenticate checks an email and password under the login rate limit,
-// for a login or to confirm a sensitive action. On failure it has answered
-// (failStatus with the generic message, or 429) and returns false.
-func (s *Server) authenticate(w http.ResponseWriter, r *http.Request, rawEmail, pw string, failStatus int) (store.User, bool) {
-	ctx := r.Context()
-	email, err := store.NormalizeEmail(rawEmail)
-	if err != nil {
-		writeError(w, failStatus, msgBadCredentials)
-		return store.User{}, false
-	}
-	if !s.underLoginLimit(w, r, email) {
-		return store.User{}, false
-	}
-	u, err := s.auth.UserByEmail(ctx, email)
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		password.VerifyDummy(pw) // same time as a real check
-		s.loginFailed(w, r, store.User{Email: email}, "unknown email", failStatus, msgBadCredentials)
-		return store.User{}, false
-	case err != nil:
-		s.internalError(w, r, err)
-		return store.User{}, false
-	}
-	if u.PasswordHash == "" || u.DisabledAt != nil {
-		password.VerifyDummy(pw)
-		s.loginFailed(w, r, u, "no password or disabled", failStatus, msgBadCredentials)
-		return store.User{}, false
-	}
-	ok, err := password.Verify(pw, u.PasswordHash)
-	if err != nil {
-		s.internalError(w, r, err)
-		return store.User{}, false
-	}
-	if !ok {
-		s.loginFailed(w, r, u, "wrong password", failStatus, msgBadCredentials)
-		return store.User{}, false
-	}
-	return u, true
-}
-
-// underLoginLimit answers 429 and returns false when email or the client
-// address had too many recent failures (passwords and codes alike).
-func (s *Server) underLoginLimit(w http.ResponseWriter, r *http.Request, email string) bool {
-	byEmail, byIP, err := s.auth.RecentFailures(r.Context(), email, clientIP(r), s.cfg.Now().Add(-loginWindow))
-	if err != nil {
-		s.internalError(w, r, err)
-		return false
-	}
-	if byEmail >= maxFailuresPerKey || byIP >= maxFailuresPerIP {
-		w.Header().Set("Retry-After", strconv.Itoa(int(loginWindow.Seconds())))
-		writeError(w, http.StatusTooManyRequests, "too many failed attempts, try again later")
-		return false
-	}
-	return true
-}
-
-// loginFailed records the failure (with its real reason, for the auth log
-// only) and answers status with msg. Every failure counts toward the login
-// rate limit.
-func (s *Server) loginFailed(w http.ResponseWriter, r *http.Request, u store.User, reason string, status int, msg string) {
-	if err := s.auth.Log(r.Context(), store.AuthEvent{
-		UserID: u.ID, Email: u.Email, Action: store.AuthLoginFailed, IP: clientIP(r),
-		Details: map[string]any{"reason": reason},
-	}); err != nil {
-		s.internalError(w, r, err)
-		return
-	}
-	writeError(w, status, msg)
-}
-
-func setSessionCookie(w http.ResponseWriter, token string, expires time.Time) {
-	http.SetCookie(w, &http.Cookie{
-		Name: sessionCookie, Value: token, Path: "/", Expires: expires,
-		Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode,
-	})
+	account.SetSessionCookie(w, res.Session.Token, res.Session.Expires)
+	s.writeMe(w, r, res.Session.Session)
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request, sess store.Session, token string) {
-	if err := s.auth.DeleteSession(r.Context(), token); err != nil {
+	if err := s.acct.Logout(r.Context(), sess, token, account.ClientFrom(r)); err != nil {
 		s.internalError(w, r, err)
 		return
 	}
-	if err := s.auth.Log(r.Context(), store.AuthEvent{UserID: sess.UserID, Email: sess.Email, Action: store.AuthLogout, IP: clientIP(r)}); err != nil {
-		s.internalError(w, r, err)
-		return
-	}
-	http.SetCookie(w, &http.Cookie{
-		Name: sessionCookie, Value: "", Path: "/", MaxAge: -1,
-		Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode,
-	})
+	account.ClearSessionCookie(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -188,7 +104,7 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request, sess store.Session, 
 }
 
 func (s *Server) writeMe(w http.ResponseWriter, r *http.Request, sess store.Session) {
-	ms, err := s.auth.Memberships(r.Context(), sess.UserID)
+	ms, err := s.acct.Memberships(r.Context(), sess.UserID)
 	if err != nil {
 		s.internalError(w, r, err)
 		return
@@ -212,22 +128,8 @@ func (s *Server) setupPassword(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) {
 		return
 	}
-	if err := password.Check(req.Password); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	hash, err := password.Hash(req.Password)
-	if err != nil {
-		s.internalError(w, r, err)
-		return
-	}
-	_, err = s.auth.SetPasswordWithToken(r.Context(), req.Token, hash, clientIP(r))
-	if errors.Is(err, store.ErrInvalidToken) {
-		writeError(w, http.StatusBadRequest, "invalid or expired setup token")
-		return
-	}
-	if err != nil {
-		s.internalError(w, r, err)
+	if err := s.acct.SetupPassword(r.Context(), req.Token, req.Password, account.ClientFrom(r)); err != nil {
+		s.accountError(w, r, err, http.StatusBadRequest)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -240,20 +142,11 @@ type sessionHandler func(w http.ResponseWriter, r *http.Request, sess store.Sess
 // answer is 401, whatever the reason (missing, expired, revoked).
 func (s *Server) withSession(h sessionHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		c, err := r.Cookie(sessionCookie)
-		if err != nil || c.Value == "" {
-			writeError(w, http.StatusUnauthorized, "not logged in")
-			return
-		}
-		sess, err := s.auth.SessionUser(r.Context(), c.Value, s.cfg.SessionIdle)
-		if errors.Is(err, store.ErrInvalidToken) {
-			writeError(w, http.StatusUnauthorized, "not logged in")
-			return
-		}
+		sess, token, err := s.acct.SessionFrom(r)
 		if err != nil {
-			s.internalError(w, r, err)
+			s.accountError(w, r, err, http.StatusUnauthorized)
 			return
 		}
-		h(w, r, sess, c.Value)
+		h(w, r, sess, token)
 	}
 }

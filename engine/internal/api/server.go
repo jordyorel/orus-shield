@@ -16,14 +16,13 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"runtime/debug"
 	"strings"
 	"time"
 
+	"github.com/jordyorel/orus-shield/engine/internal/account"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
-	"github.com/jordyorel/orus-shield/engine/internal/seal"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
@@ -50,33 +49,39 @@ type Config struct {
 }
 
 const (
-	defaultSessionIdle = 12 * time.Hour
-	defaultSessionMax  = 7 * 24 * time.Hour
 	// maxBodyBytes bounds request bodies: every request here is small JSON.
 	maxBodyBytes = 1 << 20
 )
 
 // Server is the API. Build it with New.
 type Server struct {
-	auth *store.Auth
+	// acct runs the authentication flows (package account, shared with
+	// the dashboard).
+	acct *account.Service
 	// org returns the handle of one organization. It is the only way
 	// handlers reach customer data.
 	org func(orgID string) (*store.Org, error)
-	// mfaKey seals and opens TOTP secrets.
-	mfaKey *seal.Key
-	cfg    Config
-	log    *slog.Logger
+	cfg Config
+	log *slog.Logger
 }
 
-// New returns the API server on st. It keeps only st's authentication
-// handle and its Org constructor.
+// New returns the API server on st, with its own account service built
+// from cfg. It keeps only st's authentication handle (inside the account
+// service) and its Org constructor.
 func New(st *store.Store, cfg Config, log *slog.Logger) (*Server, error) {
-	if cfg.SessionIdle <= 0 {
-		cfg.SessionIdle = defaultSessionIdle
+	acct, err := account.New(st.Auth(), account.Config{
+		SessionIdle: cfg.SessionIdle, SessionMax: cfg.SessionMax, Now: cfg.Now, MFAKey: cfg.MFAKey,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("api: %w", err)
 	}
-	if cfg.SessionMax <= 0 {
-		cfg.SessionMax = defaultSessionMax
-	}
+	return NewWithAccount(st, acct, cfg, log)
+}
+
+// NewWithAccount returns the API server on an existing account service, so
+// that the API and the dashboard share the same sessions and rules. The
+// session settings and MFA key of cfg are ignored: acct has its own.
+func NewWithAccount(st *store.Store, acct *account.Service, cfg Config, log *slog.Logger) (*Server, error) {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
@@ -86,11 +91,7 @@ func New(st *store.Store, cfg Config, log *slog.Logger) (*Server, error) {
 	if len(cfg.Modules) == 0 {
 		return nil, errors.New("api: no modules configured")
 	}
-	key, err := seal.NewKey(cfg.MFAKey)
-	if err != nil {
-		return nil, fmt.Errorf("api: MFA key: %w", err)
-	}
-	return &Server{auth: st.Auth(), org: st.Org, mfaKey: key, cfg: cfg, log: log}, nil
+	return &Server{acct: acct, org: st.Org, cfg: cfg, log: log}, nil
 }
 
 // Handler returns the API's HTTP handler with every protection applied.
@@ -217,15 +218,4 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 		return false
 	}
 	return true
-}
-
-// clientIP is the address of the TCP peer. Headers such as X-Forwarded-For
-// are ignored: anyone can set them. Behind a reverse proxy, the proxy must
-// be configured to pass the real address (to add when we deploy one).
-func clientIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
 }
