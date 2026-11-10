@@ -27,7 +27,9 @@ React): sign-in, MFA, password setup, the overview, vulnerabilities, assets (add
 TXT verification, first scan), scans (modules, launch, per-domain rate and exclusions
 through `PATCH /targets/{id}`, live history) and settings (profile: password change, MFA;
 team: invite with a one-time setup code, roles, removal, at least one admin kept; migration
-0009 lets the auth role do exactly that) screens are done; scheduling does not exist yet,
+0009 lets the auth role do exactly that), attack surface, posture, prioritization and
+governance (from `/orgs/{org}/assets`, `/checks`, `/trends`) screens are done: every menu
+entry works, data without a source is shown as "Bientôt"; scheduling does not exist yet,
 the other menu entries show "Bientôt disponible". Finding texts stay in the modules'
 English (decided 2026-11-10); the dashboard's own wording is French.
 

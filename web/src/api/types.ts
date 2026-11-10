@@ -194,3 +194,39 @@ export interface Invitation {
   member: Member;
   setup_token?: string;
 }
+
+/** orgAssetJSON */
+export interface OrgAsset {
+  target_id: string;
+  domain: string;
+  id: string;
+  kind: "hostname" | "ip" | "service" | "certificate";
+  value: string;
+  details: Record<string, string>;
+  sources: string[];
+  first_seen: string;
+  last_seen: string;
+  gone_at: string | null;
+}
+
+export type Category = "email" | "web" | "tls" | "dns" | "network" | "identity" | "cloud" | "leaks";
+
+/** checkJSON */
+export interface Check {
+  target_id?: string;
+  id: string;
+  title: string;
+  module: string;
+  category: Category;
+  severity: Severity;
+  status: "passed" | "failed" | "not_applicable";
+  findings: number;
+  evaluated_at: string;
+}
+
+/** monthJSON */
+export interface Month {
+  month: string;
+  opened: number;
+  fixed: number;
+}

@@ -53,6 +53,9 @@ func (s *Server) orgRoutes(mux *http.ServeMux) {
 	read("/overview", s.overview)
 	read("/findings", s.orgFindings)
 	read("/modules", s.listModules)
+	read("/assets", s.orgAssets)
+	read("/checks", s.orgChecks)
+	read("/trends", s.trends)
 	read("/scans", s.recentScans)
 	read("/targets", s.listTargets)
 	read("/targets/{target}", s.targetOnly(s.getTarget))
@@ -389,7 +392,9 @@ func (s *Server) posture(w http.ResponseWriter, r *http.Request, req orgRequest,
 }
 
 type checkJSON struct {
+	TargetID    string    `json:"target_id,omitempty"`
 	ID          string    `json:"id"`
+	Title       string    `json:"title"` // from the module's catalog
 	Module      string    `json:"module"`
 	Category    string    `json:"category"`
 	Severity    string    `json:"severity"`
@@ -406,8 +411,7 @@ func (s *Server) checks(w http.ResponseWriter, r *http.Request, req orgRequest, 
 	}
 	out := make([]checkJSON, 0, len(states))
 	for _, c := range states {
-		out = append(out, checkJSON{ID: c.CheckID, Module: c.ModuleID, Category: string(c.Category),
-			Severity: string(c.Severity), Status: string(c.Status), Findings: c.Findings, EvaluatedAt: c.EvaluatedAt})
+		out = append(out, s.toCheckJSON(c, ""))
 	}
 	writeJSON(w, http.StatusOK, listOf(out))
 }
@@ -438,4 +442,105 @@ func intParam(w http.ResponseWriter, r *http.Request, name string, def, lo, hi i
 		return 0, false
 	}
 	return n, true
+}
+
+func (s *Server) toCheckJSON(c store.CheckState, targetID string) checkJSON {
+	return checkJSON{TargetID: targetID, ID: c.CheckID, Title: s.checkTitle(c.ModuleID, c.CheckID), Module: c.ModuleID,
+		Category: string(c.Category), Severity: string(c.Severity), Status: string(c.Status), Findings: c.Findings, EvaluatedAt: c.EvaluatedAt}
+}
+
+// checkTitle is the catalog title of a check ("DMARC record published"),
+// or its ID when the module is not in the catalog.
+func (s *Server) checkTitle(moduleID, checkID string) string {
+	for _, info := range s.cfg.Catalog {
+		if info.ID != moduleID {
+			continue
+		}
+		for _, c := range info.Checks {
+			if c.ID == checkID {
+				return c.Title
+			}
+		}
+	}
+	return checkID
+}
+
+// orgChecks lists the latest status of every check of every target: the
+// posture screen's categories and inventory.
+func (s *Server) orgChecks(w http.ResponseWriter, r *http.Request, req orgRequest) {
+	targets, err := req.org.ListTargets(r.Context())
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	out := []checkJSON{}
+	for _, t := range targets {
+		states, err := req.org.CheckStatuses(r.Context(), t.ID)
+		if err != nil {
+			s.internalError(w, r, err)
+			return
+		}
+		for _, c := range states {
+			out = append(out, s.toCheckJSON(c, t.ID))
+		}
+	}
+	writeJSON(w, http.StatusOK, listOf(out))
+}
+
+type orgAssetJSON struct {
+	TargetID string `json:"target_id"`
+	Domain   string `json:"domain"`
+	assetJSON
+}
+
+// orgAssets lists the current assets of every target: the attack surface
+// screen's counts and the protections (CDN, WAF) of the prioritization.
+func (s *Server) orgAssets(w http.ResponseWriter, r *http.Request, req orgRequest) {
+	targets, err := req.org.ListTargets(r.Context())
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	out := []orgAssetJSON{}
+	for _, t := range targets {
+		assets, err := req.org.ListAssets(r.Context(), t.ID, false)
+		if err != nil {
+			s.internalError(w, r, err)
+			return
+		}
+		for _, a := range assets {
+			details := a.Details
+			if details == nil {
+				details = map[string]string{}
+			}
+			out = append(out, orgAssetJSON{TargetID: t.ID, Domain: t.Domain, assetJSON: assetJSON{ID: a.ID, Kind: string(a.Kind), Value: a.Value,
+				Details: details, Sources: a.Sources, FirstSeen: a.FirstSeen, LastSeen: a.LastSeen, GoneAt: a.GoneAt}})
+		}
+	}
+	writeJSON(w, http.StatusOK, listOf(out))
+}
+
+type monthJSON struct {
+	Month  string `json:"month"` // YYYY-MM
+	Opened int    `json:"opened"`
+	Fixed  int    `json:"fixed"`
+}
+
+// trends answers GET /orgs/{org}/trends?months=N (1 to 24, default 6):
+// findings opened and fixed per calendar month.
+func (s *Server) trends(w http.ResponseWriter, r *http.Request, req orgRequest) {
+	months, ok := intParam(w, r, "months", 6, 1, 24)
+	if !ok {
+		return
+	}
+	counts, err := req.org.Trends(r.Context(), months, s.cfg.Now())
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	out := make([]monthJSON, 0, len(counts))
+	for _, c := range counts {
+		out = append(out, monthJSON{Month: c.Month.Format("2006-01"), Opened: c.Opened, Fixed: c.Fixed})
+	}
+	writeJSON(w, http.StatusOK, listOf(out))
 }

@@ -191,3 +191,28 @@ func TestRecentScansCounts(t *testing.T) {
 		t.Errorf("ListScans = %+v, %v", byTarget, err)
 	}
 }
+
+func TestTrends(t *testing.T) {
+	l := newLifecycle(t)
+	ctx := context.Background()
+	spf := makeFinding("email", "spf-missing", "example.com")
+	email := []string{"email"}
+	l.mustScan(t1, email, nil, spf)              // opened
+	l.mustScan(t2, email, nil)                   // fixed
+	l.mustScan(t3, email, nil, spf)              // reopened: opened again
+	l.mustScan(t4.Add(24*time.Hour), email, nil) // fixed
+
+	months, err := l.org.Trends(ctx, 3, t4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(months) != 3 {
+		t.Fatalf("months = %+v", months)
+	}
+	if m := months[0]; m.Month != time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC) || m.Opened != 0 || m.Fixed != 0 {
+		t.Errorf("September = %+v, want empty", m)
+	}
+	if m := months[2]; m.Month != time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC) || m.Opened != 2 || m.Fixed != 2 {
+		t.Errorf("November = %+v, want 2 opened, 2 fixed", m)
+	}
+}

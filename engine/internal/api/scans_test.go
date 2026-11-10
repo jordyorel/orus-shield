@@ -87,3 +87,30 @@ func TestUpdateTarget(t *testing.T) {
 		t.Errorf("no target.updated audit entry with the old rate: %+v", audit.Items)
 	}
 }
+
+func TestOrgAssetsChecksTrends(t *testing.T) {
+	e := newEnv(t)
+	a := e.tenant("A", "example.com")
+	e.tenant("B", "example.org")
+	base := "/api/v1/orgs/" + a.orgID
+
+	var assets list[orgAssetJSON]
+	e.do("GET", base+"/assets", a.viewer, nil).json(t, &assets)
+	if len(assets.Items) != 2 || assets.Items[0].Domain != "example.com" || assets.Items[0].TargetID != a.target.ID {
+		t.Errorf("assets = %+v", assets.Items)
+	}
+	var checks list[checkJSON]
+	e.do("GET", base+"/checks", a.viewer, nil).json(t, &checks)
+	if len(checks.Items) != 2 || checks.Items[0].TargetID != a.target.ID || checks.Items[0].Title == "" {
+		t.Errorf("checks = %+v", checks.Items)
+	}
+	var months list[monthJSON]
+	e.do("GET", base+"/trends", a.viewer, nil).json(t, &months)
+	last := months.Items[len(months.Items)-1]
+	if len(months.Items) != 6 || last.Month != e.now.UTC().Format("2006-01") || last.Opened != 1 {
+		t.Errorf("trends = %+v", months.Items)
+	}
+	if r := e.do("GET", base+"/trends?months=25", a.viewer, nil); r.status != http.StatusBadRequest {
+		t.Errorf("months=25 = %d, want 400", r.status)
+	}
+}

@@ -104,3 +104,57 @@ func (o *Org) NewAssets(ctx context.Context, since time.Time) (int, error) {
 	}
 	return n, tx.Commit(ctx)
 }
+
+// MonthCount is the findings opened and fixed in one calendar month (UTC).
+type MonthCount struct {
+	Month  time.Time // first day of the month, UTC
+	Opened int       // first seen or reopened
+	Fixed  int
+}
+
+// Trends returns, for the last months calendar months including the
+// current one (1 to 24), how many findings were opened (first seen or
+// reopened) and fixed, from the finding history. Every month is present,
+// zero when nothing happened.
+func (o *Org) Trends(ctx context.Context, months int, now time.Time) ([]MonthCount, error) {
+	months = min(max(months, 1), 24)
+	first := time.Date(now.UTC().Year(), now.UTC().Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, -(months - 1), 0)
+	tx, err := o.begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("trends: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	// Opened: first seen (no from_status) or reopened after a fix. A risk
+	// acceptance withdrawn (accepted_risk -> open) is not a new finding.
+	rows, err := tx.Query(ctx, `
+		SELECT date_trunc('month', at AT TIME ZONE 'UTC'),
+		       count(*) FILTER (WHERE to_status = 'open' AND (from_status IS NULL OR from_status = 'fixed')),
+		       count(*) FILTER (WHERE to_status = 'fixed')
+		FROM finding_events
+		WHERE org_id = $1 AND at >= $2
+		GROUP BY 1`, o.orgID, first)
+	if err != nil {
+		return nil, fmt.Errorf("trends: %w", err)
+	}
+	defer rows.Close()
+	byMonth := map[time.Time]MonthCount{}
+	for rows.Next() {
+		var c MonthCount
+		if err := rows.Scan(&c.Month, &c.Opened, &c.Fixed); err != nil {
+			return nil, fmt.Errorf("trends: %w", err)
+		}
+		c.Month = c.Month.UTC()
+		byMonth[c.Month] = c
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("trends: %w", err)
+	}
+	out := make([]MonthCount, 0, months)
+	for i := range months {
+		m := first.AddDate(0, i, 0)
+		c := byMonth[m]
+		c.Month = m
+		out = append(out, c)
+	}
+	return out, tx.Commit(ctx)
+}

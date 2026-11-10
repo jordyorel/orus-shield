@@ -1,4 +1,4 @@
-import type { Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Overview, RecoveryCodes, Role, Scan, Target } from "./types";
+import type { Check, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, Overview, RecoveryCodes, Role, Scan, Target } from "./types";
 import type { Exclusions } from "../exclusions";
 
 /**
@@ -61,6 +61,10 @@ export const api = {
   removeMember: (orgId: string, userId: string) => request<void>("DELETE", `${org(orgId)}/members/${encodeURIComponent(userId)}`),
   newSetupToken: (orgId: string, userId: string) =>
     request<{ setup_token: string }>("POST", `${org(orgId)}/members/${encodeURIComponent(userId)}/setup-token`),
+  orgAssets: (orgId: string, signal?: AbortSignal) => request<List<OrgAsset>>("GET", `${org(orgId)}/assets`, undefined, signal),
+  checks: (orgId: string, signal?: AbortSignal) => request<List<Check>>("GET", `${org(orgId)}/checks`, undefined, signal),
+  trends: (orgId: string, months: number, signal?: AbortSignal) =>
+    request<List<Month>>("GET", `${org(orgId)}/trends?months=${months}`, undefined, signal),
   overview: (orgId: string, days: number, signal?: AbortSignal) =>
     request<Overview>("GET", `${org(orgId)}/overview?days=${days}`, undefined, signal),
   findings: (orgId: string, signal?: AbortSignal) => request<List<Finding>>("GET", `${org(orgId)}/findings`, undefined, signal),
