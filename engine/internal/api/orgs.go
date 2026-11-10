@@ -141,55 +141,6 @@ func listOf[T any](items []T) list[T] {
 
 // ---- Handlers --------------------------------------------------------------
 
-// staleAfter is when a target without a finished scan becomes a priority
-// action ("no scan for N days").
-const staleAfter = 7 * 24 * time.Hour
-
-type overviewTarget struct {
-	ID            string         `json:"id"`
-	Domain        string         `json:"domain"`
-	Verified      bool           `json:"verified"`
-	LastScanAt    *time.Time     `json:"last_scan_at"`
-	Stale         bool           `json:"stale"` // no finished scan within staleAfter
-	OpenFindings  map[string]int `json:"open_findings"`
-	PostureScore  *int           `json:"posture_score"`
-	CurrentAssets int            `json:"current_assets"`
-}
-
-type overviewJSON struct {
-	Targets         int              `json:"targets"`
-	VerifiedTargets int              `json:"verified_targets"`
-	OpenFindings    map[string]int   `json:"open_findings"` // by severity, all targets
-	Assets          int              `json:"assets"`
-	PerTarget       []overviewTarget `json:"per_target"`
-}
-
-func (s *Server) overview(w http.ResponseWriter, r *http.Request, req orgRequest) {
-	sums, err := req.org.Overview(r.Context())
-	if err != nil {
-		s.internalError(w, r, err)
-		return
-	}
-	now := s.cfg.Now()
-	out := overviewJSON{OpenFindings: map[string]int{}, PerTarget: []overviewTarget{}}
-	for _, t := range sums {
-		out.Targets++
-		if t.Verified {
-			out.VerifiedTargets++
-		}
-		out.Assets += t.CurrentAssets
-		for sev, n := range t.OpenFindings {
-			out.OpenFindings[sev] += n
-		}
-		out.PerTarget = append(out.PerTarget, overviewTarget{
-			ID: t.ID, Domain: t.Domain, Verified: t.Verified, LastScanAt: t.LastScanAt,
-			Stale:        t.LastScanAt == nil || now.Sub(*t.LastScanAt) > staleAfter,
-			OpenFindings: t.OpenFindings, PostureScore: t.PostureScore, CurrentAssets: t.CurrentAssets,
-		})
-	}
-	writeJSON(w, http.StatusOK, out)
-}
-
 func (s *Server) listTargets(w http.ResponseWriter, r *http.Request, req orgRequest) {
 	targets, err := req.org.ListTargets(r.Context())
 	if err != nil {

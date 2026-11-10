@@ -17,10 +17,12 @@ package `posture`) and CDN / WAF detection (passive `cdn` module, asset details)
 framework mappings (CIS Controls v8) wait for Jordy's review. The HTTP API with
 invitation-only accounts, sessions and the screen 1 to 3 endpoints is done
 (`engine/cmd/api`, `engine/internal/api`), with TOTP two-factor authentication, mandatory
-for admins (packages `totp` and `seal`). The dashboard is in progress: server-rendered Go
-(`html/template`, package `web`), served by `cmd/api` on the same origin as the API; the
-authentication flows are shared in package `account`. Sign-in, MFA login, password setup
-and MFA enrolment pages are done; next: the overview screen with real data.
+for admins (packages `totp` and `seal`); the authentication flows live in package
+`account`. `GET /orgs/{org}/overview` computes everything the overview screen shows
+(score pooled across domains with `posture.Series`, daily trend, remediation time against
+the previous period, new assets, rule-based priorities). Next: the dashboard, a React +
+TypeScript app in `web/` that consumes the API (an earlier server-rendered Go version was
+dropped on 2026-11-10 in favor of React).
 
 ## How to work on this repo
 
@@ -51,10 +53,10 @@ web (dashboard)  ->  api  ->  queue  ->  engine workers  ->  modules  ->  findin
 - **findings**: one standard, versioned JSON schema shared by every module. The dashboard,
   reports, alerts and AI layer depend only on this schema, never on module internals.
 - **api/**: HTTP API for the dashboard and customers (Go).
-- **web** (`engine/internal/web`): customer dashboard, HTML rendered on the server with
-  `html/template`. Pages work without JavaScript (links and forms); a small optional script
-  may add comfort later (copy buttons, live scan status). No npm toolchain. Strict CSP:
-  no inline style or script, so templates only use classes from `static/app.css`.
+- **web/**: customer dashboard, React + TypeScript built with Vite. It talks only to the
+  JSON API, on the same origin (Vite proxies `/api` in development). Screens reproduce the
+  mockups in `docs/design/`; data that does not exist yet is shown as "Bientôt disponible",
+  never as invented figures. Strict CSP: no inline script.
 - **ai layer**: reads findings, explains them, ranks them for the customer's context and
   suggests fixes. It never creates or removes findings.
 
@@ -64,10 +66,9 @@ Planned layout (create folders only when they are needed):
 engine/
   cmd/worker/        worker entrypoint
   cmd/orusctl/       admin and development CLI (orgs, users, targets, scans, findings, audit)
-  cmd/api/           HTTP entrypoint: JSON API under /api/v1, dashboard on every other path
-  internal/account/  authentication flows shared by api and web (login, MFA, sessions, access)
+  cmd/api/           HTTP API entrypoint
+  internal/account/  authentication flows of the API (login, MFA, sessions, org access)
   internal/api/      JSON handlers: auth, org-scoped reads and writes (handlers get a *store.Org)
-  internal/web/      dashboard: HTML handlers, templates/ and static/ embedded in the binary
   internal/password/ argon2id password hashing
   internal/totp/     TOTP codes (RFC 6238), stdlib only
   internal/seal/     AES-256-GCM sealing of TOTP secrets (key from ORUS_MFA_KEY)
@@ -86,6 +87,7 @@ engine/
   internal/worker/   claims scans, runs modules, records results
   internal/modules/all/  the list of shipped modules
 deploy/              local infrastructure files (PostgreSQL init)
+web/                 dashboard (React + TypeScript, Vite)
 docs/
 ```
 
@@ -167,7 +169,7 @@ set -a; . ./.env; set +a
 cd engine && go test -race ./...    # integration tests run when ORUS_TEST_DATABASE_URL is set
 go run ./cmd/worker                 # in one terminal
 go run ./cmd/orusctl target add <domain> && go run ./cmd/orusctl scan <domain>
-go run ./cmd/api                    # API + dashboard on http://localhost:8080 (needs ORUS_MFA_KEY)
+go run ./cmd/api                    # API on 127.0.0.1:8080 (needs ORUS_MFA_KEY in .env)
 go run ./cmd/orusctl user add -role admin you@example.com   # prints a one-time setup token
 ```
 

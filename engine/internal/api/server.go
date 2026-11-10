@@ -55,8 +55,7 @@ const (
 
 // Server is the API. Build it with New.
 type Server struct {
-	// acct runs the authentication flows (package account, shared with
-	// the dashboard).
+	// acct runs the authentication flows (package account).
 	acct *account.Service
 	// org returns the handle of one organization. It is the only way
 	// handlers reach customer data.
@@ -65,23 +64,9 @@ type Server struct {
 	log *slog.Logger
 }
 
-// New returns the API server on st, with its own account service built
-// from cfg. It keeps only st's authentication handle (inside the account
-// service) and its Org constructor.
+// New returns the API server on st. It keeps only st's authentication
+// handle (inside the account service) and its Org constructor.
 func New(st *store.Store, cfg Config, log *slog.Logger) (*Server, error) {
-	acct, err := account.New(st.Auth(), account.Config{
-		SessionIdle: cfg.SessionIdle, SessionMax: cfg.SessionMax, Now: cfg.Now, MFAKey: cfg.MFAKey,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("api: %w", err)
-	}
-	return NewWithAccount(st, acct, cfg, log)
-}
-
-// NewWithAccount returns the API server on an existing account service, so
-// that the API and the dashboard share the same sessions and rules. The
-// session settings and MFA key of cfg are ignored: acct has its own.
-func NewWithAccount(st *store.Store, acct *account.Service, cfg Config, log *slog.Logger) (*Server, error) {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
@@ -90,6 +75,12 @@ func NewWithAccount(st *store.Store, acct *account.Service, cfg Config, log *slo
 	}
 	if len(cfg.Modules) == 0 {
 		return nil, errors.New("api: no modules configured")
+	}
+	acct, err := account.New(st.Auth(), account.Config{
+		SessionIdle: cfg.SessionIdle, SessionMax: cfg.SessionMax, Now: cfg.Now, MFAKey: cfg.MFAKey,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("api: %w", err)
 	}
 	return &Server{acct: acct, org: st.Org, cfg: cfg, log: log}, nil
 }

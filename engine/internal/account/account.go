@@ -1,13 +1,11 @@
-// Package account holds the authentication flows shared by the JSON API
-// (package api) and the web dashboard (package web): login with or without
-// a second factor, sessions, password setup, TOTP enrolment, and access to
-// an organization.
+// Package account holds the authentication flows of the HTTP API: login
+// with or without a second factor, sessions, password setup, TOTP
+// enrolment, and access to an organization.
 //
-// Every security decision lives here, once: the rate limit on failed
-// logins, the identical answer for every bad credential, the password
-// re-check before enrolment, the mandatory second factor for admins. The
-// two front ends only translate the typed errors below into a JSON status
-// or a French message. A rule changed here applies to both.
+// Every security decision lives here, once, independent of HTTP: the rate
+// limit on failed logins, the identical answer for every bad credential,
+// the password re-check before enrolment, the mandatory second factor for
+// admins. Package api only translates the typed errors below into statuses.
 package account
 
 import (

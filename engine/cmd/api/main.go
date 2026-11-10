@@ -1,6 +1,4 @@
-// Command api serves the JSON API under /api/v1 and the web dashboard on
-// every other path, on one origin: both share the session cookie, and the
-// dashboard needs no cross-origin requests.
+// Command api serves the dashboard's HTTP API.
 //
 // Configuration comes from environment variables (see loadConfig). It
 // listens on 127.0.0.1 by default: exposing it means putting it behind a
@@ -18,11 +16,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jordyorel/orus-shield/engine/internal/account"
 	"github.com/jordyorel/orus-shield/engine/internal/api"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/all"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
-	"github.com/jordyorel/orus-shield/engine/internal/web"
 )
 
 func main() {
@@ -58,26 +54,14 @@ func run(log *slog.Logger) error {
 	for _, m := range reg.All() {
 		modules = append(modules, m.Info().ID)
 	}
-	// One account service for both front ends: same sessions, same rules.
-	acct, err := account.New(st.Auth(), account.Config{MFAKey: cfg.mfaKey})
+	srv, err := api.New(st, api.Config{TrustedOrigins: cfg.trustedOrigins, Modules: modules, MFAKey: cfg.mfaKey}, log)
 	if err != nil {
 		return err
 	}
-	srv, err := api.NewWithAccount(st, acct, api.Config{TrustedOrigins: cfg.trustedOrigins, Modules: modules}, log)
+	handler, err := srv.Handler()
 	if err != nil {
 		return err
 	}
-	apiHandler, err := srv.Handler()
-	if err != nil {
-		return err
-	}
-	dashboard, err := web.New(acct, log)
-	if err != nil {
-		return err
-	}
-	handler := http.NewServeMux()
-	handler.Handle("/api/", apiHandler)
-	handler.Handle("/", dashboard.Handler())
 	httpServer := &http.Server{
 		Addr:    cfg.addr,
 		Handler: handler,
@@ -94,7 +78,7 @@ func run(log *slog.Logger) error {
 
 	errc := make(chan error, 1)
 	go func() {
-		log.Info("api and dashboard listening", "addr", cfg.addr)
+		log.Info("api listening", "addr", cfg.addr)
 		errc <- httpServer.ListenAndServe()
 	}()
 	select {
