@@ -38,7 +38,11 @@ const (
 	AuthLoginFailed     = "login.failed"
 	AuthLogout          = "logout"
 	AuthPasswordSet     = "password.set"
-	AuthSetupTokenIssue = "setup_token.issued" //nolint:gosec // G101: an audit action name, not a credential
+	AuthSetupTokenIssue = "setup_token.issued"  //nolint:gosec // G101: an audit action name, not a credential
+	AuthMFAChallenge    = "login.mfa_challenge" // password correct, code expected
+	AuthMFAEnabled      = "mfa.enabled"
+	AuthMFADisabled     = "mfa.disabled"
+	AuthMFAReset        = "mfa.reset" // by an operator, for a lost phone
 )
 
 // Audit action when a user is added to an organization.
@@ -59,6 +63,7 @@ type User struct {
 	PasswordHash string // empty until set
 	CreatedAt    time.Time
 	DisabledAt   *time.Time
+	MFAEnabled   bool // a confirmed TOTP second factor
 }
 
 // Membership is a user's role in one organization.
@@ -73,6 +78,11 @@ type Session struct {
 	UserID    string
 	Email     string
 	ExpiresAt time.Time
+	// MFA is true when the session was opened, or upgraded at enrolment,
+	// with a second factor. Admin routes require it.
+	MFA bool
+	// MFAEnabled tells whether the user has a confirmed second factor.
+	MFAEnabled bool
 }
 
 // AuthEvent is one line of the auth log.
@@ -144,8 +154,10 @@ func userByEmail(ctx context.Context, q querier, email string) (User, error) {
 		return User{}, fmt.Errorf("get user: %w", ErrNotFound)
 	}
 	var u User
-	err = q.QueryRow(ctx, `SELECT id::text, email, coalesce(password_hash, ''), created_at, disabled_at
-		FROM users WHERE email = $1`, e).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.CreatedAt, &u.DisabledAt)
+	err = q.QueryRow(ctx, `SELECT u.id::text, u.email, coalesce(u.password_hash, ''), u.created_at, u.disabled_at,
+			m.enabled_at IS NOT NULL
+		FROM users u LEFT JOIN user_mfa m ON m.user_id = u.id
+		WHERE u.email = $1`, e).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.CreatedAt, &u.DisabledAt, &u.MFAEnabled)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, fmt.Errorf("get user %s: %w", e, ErrNotFound)
 	}
@@ -314,22 +326,30 @@ func (a *Auth) RecentFailures(ctx context.Context, email, ip string, since time.
 	return byEmail, byIP, nil
 }
 
-// CreateSession opens a session for userID valid until expiresAt and returns
-// its token. Only the token's hash is stored.
-func (a *Auth) CreateSession(ctx context.Context, userID, ip, userAgent string, expiresAt time.Time) (string, error) {
-	token, hash, err := newToken()
-	if err != nil {
-		return "", err
-	}
+// CreateSession opens a session for a user without a second factor, valid
+// until expiresAt, and returns its token. Users with MFA go through
+// CreateMFAChallenge and CompleteMFALogin instead.
+func (a *Auth) CreateSession(ctx context.Context, userID, ip, userAgent string, expiresAt time.Time) (token string, err error) {
 	err = a.inTx(ctx, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `INSERT INTO sessions (token_hash, user_id, expires_at, ip, user_agent)
-			VALUES ($1, $2, $3, $4, $5)`, hash, userID, expiresAt, ip, truncateRunes(userAgent, 512))
+		token, err = createSession(ctx, tx, userID, ip, userAgent, expiresAt, false)
 		return err
 	})
 	if err != nil {
 		return "", fmt.Errorf("create session: %w", err)
 	}
 	return token, nil
+}
+
+// createSession inserts a session and returns its token. Only the token's
+// hash is stored.
+func createSession(ctx context.Context, tx pgx.Tx, userID, ip, userAgent string, expiresAt time.Time, mfa bool) (string, error) {
+	token, hash, err := newToken()
+	if err != nil {
+		return "", err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO sessions (token_hash, user_id, expires_at, ip, user_agent, mfa)
+		VALUES ($1, $2, $3, $4, $5, $6)`, hash, userID, expiresAt, ip, truncateRunes(userAgent, 512), mfa)
+	return token, err
 }
 
 // SessionUser returns the session for token if it is valid: not expired,
@@ -343,8 +363,10 @@ func (a *Auth) SessionUser(ctx context.Context, token string, idle time.Duration
 			FROM users u
 			WHERE se.token_hash = $1 AND u.id = se.user_id AND u.disabled_at IS NULL
 			  AND se.expires_at > now() AND se.last_seen_at > now() - make_interval(secs => $2)
-			RETURNING u.id::text, u.email, se.expires_at`, tokenHash(token), idle.Seconds()).
-			Scan(&s.UserID, &s.Email, &s.ExpiresAt)
+			RETURNING u.id::text, u.email, se.expires_at, se.mfa,
+				EXISTS (SELECT FROM user_mfa m WHERE m.user_id = u.id AND m.enabled_at IS NOT NULL)`,
+			tokenHash(token), idle.Seconds()).
+			Scan(&s.UserID, &s.Email, &s.ExpiresAt, &s.MFA, &s.MFAEnabled)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrInvalidToken
 		}
