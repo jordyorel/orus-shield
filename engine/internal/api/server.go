@@ -162,7 +162,8 @@ func (s *Server) recoverPanics(next http.Handler) http.Handler {
 type errorBody struct {
 	Error string `json:"error"`
 	// Code is a stable identifier for errors the dashboard reacts to
-	// (mfa_required: show the enrolment screen).
+	// (mfa_required: show the enrolment screen; login_expired: the MFA
+	// login token is gone, sign in again from the password).
 	Code string `json:"code,omitempty"`
 }
 

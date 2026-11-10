@@ -52,7 +52,11 @@ func (s *Server) accountError(w http.ResponseWriter, r *http.Request, err error,
 		writeError(w, http.StatusTooManyRequests, err.Error())
 	case errors.Is(err, account.ErrBadCode):
 		writeError(w, badCredentials, err.Error())
-	case errors.Is(err, account.ErrChallengeExpired), errors.Is(err, account.ErrNoSession):
+	case errors.Is(err, account.ErrChallengeExpired):
+		// Same status as a wrong code; the code tells the dashboard to go
+		// back to the password instead of asking for the code again.
+		writeErrorCode(w, http.StatusUnauthorized, "login_expired", err.Error())
+	case errors.Is(err, account.ErrNoSession):
 		writeError(w, http.StatusUnauthorized, err.Error())
 	case errors.Is(err, account.ErrInvalidSetupToken),
 		errors.Is(err, password.ErrTooShort), errors.Is(err, password.ErrTooLong):

@@ -143,14 +143,19 @@ func TestMFALogin(t *testing.T) {
 	codes := e.enrol("alice@example.com", e.login("alice@example.com"))
 
 	mfaToken := e.challenge("alice@example.com")
-	if r := e.loginMFA(mfaToken, "000000"); r.status != http.StatusUnauthorized || r.cookie(sessionCookie) != nil {
-		t.Errorf("wrong code = %d, want 401 without session", r.status)
+	// A wrong code and an unknown token are both 401; only the second has
+	// the login_expired code (go back to the password).
+	var body errorBody
+	r := e.loginMFA(mfaToken, "000000")
+	if r.json(t, &body); r.status != http.StatusUnauthorized || r.cookie(sessionCookie) != nil || body.Code != "" {
+		t.Errorf("wrong code = %d %+v, want 401 without session or code", r.status, body)
 	}
-	if r := e.loginMFA("forged-token", e.code("alice@example.com")); r.status != http.StatusUnauthorized {
-		t.Errorf("forged MFA token = %d, want 401", r.status)
+	r = e.loginMFA("forged-token", e.code("alice@example.com"))
+	if r.json(t, &body); r.status != http.StatusUnauthorized || body.Code != "login_expired" {
+		t.Errorf("forged MFA token = %d %+v, want 401 login_expired", r.status, body)
 	}
 	code := e.code("alice@example.com")
-	r := e.loginMFA(mfaToken, code)
+	r = e.loginMFA(mfaToken, code)
 	c := r.cookie(sessionCookie)
 	if r.status != http.StatusOK || c == nil {
 		t.Fatalf("MFA login = %d %s", r.status, r.body)
