@@ -1,4 +1,4 @@
-import type { Finding, FindingStatus, Instructions, List, Me, MfaChallenge, MfaSetup, ModuleInfo, Overview, RecoveryCodes, Scan, Target } from "./types";
+import type { Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Overview, RecoveryCodes, Role, Scan, Target } from "./types";
 import type { Exclusions } from "../exclusions";
 
 /**
@@ -51,6 +51,16 @@ export const api = {
   setupPassword: (token: string, password: string) => request<void>("POST", "/auth/setup-password", { token, password }),
   mfaSetup: (password: string) => request<MfaSetup>("POST", "/auth/mfa/setup", { password }),
   mfaConfirm: (code: string) => request<RecoveryCodes>("POST", "/auth/mfa/confirm", { code }),
+  changePassword: (current_password: string, new_password: string) =>
+    request<void>("POST", "/auth/password", { current_password, new_password }),
+  mfaDisable: (password: string, code: string) => request<void>("POST", "/auth/mfa/disable", { password, code }),
+  members: (orgId: string, signal?: AbortSignal) => request<List<Member>>("GET", `${org(orgId)}/members`, undefined, signal),
+  invite: (orgId: string, email: string, role: Role) => request<Invitation>("POST", `${org(orgId)}/members`, { email, role }),
+  setMemberRole: (orgId: string, userId: string, role: Role) =>
+    request<void>("PUT", `${org(orgId)}/members/${encodeURIComponent(userId)}/role`, { role }),
+  removeMember: (orgId: string, userId: string) => request<void>("DELETE", `${org(orgId)}/members/${encodeURIComponent(userId)}`),
+  newSetupToken: (orgId: string, userId: string) =>
+    request<{ setup_token: string }>("POST", `${org(orgId)}/members/${encodeURIComponent(userId)}/setup-token`),
   overview: (orgId: string, days: number, signal?: AbortSignal) =>
     request<Overview>("GET", `${org(orgId)}/overview?days=${days}`, undefined, signal),
   findings: (orgId: string, signal?: AbortSignal) => request<List<Finding>>("GET", `${org(orgId)}/findings`, undefined, signal),

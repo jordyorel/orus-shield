@@ -60,9 +60,12 @@ export function AppShell({ me, org, section, title, actions, children }: AppShel
           <p className="sub">
             {roleLabel(org.role)} · {org.org_name}
           </p>
-          <button type="button" className="link-button" onClick={logout}>
-            Se déconnecter
-          </button>
+          <div className="side-links">
+            <Link to={`${orgPath(org.org_id, "parametres")}?onglet=profil`}>Mon profil</Link>
+            <button type="button" className="link-button" onClick={logout}>
+              Se déconnecter
+            </button>
+          </div>
         </div>
       </aside>
       <main className="main">

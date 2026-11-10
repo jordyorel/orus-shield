@@ -601,6 +601,19 @@ textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 
 .progress-bar { position: relative; width: 120px; height: 6px; overflow: hidden; background: var(--line-soft); border-radius: 3px; }
 .progress-bar span { position: absolute; inset: 0 auto 0 0; background: var(--primary); border-radius: 3px; transition: width .4s ease-out; }
 
+/* ---- Settings ------------------------------------------------------------ */
+
+.tabs { margin-top: -8px; }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 10px 24px; margin: 16px 0 0; font-size: 15px; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; font-weight: 500; overflow-wrap: anywhere; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; align-items: end; margin-top: 16px; }
+.card .alert { margin-top: 12px; }
+.row-actions { display: flex; gap: 14px; }
+.link-button.danger { color: var(--bad-ink); }
+.side-links { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; }
+.side-links a, .side-card .side-links .link-button { margin-top: 0; font-size: 13px; color: #5EEAD4; }
+
 /* While a new period loads, the previous figures stay, dimmed. */
 .loading { opacity: .6; transition: opacity .2s; }
 

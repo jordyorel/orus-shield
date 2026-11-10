@@ -24,8 +24,10 @@ the previous period, new assets, rule-based priorities); `GET /orgs/{org}/findin
 every target's findings. The dashboard is a React + TypeScript app in `web/` that consumes
 the API (an earlier server-rendered Go version was dropped on 2026-11-10 in favor of
 React): sign-in, MFA, password setup, the overview, vulnerabilities, assets (add a domain, DNS
-TXT verification, first scan) and scans (modules, launch, per-domain rate and exclusions
-through `PATCH /targets/{id}`, live history) screens are done; scheduling does not exist yet,
+TXT verification, first scan), scans (modules, launch, per-domain rate and exclusions
+through `PATCH /targets/{id}`, live history) and settings (profile: password change, MFA;
+team: invite with a one-time setup code, roles, removal, at least one admin kept; migration
+0009 lets the auth role do exactly that) screens are done; scheduling does not exist yet,
 the other menu entries show "Bientôt disponible". Finding texts stay in the modules'
 English (decided 2026-11-10); the dashboard's own wording is French.
 
@@ -184,8 +186,9 @@ The dashboard sets a `Secure` session cookie: Brave, Chrome and Firefox accept i
 `http://localhost`, Safari does not (use another browser locally). Restart `go run ./cmd/api`
 after changing Go code: it does not reload by itself. Vite reloads the dashboard live.
 
-Accounts are invitation-only: `orusctl user add` creates the account and prints a setup
-token; the user sets their password on the dashboard page `/setup-password` (or with
+Accounts are invitation-only: an organization admin invites from Paramètres > Équipe
+(the dashboard shows the setup code once), or `orusctl user add` creates the account and
+prints a setup token; the user sets their password on the dashboard page `/setup-password` (or with
 `POST /api/v1/auth/setup-password`). Session
 cookies are `Secure`: browsers accept them on `localhost`, anywhere else the API must be
 behind HTTPS.

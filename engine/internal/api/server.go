@@ -117,6 +117,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/mfa/confirm", s.withSession(s.mfaConfirm))
 	mux.HandleFunc("POST /api/v1/auth/mfa/disable", s.withSession(s.mfaDisable))
 	s.orgRoutes(mux)
+	s.teamRoutes(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
 	})

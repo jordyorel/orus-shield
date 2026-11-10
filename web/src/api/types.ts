@@ -178,3 +178,19 @@ export interface Instructions {
   expires_at: string | null;
   verified: boolean;
 }
+
+/** memberJSON */
+export interface Member {
+  user_id: string;
+  email: string;
+  role: Role;
+  /** A password is set. */
+  activated: boolean;
+  mfa_enabled: boolean;
+}
+
+/** invitationJSON: setup_token is shown once, absent for an activated account. */
+export interface Invitation {
+  member: Member;
+  setup_token?: string;
+}

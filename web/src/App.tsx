@@ -6,6 +6,7 @@ import { AssetsPage } from "./pages/AssetsPage";
 import { ComingSoonPage, NoOrgPage, NotFoundPage } from "./pages/OtherPages";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ScansPage } from "./pages/ScansPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { SetupPasswordPage } from "./pages/SetupPasswordPage";
 import { VulnerabilitiesPage } from "./pages/VulnerabilitiesPage";
 import { match, Redirect, useLocation } from "./router";
@@ -37,6 +38,7 @@ export function App() {
   if (!params || !org) return <NotFoundPage />;
   const section = params.section ?? "";
   if (section === "") return <OverviewPage key={org.org_id} me={me} org={org} />;
+  if (section === "parametres") return <SettingsPage key={org.org_id} me={me} org={org} />;
   if (section === "scans") return <ScansPage key={org.org_id} me={me} org={org} />;
   if (section === "actifs") return <AssetsPage key={org.org_id} me={me} org={org} />;
   if (section === "vulnerabilites") return <VulnerabilitiesPage key={org.org_id} me={me} org={org} />;

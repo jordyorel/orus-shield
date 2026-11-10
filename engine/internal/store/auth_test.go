@@ -207,8 +207,23 @@ func TestAuthRoleCannotReadCustomerData(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// And it cannot create accounts or memberships: that is administration.
-	if _, err := tx.Exec(ctx, "INSERT INTO users (email) VALUES ('x@example.com')"); err == nil || !strings.Contains(err.Error(), "permission denied") {
-		t.Errorf("auth role creating a user = %v, want permission denied", err)
+	// Since migration 0009 it may invite (create an account with its email
+	// only), but never write a password or any other column on insert, nor
+	// create organizations.
+	for name, stmt := range map[string]string{
+		"user with a password": "INSERT INTO users (email, password_hash) VALUES ('x@example.com', 'hash')",
+		"disabled user":        "INSERT INTO users (email, disabled_at) VALUES ('y@example.com', now())",
+		"organization":         "INSERT INTO organizations (name) VALUES ('Evil')",
+	} {
+		if _, err := tx.Exec(ctx, "SAVEPOINT s"); err != nil {
+			t.Fatal(err)
+		}
+		_, err := tx.Exec(ctx, stmt)
+		if err == nil || !strings.Contains(err.Error(), "permission denied") {
+			t.Errorf("auth role creating a %s = %v, want permission denied", name, err)
+		}
+		if _, err := tx.Exec(ctx, "ROLLBACK TO SAVEPOINT s"); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
