@@ -407,7 +407,8 @@ func (c cli) printSetupToken(ctx context.Context, u store.User, actor string) er
 		return err
 	}
 	fmt.Fprintf(c.out, "one-time setup token for %s (valid %s, shown only once):\n  %s\n", u.Email, setupTokenTTL, token)
-	fmt.Fprintln(c.out, "send it to the user over a trusted channel; they set their password with")
+	fmt.Fprintln(c.out, "send it to the user over a trusted channel; they set their password on the")
+	fmt.Fprintln(c.out, "dashboard page /setup-password, or with")
 	fmt.Fprintln(c.out, `  POST /api/v1/auth/setup-password {"token": "...", "password": "..."}`)
 	return nil
 }

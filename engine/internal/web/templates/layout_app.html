@@ -1,0 +1,41 @@
+{{define "layout"}}<!doctype html>
+<html lang="fr">
+<head>{{template "head" .}}</head>
+<body>
+<div class="app">
+<aside class="sidebar">
+<a class="brand" href="/">{{template "logo"}}<span class="brand-name">Orus Shield</span></a>
+<nav class="nav" aria-label="Application">
+<a href="/orgs/{{.App.Org.OrgID}}"{{if eq .App.Nav "overview"}} aria-current="page"{{end}}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg>Vue d'ensemble</a>
+</nav>
+{{if gt (len .App.Orgs) 1}}
+<div class="side-section">
+<p class="side-title" id="orgs-title">Organisations</p>
+<nav class="nav" aria-labelledby="orgs-title">
+{{range .App.Orgs}}<a href="/orgs/{{.OrgID}}"{{if eq .OrgID $.App.Org.OrgID}} aria-current="page"{{end}}>{{.OrgName}}</a>{{end}}
+</nav>
+</div>
+{{end}}
+<div class="side-user">
+<p class="email">{{.App.Email}}</p>
+<p class="role">{{roleLabel .App.Org.Role}} · {{.App.Org.OrgName}}</p>
+{{template "logout"}}
+</div>
+</aside>
+<main class="main">
+<div class="page-header">
+<div>
+<p class="org">{{.App.Org.OrgName}}</p>
+<h1>{{template "title" .}}</h1>
+</div>
+<span class="avatar" aria-hidden="true">{{initials .App.Email}}</span>
+</div>
+{{template "messages" .}}
+<div class="content">
+{{template "content" .}}
+</div>
+</main>
+</div>
+</body>
+</html>
+{{end}}

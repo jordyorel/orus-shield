@@ -1,0 +1,25 @@
+{{define "title"}}Activer la double authentification{{end}}
+{{define "content"}}
+<div class="stack">
+<h1>Ajoutez Orus Shield à votre application</h1>
+{{template "messages" .}}
+{{if .Data.Secret}}
+<ol class="steps">
+<li>Installez une application d'authentification si vous n'en avez pas : Google Authenticator, Microsoft Authenticator, 2FAS ou Aegis.</li>
+<li>Ajoutez un compte en saisissant cette clé :</li>
+</ol>
+<p class="secret" aria-label="Clé secrète">{{groups .Data.Secret}}</p>
+<p class="small">Sur ce téléphone ? <a href="{{.Data.URI}}">Ouvrir directement dans l'application</a></p>
+<p class="small muted">Cette clé ne sera plus affichée. Ne la communiquez à personne.</p>
+{{else}}
+<p class="muted">Le code change toutes les 30 secondes : saisissez celui qui s'affiche maintenant. Si vous n'avez pas encore ajouté le compte dans votre application, <a href="/mfa/setup">recommencez l'activation</a>.</p>
+{{end}}
+<form method="post" action="/mfa/confirm" class="stack">
+<div class="field">
+<label for="code">Code à 6 chiffres affiché par l'application</label>
+<input id="code" class="code" name="code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required autofocus>
+</div>
+<button class="btn btn-primary btn-block" type="submit">Activer</button>
+</form>
+</div>
+{{end}}
