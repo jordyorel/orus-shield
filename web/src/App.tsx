@@ -5,6 +5,7 @@ import { MfaSetupPage } from "./pages/MfaSetupPage";
 import { ComingSoonPage, NoOrgPage, NotFoundPage } from "./pages/OtherPages";
 import { OverviewPage } from "./pages/OverviewPage";
 import { SetupPasswordPage } from "./pages/SetupPasswordPage";
+import { VulnerabilitiesPage } from "./pages/VulnerabilitiesPage";
 import { match, Redirect, useLocation } from "./router";
 
 export function App() {
@@ -34,6 +35,7 @@ export function App() {
   if (!params || !org) return <NotFoundPage />;
   const section = params.section ?? "";
   if (section === "") return <OverviewPage key={org.org_id} me={me} org={org} />;
+  if (section === "vulnerabilites") return <VulnerabilitiesPage key={org.org_id} me={me} org={org} />;
   if (sections.some((s) => s.path === section)) return <ComingSoonPage me={me} org={org} section={section} />;
   return <NotFoundPage />;
 }

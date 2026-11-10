@@ -109,3 +109,15 @@ export function priorityText(p: Priority, now: Date): { title: string; detail: s
 export function initial(email: string): string {
   return (email[0] ?? "?").toUpperCase();
 }
+
+/** moduleLabel: the family of a check, as the mockups name them. */
+export function moduleLabel(moduleId: string): string {
+  return ({ email: "Emails", tls: "TLS et certificats", ports: "Ports et services", cdn: "Protection web" } as Record<string, string>)[moduleId] ?? moduleId;
+}
+
+/** age: "il y a 2 j", as in the vulnerabilities list. */
+export function age(iso: string, now: Date): string {
+  const days = Math.round((startOfDay(now) - startOfDay(new Date(iso))) / (DAY * 1000));
+  if (days <= 0) return "aujourd’hui";
+  return `il y a ${days} j`;
+}

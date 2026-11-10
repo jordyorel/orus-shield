@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chartGeometry } from "./chart";
+import { chartGeometry, scale } from "./chart";
 
 const trend = (scores: (number | null)[]) => scores.map((score, i) => ({ at: new Date(2026, 10, i + 1).toISOString(), score }));
 
@@ -18,6 +18,14 @@ describe("chartGeometry", () => {
 
   it("maps 0 and 100 to the chart's bounds", () => {
     const g = chartGeometry(trend([0, 100]));
-    expect(g.lines[0]).toBe("40,204 640,16");
+    expect(g.lines[0]).toBe("40,196 640,24");
+  });
+
+  it("fits the axis to the scores, as in the mockup", () => {
+    expect(scale([50, 62, 75])).toEqual({ lo: 40, hi: 80 });
+    expect(scale([97, 100])).toEqual({ lo: 60, hi: 100 });
+    expect(scale([0, 3])).toEqual({ lo: 0, hi: 40 });
+    expect(scale([])).toEqual({ lo: 0, hi: 100 });
+    expect(chartGeometry(trend([50, 75])).grid.map((g) => g.label)).toEqual([80, 60, 40]);
   });
 });

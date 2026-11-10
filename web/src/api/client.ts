@@ -1,4 +1,4 @@
-import type { Me, MfaChallenge, MfaSetup, Overview, RecoveryCodes } from "./types";
+import type { Finding, FindingStatus, List, Me, MfaChallenge, MfaSetup, Overview, RecoveryCodes, Scan } from "./types";
 
 /**
  * An error answered by the API. message is the API's English text, for
@@ -52,4 +52,16 @@ export const api = {
   mfaConfirm: (code: string) => request<RecoveryCodes>("POST", "/auth/mfa/confirm", { code }),
   overview: (orgId: string, days: number, signal?: AbortSignal) =>
     request<Overview>("GET", `${org(orgId)}/overview?days=${days}`, undefined, signal),
+  findings: (orgId: string, signal?: AbortSignal) => request<List<Finding>>("GET", `${org(orgId)}/findings`, undefined, signal),
+  /** setFindingStatus: accepted_risk, or open to withdraw it. "fixed" is decided by scans only. */
+  setFindingStatus: (orgId: string, targetId: string, findingId: string, status: Exclude<FindingStatus, "fixed">) =>
+    request<void>(
+      "PUT",
+      `${org(orgId)}/targets/${encodeURIComponent(targetId)}/findings/${encodeURIComponent(findingId)}/status`,
+      { status },
+    ),
+  startScan: (orgId: string, targetId: string, modules?: string[]) =>
+    request<Scan>("POST", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/scans`, modules ? { modules } : {}),
+  scan: (orgId: string, scanId: string, signal?: AbortSignal) =>
+    request<Scan>("GET", `${org(orgId)}/scans/${encodeURIComponent(scanId)}`, undefined, signal),
 };

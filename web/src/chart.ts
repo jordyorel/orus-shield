@@ -3,7 +3,7 @@
 
 import type { TrendPoint } from "./api/types";
 
-export const CHART = { width: 640, height: 220, top: 16, bottom: 204 } as const;
+export const CHART = { width: 640, height: 220, top: 24, bottom: 196 } as const;
 
 export interface ChartGeometry {
   /** Runs of consecutive days with a score, as SVG polyline points. */
@@ -16,15 +16,34 @@ export interface ChartGeometry {
   measured: number;
 }
 
+/**
+ * scale fits the vertical axis to the measured scores, as in the mockup
+ * (40 to 80 for scores between 50 and 75): a 0-100 axis would flatten
+ * every change. Bounds are multiples of 20 with a margin, at least 40
+ * points apart, within 0-100.
+ */
+export function scale(scores: number[]): { lo: number; hi: number } {
+  if (scores.length === 0) return { lo: 0, hi: 100 };
+  let lo = Math.max(0, Math.floor((Math.min(...scores) - 5) / 20) * 20);
+  let hi = Math.min(100, Math.ceil((Math.max(...scores) + 5) / 20) * 20);
+  while (hi - lo < 40) {
+    if (hi < 100) hi += 20;
+    else lo -= 20;
+  }
+  return { lo, hi };
+}
+
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-export function scoreY(score: number): number {
-  return round1(CHART.bottom - (score / 100) * (CHART.bottom - CHART.top));
+function yFor(lo: number, hi: number) {
+  return (score: number) => round1(CHART.bottom - ((score - lo) / (hi - lo)) * (CHART.bottom - CHART.top));
 }
 
 export function chartGeometry(trend: TrendPoint[]): ChartGeometry {
   const g: ChartGeometry = { lines: [], dots: [], grid: [], measured: 0 };
-  for (const label of [100, 50, 0]) g.grid.push({ y: scoreY(label), label });
+  const { lo, hi } = scale(trend.flatMap((p) => (p.score === null ? [] : [p.score])));
+  const scoreY = yFor(lo, hi);
+  for (const label of [hi, (hi + lo) / 2, lo]) g.grid.push({ y: scoreY(label), label });
   const left = 40;
   const step = (CHART.width - left) / Math.max(trend.length - 1, 1);
   let run: { x: number; y: number }[] = [];

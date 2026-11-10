@@ -147,7 +147,7 @@ describe("App", () => {
     });
     start("/orgs/" + ORG);
     expect(await screen.findByText("+27 points")).toBeTruthy();
-    expect(screen.getByText("60")).toBeTruthy();
+    expect(document.querySelector(".kpi-value")?.textContent).toBe("60/100");
     expect(screen.getByText("dont 1 critique")).toBeTruthy(); // info findings are not vulnerabilities
     expect(screen.getByText("2,0 j")).toBeTruthy();
     expect(screen.getByText("−1,8 j")).toBeTruthy(); // faster than the previous period

@@ -72,6 +72,7 @@ func readPaths(tn tenant) []string {
 	t := base + "/targets/" + tn.target.ID
 	return []string{
 		base + "/overview",
+		base + "/findings",
 		base + "/targets",
 		t,
 		t + "/assets?include_gone=true",
@@ -95,16 +96,25 @@ func TestReadRoutes(t *testing.T) {
 	}
 
 	var findings list[finding.Finding]
-	e.do("GET", readPaths(a)[6], a.viewer, nil).json(t, &findings)
+	e.do("GET", readPaths(a)[7], a.viewer, nil).json(t, &findings)
 	if len(findings.Items) != 1 || findings.Items[0].ID != a.finding.ID || findings.Items[0].Status != finding.StatusOpen {
 		t.Errorf("findings = %+v", findings.Items)
 	}
-	e.do("GET", readPaths(a)[6]+"?severity=low", a.viewer, nil).json(t, &findings)
+	e.do("GET", readPaths(a)[7]+"?severity=low", a.viewer, nil).json(t, &findings)
 	if len(findings.Items) != 0 {
 		t.Errorf("severity filter: %+v", findings.Items)
 	}
-	if r := e.do("GET", readPaths(a)[6]+"?status=maybe", a.viewer, nil); r.status != http.StatusBadRequest {
+	if r := e.do("GET", readPaths(a)[7]+"?status=maybe", a.viewer, nil); r.status != http.StatusBadRequest {
 		t.Errorf("unknown status filter = %d, want 400", r.status)
+	}
+
+	var all list[orgFinding]
+	e.do("GET", readPaths(a)[1]+"?status=open", a.viewer, nil).json(t, &all)
+	if len(all.Items) != 1 || all.Items[0].TargetID != a.target.ID || all.Items[0].ID != a.finding.ID || all.Items[0].Title != "No DMARC" {
+		t.Errorf("organization findings = %+v", all.Items)
+	}
+	if r := e.do("GET", readPaths(a)[1]+"?severity=bad", a.viewer, nil); r.status != http.StatusBadRequest {
+		t.Errorf("unknown severity filter = %d, want 400", r.status)
 	}
 
 	var ov overviewJSON
@@ -115,20 +125,20 @@ func TestReadRoutes(t *testing.T) {
 	}
 
 	var posture list[postureJSON]
-	e.do("GET", readPaths(a)[8], a.viewer, nil).json(t, &posture)
+	e.do("GET", readPaths(a)[9], a.viewer, nil).json(t, &posture)
 	if len(posture.Items) != 1 || posture.Items[0].Score == nil || *posture.Items[0].Score != 50 {
 		t.Errorf("posture = %+v", posture.Items)
 	}
 	var target targetJSON
-	e.do("GET", readPaths(a)[2], a.viewer, nil).json(t, &target)
+	e.do("GET", readPaths(a)[3], a.viewer, nil).json(t, &target)
 	if target.Domain != "example.com" || target.Verified {
 		t.Errorf("target = %+v", target)
 	}
 
-	if r := e.do("GET", readPaths(a)[3][:len(readPaths(a)[3])-4]+"maybe", a.viewer, nil); r.status != http.StatusBadRequest {
+	if r := e.do("GET", readPaths(a)[4][:len(readPaths(a)[4])-4]+"maybe", a.viewer, nil); r.status != http.StatusBadRequest {
 		t.Errorf("include_gone=maybe = %d, want 400", r.status)
 	}
-	if r := e.do("GET", readPaths(a)[4]+"?limit=1000", a.viewer, nil); r.status != http.StatusBadRequest {
+	if r := e.do("GET", readPaths(a)[5]+"?limit=1000", a.viewer, nil); r.status != http.StatusBadRequest {
 		t.Errorf("limit out of range = %d, want 400", r.status)
 	}
 }

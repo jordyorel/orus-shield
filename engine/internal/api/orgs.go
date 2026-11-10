@@ -51,6 +51,7 @@ func (s *Server) orgRoutes(mux *http.ServeMux) {
 		mux.HandleFunc("GET /api/v1/orgs/{org}"+pattern, s.withOrg(store.RoleViewer, h))
 	}
 	read("/overview", s.overview)
+	read("/findings", s.orgFindings)
 	read("/targets", s.listTargets)
 	read("/targets/{target}", s.targetOnly(s.getTarget))
 	read("/targets/{target}/assets", s.targetOnly(s.listAssets))
@@ -244,6 +245,49 @@ func (s *Server) listFindings(w http.ResponseWriter, r *http.Request, req orgReq
 		return (status != "" && f.Status != status) || (severity != "" && f.Severity != severity)
 	})
 	writeJSON(w, http.StatusOK, listOf(findings))
+}
+
+// orgFinding is a finding with the ID of its target, needed to act on it
+// (status, re-scan). The finding fields are inlined: same schema as
+// listFindings.
+type orgFinding struct {
+	TargetID string `json:"target_id"`
+	finding.Finding
+}
+
+// orgFindings lists the findings of every target of the organization, the
+// vulnerabilities screen. Optional filters: status and severity, each a
+// single value. Targets are read one by one: an SME has tens of them.
+func (s *Server) orgFindings(w http.ResponseWriter, r *http.Request, req orgRequest) {
+	q := r.URL.Query()
+	status, severity := finding.Status(q.Get("status")), finding.Severity(q.Get("severity"))
+	if status != "" && !status.Valid() {
+		writeError(w, http.StatusBadRequest, "unknown status")
+		return
+	}
+	if severity != "" && !severity.Valid() {
+		writeError(w, http.StatusBadRequest, "unknown severity")
+		return
+	}
+	targets, err := req.org.ListTargets(r.Context())
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	out := []orgFinding{}
+	for _, t := range targets {
+		fs, err := req.org.ListFindings(r.Context(), t.ID)
+		if err != nil {
+			s.internalError(w, r, err)
+			return
+		}
+		for _, f := range fs {
+			if (status == "" || f.Status == status) && (severity == "" || f.Severity == severity) {
+				out = append(out, orgFinding{TargetID: t.ID, Finding: f})
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, listOf(out))
 }
 
 type findingEventJSON struct {

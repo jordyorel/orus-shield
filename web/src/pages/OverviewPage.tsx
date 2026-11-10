@@ -227,7 +227,13 @@ function OverviewContent({ data, org, loading }: { data: Overview; org: Membersh
                   <li key={`${p.kind}:${p.target_id}:${p.kind === "finding" ? p.finding_id : ""}`}>
                     <span className="num">{i + 1}</span>
                     <div>
-                      <p className="action-title">{t.title}</p>
+                      <p className="action-title">
+                        {p.kind === "finding" ? (
+                          <Link to={`${orgPath(org.org_id, "vulnerabilites")}?id=${encodeURIComponent(p.finding_id)}`}>{t.title}</Link>
+                        ) : (
+                          t.title
+                        )}
+                      </p>
                       <p className="action-detail">{t.detail}</p>
                     </div>
                   </li>

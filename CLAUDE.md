@@ -20,9 +20,12 @@ invitation-only accounts, sessions and the screen 1 to 3 endpoints is done
 for admins (packages `totp` and `seal`); the authentication flows live in package
 `account`. `GET /orgs/{org}/overview` computes everything the overview screen shows
 (score pooled across domains with `posture.Series`, daily trend, remediation time against
-the previous period, new assets, rule-based priorities). Next: the dashboard, a React +
-TypeScript app in `web/` that consumes the API (an earlier server-rendered Go version was
-dropped on 2026-11-10 in favor of React).
+the previous period, new assets, rule-based priorities); `GET /orgs/{org}/findings` lists
+every target's findings. The dashboard is a React + TypeScript app in `web/` that consumes
+the API (an earlier server-rendered Go version was dropped on 2026-11-10 in favor of
+React): sign-in, MFA, password setup, the overview and the vulnerabilities screen are done,
+the other menu entries show "Bientôt disponible". Finding texts are still the modules'
+English: French texts per check are the next step.
 
 ## How to work on this repo
 
@@ -230,6 +233,7 @@ tools below before the roadmap step listed for it.
 | PostgreSQL | Main database: customers, assets, scans, findings (`JSONB`) | Adopted: PostgreSQL 18 (uuidv7), driver pgx v5 (MIT) | Step 4 |
 | Docker / Compose | Local dev environment; isolation of heavy scanners | Adopted for local dev (`docker-compose.yml`) | Step 4 |
 | Queue | Scan jobs for workers | Adopted: PostgreSQL (`SELECT ... FOR UPDATE SKIP LOCKED`), leases + fencing; no extra service | Step 4 |
+| Fonts | Inter and Space Grotesk from `@fontsource-variable/*` (OFL-1.1, no dependencies, no install scripts), bundled and served from our origin: never Google Fonts, which would send visitors' addresses to a third party | Adopted 2026-11-10 | Step 7 |
 | React + TypeScript (Vite) | Dashboard in `web/`. Exact versions, each at least two weeks old when added; `.npmrc` sets `save-exact` and `ignore-scripts`; CI runs `npm ci` and `npm audit`. Deps: react, react-dom (MIT); dev: typescript (Apache-2.0), vite, @vitejs/plugin-react, vitest, jsdom, @testing-library/react and /dom, @types/react(-dom) (MIT). No UI kit (styles come from the mockups), no router library | Adopted 2026-11-10 | Step 7 |
 | golang.org/x/crypto | argon2id password hashing (stdlib only has PBKDF2, which is not memory-hard) | Adopted (BSD-3-Clause, maintained by the Go team) | Step 7.6 |
 | Redis or Valkey | Shared rate limiting and cache across workers | Defer until several workers run; check Redis's current license first, prefer Valkey (BSD) if in doubt | After step 4 |

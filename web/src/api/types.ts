@@ -96,3 +96,51 @@ export interface Overview {
   priorities: Priority[];
   per_target: OverviewTarget[];
 }
+
+export type FindingStatus = "open" | "fixed" | "accepted_risk";
+
+/** orgFinding: a finding in the standard schema (engine/internal/finding) with its target's ID. */
+export interface Finding {
+  target_id: string;
+  schema_version: string;
+  id: string;
+  module_id: string;
+  check_id: string;
+  /** The registered domain, e.g. "example.com". */
+  target: string;
+  /** What was checked, e.g. "_dmarc.example.com". */
+  asset: string;
+  severity: Severity;
+  title: string;
+  description: string;
+  /** Raw technical proof. */
+  evidence: string;
+  /** Ordered remediation steps. */
+  remediation: string[] | null;
+  references: string[] | null;
+  first_seen: string;
+  last_seen: string;
+  status: FindingStatus;
+  fixed_at?: string;
+}
+
+export interface List<T> {
+  items: T[];
+}
+
+export type ScanStatus = "queued" | "running" | "done" | "failed";
+
+/** scanJSON */
+export interface Scan {
+  id: string;
+  target_id: string;
+  domain: string;
+  modules: string[];
+  requested_by: string;
+  status: ScanStatus;
+  attempts: number;
+  error?: string;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
