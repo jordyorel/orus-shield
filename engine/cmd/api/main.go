@@ -54,7 +54,7 @@ func run(log *slog.Logger) error {
 	for _, m := range reg.All() {
 		modules = append(modules, m.Info().ID)
 	}
-	srv, err := api.New(st, api.Config{TrustedOrigins: cfg.trustedOrigins, Modules: modules}, log)
+	srv, err := api.New(st, api.Config{TrustedOrigins: cfg.trustedOrigins, Modules: modules, MFAKey: cfg.mfaKey}, log)
 	if err != nil {
 		return err
 	}

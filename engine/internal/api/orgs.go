@@ -25,7 +25,10 @@ type orgHandler func(w http.ResponseWriter, r *http.Request, req orgRequest)
 
 // withOrg resolves {org} from the URL: the caller must be a member, with at
 // least minRole for writes. A non-member gets 404, as if the organization
-// did not exist; a viewer attempting a write gets 403.
+// did not exist; a viewer attempting a write gets 403. An admin whose
+// session was not opened with a second factor gets 403 mfa_required on
+// every route of the organization, reads included: MFA is mandatory for
+// admins, and a stolen admin password alone must not reach their data.
 func (s *Server) withOrg(minRole string, h orgHandler) http.HandlerFunc {
 	return s.withSession(func(w http.ResponseWriter, r *http.Request, sess store.Session, _ string) {
 		orgID := r.PathValue("org")
@@ -36,6 +39,11 @@ func (s *Server) withOrg(minRole string, h orgHandler) http.HandlerFunc {
 		}
 		if err != nil {
 			s.internalError(w, r, err)
+			return
+		}
+		if role == store.RoleAdmin && !sess.MFA {
+			writeErrorCode(w, http.StatusForbidden, "mfa_required",
+				"two-factor authentication is required for administrators: enable it first")
 			return
 		}
 		if minRole == store.RoleAdmin && role != store.RoleAdmin {

@@ -132,6 +132,11 @@ func (f *fakeAdmin) IssueSetupToken(ctx context.Context, userID string, ttl time
 	return "secret-setup-token", nil
 }
 
+func (f *fakeAdmin) ResetMFA(ctx context.Context, userID, actor string) error {
+	f.created = append(f.created, "reset-mfa "+userID+" "+actor)
+	return nil
+}
+
 func (f *fakeAdmin) ListOrganizations(ctx context.Context) ([]store.Organization, error) {
 	return []store.Organization{{ID: "o-1", Name: "Default", CreatedAt: time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC)}}, nil
 }
@@ -572,6 +577,22 @@ func TestUserResetAndMember(t *testing.T) {
 		t.Errorf("calls = %v", got)
 	}
 	if err := c.run(context.Background(), []string{"user", "reset", "nobody@example.com"}); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("unknown user = %v, want ErrNotFound", err)
+	}
+}
+
+func TestUserResetMFA(t *testing.T) {
+	c, _, _, out := newCLIWithOrgs()
+	if err := c.run(context.Background(), []string{"user", "reset-mfa", "-as", "support:ticket-42", "alice@example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.admin.(*fakeAdmin).created; len(got) != 1 || got[0] != "reset-mfa u-1 support:ticket-42" {
+		t.Errorf("calls = %v", got)
+	}
+	if !strings.Contains(out.String(), "alice@example.com") {
+		t.Errorf("output = %q", out.String())
+	}
+	if err := c.run(context.Background(), []string{"user", "reset-mfa", "nobody@example.com"}); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("unknown user = %v, want ErrNotFound", err)
 	}
 }

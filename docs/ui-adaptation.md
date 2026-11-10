@@ -159,7 +159,7 @@ findings), `controls`, `policies`. The heat map and risk register read from it.
    module; published ranges for Cloudflare and Fastly, response headers for the others;
    no hosting-provider detection, which needs ASN data)
 6. API endpoints for screens 1 to 3, scoped by organization, with tests. (done: users,
-   sessions and `/api/v1`; see `engine/internal/api`)
+   sessions and `/api/v1`, TOTP MFA mandatory for admins; see `engine/internal/api`)
 7. Contextual risk function, then KEV ingestion once CVE-producing modules exist.
 8. Discovery module and connectors.
 9. Governance entities.

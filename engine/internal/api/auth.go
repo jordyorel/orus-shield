@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -40,9 +39,13 @@ type membershipJSON struct {
 }
 
 type meResponse struct {
-	UserID string           `json:"user_id"`
-	Email  string           `json:"email"`
-	Orgs   []membershipJSON `json:"orgs"`
+	UserID string `json:"user_id"`
+	Email  string `json:"email"`
+	// MFAEnabled: the user has a second factor. MFASession: this session
+	// was opened with it. Admins need MFASession for their organizations.
+	MFAEnabled bool             `json:"mfa_enabled"`
+	MFASession bool             `json:"mfa_session"`
+	Orgs       []membershipJSON `json:"orgs"`
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
@@ -50,80 +53,118 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) {
 		return
 	}
-	ctx := r.Context()
-	ip := clientIP(r)
-	email, err := store.NormalizeEmail(req.Email)
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, msgBadCredentials)
-		return
-	}
-
-	byEmail, byIP, err := s.auth.RecentFailures(ctx, email, ip, s.cfg.Now().Add(-loginWindow))
-	if err != nil {
-		s.internalError(w, r, err)
-		return
-	}
-	if byEmail >= maxFailuresPerKey || byIP >= maxFailuresPerIP {
-		w.Header().Set("Retry-After", strconv.Itoa(int(loginWindow.Seconds())))
-		writeError(w, http.StatusTooManyRequests, "too many failed attempts, try again later")
-		return
-	}
-
-	u, err := s.auth.UserByEmail(ctx, email)
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		password.VerifyDummy(req.Password) // same time as a real check
-		s.loginFailed(ctx, w, r, store.User{Email: email}, "unknown email")
-		return
-	case err != nil:
-		s.internalError(w, r, err)
-		return
-	}
-	if u.PasswordHash == "" || u.DisabledAt != nil {
-		password.VerifyDummy(req.Password)
-		s.loginFailed(ctx, w, r, u, "no password or disabled")
-		return
-	}
-	ok, err := password.Verify(req.Password, u.PasswordHash)
-	if err != nil {
-		s.internalError(w, r, err)
-		return
-	}
+	u, ok := s.authenticate(w, r, req.Email, req.Password, http.StatusUnauthorized)
 	if !ok {
-		s.loginFailed(ctx, w, r, u, "wrong password")
+		return
+	}
+	ctx := r.Context()
+	if u.MFAEnabled {
+		// The password is right, but no session yet: the client sends the
+		// code with this token to POST /auth/login/mfa.
+		challenge, err := s.auth.CreateMFAChallenge(ctx, u.ID, clientIP(r), s.cfg.Now().Add(mfaChallengeTTL))
+		if err != nil {
+			s.internalError(w, r, err)
+			return
+		}
+		if err := s.auth.Log(ctx, store.AuthEvent{UserID: u.ID, Email: u.Email, Action: store.AuthMFAChallenge, IP: clientIP(r)}); err != nil {
+			s.internalError(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, mfaChallengeResponse{MFARequired: true, MFAToken: challenge})
 		return
 	}
 
 	// A new token on every login: a token known before login (session
 	// fixation) is worthless.
 	expires := s.cfg.Now().Add(s.cfg.SessionMax)
-	token, err := s.auth.CreateSession(ctx, u.ID, ip, r.UserAgent(), expires)
+	token, err := s.auth.CreateSession(ctx, u.ID, clientIP(r), r.UserAgent(), expires)
 	if err != nil {
 		s.internalError(w, r, err)
 		return
 	}
-	if err := s.auth.Log(ctx, store.AuthEvent{UserID: u.ID, Email: u.Email, Action: store.AuthLoginOK, IP: ip}); err != nil {
+	if err := s.auth.Log(ctx, store.AuthEvent{UserID: u.ID, Email: u.Email, Action: store.AuthLoginOK, IP: clientIP(r)}); err != nil {
 		s.internalError(w, r, err)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name: sessionCookie, Value: token, Path: "/", Expires: expires,
-		Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode,
-	})
+	setSessionCookie(w, token, expires)
 	s.writeMe(w, r, store.Session{UserID: u.ID, Email: u.Email})
 }
 
+// authenticate checks an email and password under the login rate limit,
+// for a login or to confirm a sensitive action. On failure it has answered
+// (failStatus with the generic message, or 429) and returns false.
+func (s *Server) authenticate(w http.ResponseWriter, r *http.Request, rawEmail, pw string, failStatus int) (store.User, bool) {
+	ctx := r.Context()
+	email, err := store.NormalizeEmail(rawEmail)
+	if err != nil {
+		writeError(w, failStatus, msgBadCredentials)
+		return store.User{}, false
+	}
+	if !s.underLoginLimit(w, r, email) {
+		return store.User{}, false
+	}
+	u, err := s.auth.UserByEmail(ctx, email)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		password.VerifyDummy(pw) // same time as a real check
+		s.loginFailed(w, r, store.User{Email: email}, "unknown email", failStatus, msgBadCredentials)
+		return store.User{}, false
+	case err != nil:
+		s.internalError(w, r, err)
+		return store.User{}, false
+	}
+	if u.PasswordHash == "" || u.DisabledAt != nil {
+		password.VerifyDummy(pw)
+		s.loginFailed(w, r, u, "no password or disabled", failStatus, msgBadCredentials)
+		return store.User{}, false
+	}
+	ok, err := password.Verify(pw, u.PasswordHash)
+	if err != nil {
+		s.internalError(w, r, err)
+		return store.User{}, false
+	}
+	if !ok {
+		s.loginFailed(w, r, u, "wrong password", failStatus, msgBadCredentials)
+		return store.User{}, false
+	}
+	return u, true
+}
+
+// underLoginLimit answers 429 and returns false when email or the client
+// address had too many recent failures (passwords and codes alike).
+func (s *Server) underLoginLimit(w http.ResponseWriter, r *http.Request, email string) bool {
+	byEmail, byIP, err := s.auth.RecentFailures(r.Context(), email, clientIP(r), s.cfg.Now().Add(-loginWindow))
+	if err != nil {
+		s.internalError(w, r, err)
+		return false
+	}
+	if byEmail >= maxFailuresPerKey || byIP >= maxFailuresPerIP {
+		w.Header().Set("Retry-After", strconv.Itoa(int(loginWindow.Seconds())))
+		writeError(w, http.StatusTooManyRequests, "too many failed attempts, try again later")
+		return false
+	}
+	return true
+}
+
 // loginFailed records the failure (with its real reason, for the auth log
-// only) and answers with the generic message.
-func (s *Server) loginFailed(ctx context.Context, w http.ResponseWriter, r *http.Request, u store.User, reason string) {
-	if err := s.auth.Log(ctx, store.AuthEvent{
+// only) and answers status with msg. Every failure counts toward the login
+// rate limit.
+func (s *Server) loginFailed(w http.ResponseWriter, r *http.Request, u store.User, reason string, status int, msg string) {
+	if err := s.auth.Log(r.Context(), store.AuthEvent{
 		UserID: u.ID, Email: u.Email, Action: store.AuthLoginFailed, IP: clientIP(r),
 		Details: map[string]any{"reason": reason},
 	}); err != nil {
 		s.internalError(w, r, err)
 		return
 	}
-	writeError(w, http.StatusUnauthorized, msgBadCredentials)
+	writeError(w, status, msg)
+}
+
+func setSessionCookie(w http.ResponseWriter, token string, expires time.Time) {
+	http.SetCookie(w, &http.Cookie{
+		Name: sessionCookie, Value: token, Path: "/", Expires: expires,
+		Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode,
+	})
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request, sess store.Session, token string) {
@@ -152,7 +193,7 @@ func (s *Server) writeMe(w http.ResponseWriter, r *http.Request, sess store.Sess
 		s.internalError(w, r, err)
 		return
 	}
-	resp := meResponse{UserID: sess.UserID, Email: sess.Email, Orgs: []membershipJSON{}}
+	resp := meResponse{UserID: sess.UserID, Email: sess.Email, MFAEnabled: sess.MFAEnabled, MFASession: sess.MFA, Orgs: []membershipJSON{}}
 	for _, m := range ms {
 		resp.Orgs = append(resp.Orgs, membershipJSON{OrgID: m.OrgID, OrgName: m.OrgName, Role: m.Role})
 	}

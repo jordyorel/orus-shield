@@ -20,7 +20,7 @@ type tenant struct {
 	target  store.Target
 	scanID  string
 	finding finding.Finding
-	session string // an admin's session
+	session string // an admin's session, opened with MFA
 	viewer  string // a viewer's session
 }
 
@@ -61,7 +61,7 @@ func (e *env) tenant(name, domain string) tenant {
 	}
 	e.user("admin@"+domain, tn.orgID, store.RoleAdmin)
 	e.user("viewer@"+domain, tn.orgID, store.RoleViewer)
-	tn.session = e.login("admin@" + domain)
+	tn.session = e.adminSession("admin@" + domain)
 	tn.viewer = e.login("viewer@" + domain)
 	return tn
 }

@@ -17,6 +17,7 @@
 //	orusctl user add [-org ORG] [-role admin|viewer] [-as NAME] <email>
 //	orusctl user member [-org ORG] [-role admin|viewer] [-as NAME] <email>
 //	orusctl user reset [-as NAME] <email>
+//	orusctl user reset-mfa [-as NAME] <email>
 //	orusctl target add [-org ORG] [-rate N] [-exclusions JSON] <domain>
 //	orusctl target show [-org ORG] <domain>
 //	orusctl target verify-token [-org ORG] [-as NAME] <domain>
@@ -61,6 +62,7 @@ const usage = `usage:
   orusctl user add [-org ORG] [-role admin|viewer] <email>     (prints a one-time setup token)
   orusctl user member [-org ORG] [-role admin|viewer] <email>  (adds to another org or changes role)
   orusctl user reset <email>                                   (new setup token: password reset)
+  orusctl user reset-mfa <email>                               (lost phone: removes MFA, closes sessions)
   orusctl target add [-org ORG] [-rate N] [-exclusions JSON] <domain>
   orusctl target show [-org ORG] <domain>
   orusctl target verify-token [-org ORG] [-as NAME] <domain>   (prints the DNS record to publish)
@@ -90,6 +92,7 @@ type Admin interface {
 	UserByEmail(ctx context.Context, email string) (store.User, error)
 	SetMembership(ctx context.Context, userID, orgID, role, actor string) error
 	IssueSetupToken(ctx context.Context, userID string, ttl time.Duration, actor string) (string, error)
+	ResetMFA(ctx context.Context, userID, actor string) error
 }
 
 // setupTokenTTL is how long a new user has to choose a password.
@@ -220,7 +223,7 @@ func (c cli) run(ctx context.Context, args []string) error {
 		return fmt.Errorf("%w: unknown org subcommand %q", errUsage, rest[0])
 	case "user":
 		if len(rest) == 0 {
-			return fmt.Errorf("%w: user needs a subcommand (add, member, reset)", errUsage)
+			return fmt.Errorf("%w: user needs a subcommand (add, member, reset, reset-mfa)", errUsage)
 		}
 		switch rest[0] {
 		case "add":
@@ -229,6 +232,8 @@ func (c cli) run(ctx context.Context, args []string) error {
 			return c.userMember(ctx, rest[1:])
 		case "reset":
 			return c.userReset(ctx, rest[1:])
+		case "reset-mfa":
+			return c.userResetMFA(ctx, rest[1:])
 		}
 		return fmt.Errorf("%w: unknown user subcommand %q", errUsage, rest[0])
 	case "target":
@@ -370,6 +375,28 @@ func (c cli) userReset(ctx context.Context, args []string) error {
 		return err
 	}
 	return c.printSetupToken(ctx, u, *actor)
+}
+
+// userResetMFA removes a user's second factor when they lost their phone
+// and their recovery codes. Check who is asking before running it: it is
+// the one way around MFA. The user then signs in with their password and
+// must enrol again before using admin routes.
+func (c cli) userResetMFA(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("user reset-mfa", flag.ContinueOnError)
+	actor := fs.String("as", c.defaultActor, "requester recorded in the auth log")
+	pos, err := parse(fs, args, 1)
+	if err != nil {
+		return err
+	}
+	u, err := c.admin.UserByEmail(ctx, pos[0])
+	if err != nil {
+		return err
+	}
+	if err := c.admin.ResetMFA(ctx, u.ID, *actor); err != nil {
+		return err
+	}
+	fmt.Fprintf(c.out, "two-factor authentication of %s removed and every session closed; they must enrol again\n", u.Email)
+	return nil
 }
 
 // printSetupToken issues a setup token and tells how to use it. The token

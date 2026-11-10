@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/password"
+	"github.com/jordyorel/orus-shield/engine/internal/seal"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 	"github.com/jordyorel/orus-shield/engine/internal/store/storetest"
 )
@@ -26,14 +28,19 @@ type env struct {
 	handler http.Handler
 	now     time.Time
 	dns     *fakeDNS
+	secrets map[string][]byte // TOTP secrets of enrolled users, by email
 }
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	st := storetest.New(t)
-	e := &env{t: t, st: st, now: time.Now()}
+	e := &env{t: t, st: st, now: time.Now(), secrets: map[string][]byte{}}
 	e.dns = &fakeDNS{txt: map[string][]string{}}
-	srv, err := New(st, Config{Now: func() time.Time { return e.now }, DNS: e.dns, Modules: []string{"email", "tls"}},
+	key := make([]byte, seal.KeyLen)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatal(err)
+	}
+	srv, err := New(st, Config{Now: func() time.Time { return e.now }, DNS: e.dns, Modules: []string{"email", "tls"}, MFAKey: key},
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)

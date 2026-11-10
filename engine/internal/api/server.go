@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
+	"github.com/jordyorel/orus-shield/engine/internal/seal"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
@@ -43,6 +44,9 @@ type Config struct {
 	// Modules are the module IDs a scan may request; a scan without a list
 	// runs them all.
 	Modules []string
+	// MFAKey encrypts TOTP secrets in the database (seal.KeyLen bytes,
+	// from ORUS_MFA_KEY). Required.
+	MFAKey []byte
 }
 
 const (
@@ -58,8 +62,10 @@ type Server struct {
 	// org returns the handle of one organization. It is the only way
 	// handlers reach customer data.
 	org func(orgID string) (*store.Org, error)
-	cfg Config
-	log *slog.Logger
+	// mfaKey seals and opens TOTP secrets.
+	mfaKey *seal.Key
+	cfg    Config
+	log    *slog.Logger
 }
 
 // New returns the API server on st. It keeps only st's authentication
@@ -80,7 +86,11 @@ func New(st *store.Store, cfg Config, log *slog.Logger) (*Server, error) {
 	if len(cfg.Modules) == 0 {
 		return nil, errors.New("api: no modules configured")
 	}
-	return &Server{auth: st.Auth(), org: st.Org, cfg: cfg, log: log}, nil
+	key, err := seal.NewKey(cfg.MFAKey)
+	if err != nil {
+		return nil, fmt.Errorf("api: MFA key: %w", err)
+	}
+	return &Server{auth: st.Auth(), org: st.Org, mfaKey: key, cfg: cfg, log: log}, nil
 }
 
 // Handler returns the API's HTTP handler with every protection applied.
@@ -105,6 +115,10 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/logout", s.withSession(s.logout))
 	mux.HandleFunc("GET /api/v1/auth/me", s.withSession(s.me))
 	mux.HandleFunc("POST /api/v1/auth/setup-password", s.setupPassword)
+	mux.HandleFunc("POST /api/v1/auth/login/mfa", s.loginMFA)
+	mux.HandleFunc("POST /api/v1/auth/mfa/setup", s.withSession(s.mfaSetup))
+	mux.HandleFunc("POST /api/v1/auth/mfa/confirm", s.withSession(s.mfaConfirm))
+	mux.HandleFunc("POST /api/v1/auth/mfa/disable", s.withSession(s.mfaDisable))
 	s.orgRoutes(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
@@ -155,6 +169,9 @@ func (s *Server) recoverPanics(next http.Handler) http.Handler {
 // the user and never include internal details.
 type errorBody struct {
 	Error string `json:"error"`
+	// Code is a stable identifier for errors the dashboard reacts to
+	// (mfa_required: show the enrolment screen).
+	Code string `json:"code,omitempty"`
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -165,6 +182,10 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, errorBody{Error: msg})
+}
+
+func writeErrorCode(w http.ResponseWriter, status int, code, msg string) {
+	writeJSON(w, status, errorBody{Error: msg, Code: code})
 }
 
 // internalError logs err and answers 500 without details.

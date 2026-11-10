@@ -16,7 +16,8 @@ catalog with evaluated checks and posture score (`check_status`, `posture_snapsh
 package `posture`) and CDN / WAF detection (passive `cdn` module, asset details) are done;
 framework mappings (CIS Controls v8) wait for Jordy's review. The HTTP API with
 invitation-only accounts, sessions and the screen 1 to 3 endpoints is done
-(`engine/cmd/api`, `engine/internal/api`). Next: TOTP MFA, then the dashboard.
+(`engine/cmd/api`, `engine/internal/api`), with TOTP two-factor authentication, mandatory
+for admins (packages `totp` and `seal`). Next: the dashboard.
 
 ## How to work on this repo
 
@@ -60,6 +61,8 @@ engine/
   cmd/api/           HTTP API entrypoint
   internal/api/      HTTP handlers: auth, org-scoped reads and writes (handlers get a *store.Org)
   internal/password/ argon2id password hashing
+  internal/totp/     TOTP codes (RFC 6238), stdlib only
+  internal/seal/     AES-256-GCM sealing of TOTP secrets (key from ORUS_MFA_KEY)
   internal/module/   the Module interface and the registry
   internal/modules/  one package per check (email, tls, ports, cdn, ...)
   internal/finding/  finding schema and validation
@@ -157,7 +160,7 @@ set -a; . ./.env; set +a
 cd engine && go test -race ./...    # integration tests run when ORUS_TEST_DATABASE_URL is set
 go run ./cmd/worker                 # in one terminal
 go run ./cmd/orusctl target add <domain> && go run ./cmd/orusctl scan <domain>
-go run ./cmd/api                    # API on 127.0.0.1:8080
+go run ./cmd/api                    # API on 127.0.0.1:8080 (needs ORUS_MFA_KEY in .env)
 go run ./cmd/orusctl user add -role admin you@example.com   # prints a one-time setup token
 ```
 
@@ -165,6 +168,15 @@ Accounts are invitation-only: `orusctl user add` creates the account and prints 
 token; the user sets their password with `POST /api/v1/auth/setup-password`. Session
 cookies are `Secure`: browsers accept them on `localhost`, anywhere else the API must be
 behind HTTPS.
+
+Two-factor authentication (TOTP) is mandatory for admins: an admin session opened without
+a second factor gets `403 {"code": "mfa_required"}` on every route of that organization,
+reads included. Enrolment is `POST /auth/mfa/setup` (password) then `/auth/mfa/confirm`
+(first code, returns 10 recovery codes); with MFA, `POST /auth/login` returns an
+`mfa_token` that `POST /auth/login/mfa` exchanges with a code for the session. Wrong codes
+count as failed logins. The API needs `ORUS_MFA_KEY` (`openssl rand -base64 32`), which
+encrypts the secrets in the database: losing it invalidates every enrolment. A user who
+lost their phone and recovery codes is reset with `orusctl user reset-mfa <email>`.
 
 orusctl works in one organization at a time: `-org NAME|ID`, else `ORUS_ORG`, else
 `Default` (created by migration 0003, which also holds every pre-existing target).
