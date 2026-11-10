@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/account"
+	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
@@ -43,6 +44,10 @@ type Config struct {
 	// Modules are the module IDs a scan may request; a scan without a list
 	// runs them all.
 	Modules []string
+	// Catalog describes the modules of Modules (name, passive or active)
+	// for GET /orgs/{org}/modules. Optional: without it the route lists
+	// the IDs only.
+	Catalog []module.Info
 	// MFAKey encrypts TOTP secrets in the database (seal.KeyLen bytes,
 	// from ORUS_MFA_KEY). Required.
 	MFAKey []byte

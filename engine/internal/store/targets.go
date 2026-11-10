@@ -96,6 +96,48 @@ func (o *Org) CreateTarget(ctx context.Context, nt NewTarget) (Target, error) {
 	return t, nil
 }
 
+// TargetSettings are the scan settings of a target a customer may change.
+// A nil field is left unchanged.
+type TargetSettings struct {
+	// Exclusions must already be valid for gate.ParseExclusions: the API
+	// checks them with the worker's parser before calling.
+	Exclusions json.RawMessage
+	RatePerSec *float64 // > 0
+}
+
+// UpdateTargetSettings changes a target's exclusions and rate and returns
+// the target as stored. The worker reads them at the start of each scan,
+// so a change applies from the next scan on. A target of another
+// organization is ErrNotFound.
+func (o *Org) UpdateTargetSettings(ctx context.Context, id string, ts TargetSettings) (Target, error) {
+	if !isUUID(id) {
+		return Target{}, fmt.Errorf("update target %s: %w", id, ErrNotFound)
+	}
+	if ts.RatePerSec != nil && *ts.RatePerSec <= 0 {
+		return Target{}, fmt.Errorf("update target %s: rate must be positive", id)
+	}
+	var exclusions any
+	if ts.Exclusions != nil {
+		exclusions = ts.Exclusions
+	}
+	tx, err := o.begin(ctx)
+	if err != nil {
+		return Target{}, fmt.Errorf("update target %s: %w", id, err)
+	}
+	defer tx.Rollback(ctx)
+	t, err := scanTarget(tx.QueryRow(ctx, `
+		UPDATE targets SET exclusions = coalesce($3::jsonb, exclusions), rate_per_sec = coalesce($4, rate_per_sec)
+		WHERE id = $1 AND org_id = $2
+		RETURNING `+targetColumns, id, o.orgID, exclusions, ts.RatePerSec))
+	if err != nil {
+		return Target{}, fmt.Errorf("update target %s: %w", id, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Target{}, fmt.Errorf("update target %s: %w", id, err)
+	}
+	return t, nil
+}
+
 // GetTarget returns the target with the given ID, or ErrNotFound. Through an
 // Org, a target of another organization is ErrNotFound too: the caller
 // cannot tell it exists.

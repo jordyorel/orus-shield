@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -14,8 +15,11 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
-// Audit action for a target created through the API.
-const actionTargetCreated = "target.created"
+// Audit actions for targets changed through the API.
+const (
+	actionTargetCreated = "target.created"
+	actionTargetUpdated = "target.updated"
+)
 
 // writeRoutes registers the routes that change state: admin only.
 func (s *Server) writeRoutes(mux *http.ServeMux) {
@@ -24,6 +28,7 @@ func (s *Server) writeRoutes(mux *http.ServeMux) {
 	}
 	base := "/api/v1/orgs/{org}"
 	write("POST "+base+"/targets", s.createTarget)
+	write("PATCH "+base+"/targets/{target}", s.targetOnly(s.updateTarget))
 	write("POST "+base+"/targets/{target}/verification", s.targetOnly(s.verificationInstructions))
 	write("POST "+base+"/targets/{target}/verify", s.targetOnly(s.verifyTarget))
 	write("POST "+base+"/targets/{target}/scans", s.targetOnly(s.startScan))
@@ -77,6 +82,58 @@ func (s *Server) createTarget(w http.ResponseWriter, r *http.Request, req orgReq
 		return
 	}
 	writeJSON(w, http.StatusCreated, toTargetJSON(t))
+}
+
+type updateTargetRequest struct {
+	Exclusions json.RawMessage `json:"exclusions,omitempty"`
+	RatePerSec *float64        `json:"rate_per_sec,omitempty"`
+}
+
+// updateTarget changes a target's exclusions (rule 2) and rate (rule 3).
+// Both are checked like at creation; the worker applies them from the next
+// scan. The audit log keeps the old and new values.
+func (s *Server) updateTarget(w http.ResponseWriter, r *http.Request, req orgRequest, t store.Target) {
+	var body updateTargetRequest
+	if !decode(w, r, &body) {
+		return
+	}
+	if body.Exclusions == nil && body.RatePerSec == nil {
+		writeError(w, http.StatusBadRequest, "nothing to update: send exclusions and/or rate_per_sec")
+		return
+	}
+	if body.Exclusions != nil {
+		// An object, never null: the stored value must stay readable as
+		// the worker's exclusions.
+		if !bytes.HasPrefix(bytes.TrimSpace(body.Exclusions), []byte("{")) {
+			writeError(w, http.StatusBadRequest, "invalid exclusions: must be an object")
+			return
+		}
+		if _, err := gate.ParseExclusions(body.Exclusions); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid exclusions: "+err.Error())
+			return
+		}
+	}
+	if body.RatePerSec != nil && (*body.RatePerSec <= 0 || *body.RatePerSec > 100) {
+		writeError(w, http.StatusBadRequest, "rate_per_sec must be greater than 0 and at most 100")
+		return
+	}
+	updated, err := req.org.UpdateTargetSettings(r.Context(), t.ID, store.TargetSettings{Exclusions: body.Exclusions, RatePerSec: body.RatePerSec})
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	if err := req.org.AppendAudit(r.Context(), store.AuditEntry{
+		Actor: actor(req), Action: actionTargetUpdated, Target: t.Domain,
+		Details: map[string]any{
+			"target_id": t.ID,
+			"before":    map[string]any{"rate_per_sec": t.RatePerSec, "exclusions": t.Exclusions},
+			"after":     map[string]any{"rate_per_sec": updated.RatePerSec, "exclusions": updated.Exclusions},
+		},
+	}); err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toTargetJSON(updated))
 }
 
 type instructionsJSON struct {

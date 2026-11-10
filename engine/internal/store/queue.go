@@ -43,6 +43,11 @@ type Scan struct {
 	CreatedAt  time.Time
 	StartedAt  *time.Time
 	FinishedAt *time.Time
+	// NewFindings and FixedFindings are the findings this scan opened and
+	// marked fixed. Set by ListScans and RecentScans for finished scans
+	// only; nil elsewhere.
+	NewFindings   *int
+	FixedFindings *int
 }
 
 const scanColumns = `s.id::text, s.org_id::text, s.target_id::text, t.domain, s.modules, s.requested_by, s.status,

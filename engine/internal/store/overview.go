@@ -27,24 +27,54 @@ func (o *Org) ListTargets(ctx context.Context) ([]Target, error) {
 }
 
 // ListScans returns the latest scans of one of the organization's targets,
-// newest first, at most limit (1 to 100).
+// newest first, at most limit (1 to 100), with their findings counts.
 func (o *Org) ListScans(ctx context.Context, targetID string, limit int) ([]Scan, error) {
 	if !isUUID(targetID) {
 		return nil, nil
 	}
+	return o.listScans(ctx, targetID, limit)
+}
+
+// RecentScans returns the organization's latest scans across all targets,
+// newest first, at most limit (1 to 100), with their findings counts.
+func (o *Org) RecentScans(ctx context.Context, limit int) ([]Scan, error) {
+	return o.listScans(ctx, "", limit)
+}
+
+// listScans lists scans of targetID, or of every target when it is empty.
+// NewFindings and FixedFindings come from the scan.finished audit entry
+// (found through the audit log's target index), so they need no column of
+// their own; they stay nil for scans not finished.
+func (o *Org) listScans(ctx context.Context, targetID string, limit int) ([]Scan, error) {
 	limit = min(max(limit, 1), 100)
+	var target *string
+	if targetID != "" {
+		target = &targetID
+	}
 	tx, err := o.begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list scans: %w", err)
 	}
 	defer tx.Rollback(ctx)
-	rows, err := tx.Query(ctx, "SELECT "+scanColumns+` FROM scans s JOIN targets t ON t.id = s.target_id
-		WHERE s.org_id = $1 AND s.target_id = $2 ORDER BY s.created_at DESC, s.id DESC LIMIT $3`,
-		o.orgID, targetID, limit)
+	rows, err := tx.Query(ctx, "SELECT "+scanColumns+`, fin.new, fin.fixed
+		FROM scans s JOIN targets t ON t.id = s.target_id
+		LEFT JOIN LATERAL (
+			SELECT (a.details->>'new')::int AS new, (a.details->>'fixed')::int AS fixed FROM audit_log a
+			WHERE a.org_id = s.org_id AND a.target = t.domain AND a.action = $4
+			  AND a.details->>'scan_id' = s.id::text
+			LIMIT 1) fin ON true
+		WHERE s.org_id = $1 AND ($2::uuid IS NULL OR s.target_id = $2::uuid)
+		ORDER BY s.created_at DESC, s.id DESC LIMIT $3`,
+		o.orgID, target, limit, ActionScanFinished)
 	if err != nil {
 		return nil, fmt.Errorf("list scans: %w", err)
 	}
-	scans, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Scan, error) { return scanScan(r) })
+	scans, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Scan, error) {
+		var sc Scan
+		err := r.Scan(&sc.ID, &sc.OrgID, &sc.TargetID, &sc.Domain, &sc.Modules, &sc.RequestedBy, &sc.Status,
+			&sc.Attempt, &sc.Error, &sc.CreatedAt, &sc.StartedAt, &sc.FinishedAt, &sc.NewFindings, &sc.FixedFindings)
+		return sc, err
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list scans: %w", err)
 	}

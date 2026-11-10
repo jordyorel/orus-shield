@@ -143,6 +143,18 @@ export interface Scan {
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
+  /** Findings this scan opened and fixed (finished scans, in lists only). */
+  new_findings?: number;
+  fixed_findings?: number;
+}
+
+/** moduleJSON */
+export interface ModuleInfo {
+  id: string;
+  name: string;
+  /** active modules run on verified targets only. */
+  kind: "passive" | "active" | "";
+  checks: number;
 }
 
 /** targetJSON */

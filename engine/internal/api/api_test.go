@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/password"
 	"github.com/jordyorel/orus-shield/engine/internal/seal"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
@@ -40,7 +41,8 @@ func newEnv(t *testing.T) *env {
 	if _, err := rand.Read(key); err != nil {
 		t.Fatal(err)
 	}
-	srv, err := New(st, Config{Now: func() time.Time { return e.now }, DNS: e.dns, Modules: []string{"email", "tls"}, MFAKey: key},
+	srv, err := New(st, Config{Now: func() time.Time { return e.now }, DNS: e.dns, Modules: []string{"email", "tls"}, MFAKey: key,
+		Catalog: []module.Info{{ID: "email", Name: "Email security", Kind: module.KindPassive}, {ID: "tls", Name: "TLS", Kind: module.KindPassive}}},
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)

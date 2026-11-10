@@ -52,6 +52,8 @@ func (s *Server) orgRoutes(mux *http.ServeMux) {
 	}
 	read("/overview", s.overview)
 	read("/findings", s.orgFindings)
+	read("/modules", s.listModules)
+	read("/scans", s.recentScans)
 	read("/targets", s.listTargets)
 	read("/targets/{target}", s.targetOnly(s.getTarget))
 	read("/targets/{target}/assets", s.targetOnly(s.listAssets))
@@ -117,13 +119,17 @@ type scanJSON struct {
 	CreatedAt   time.Time  `json:"created_at"`
 	StartedAt   *time.Time `json:"started_at"`
 	FinishedAt  *time.Time `json:"finished_at"`
+	// Findings this scan opened and marked fixed; only in scan lists, for
+	// finished scans.
+	NewFindings   *int `json:"new_findings,omitempty"`
+	FixedFindings *int `json:"fixed_findings,omitempty"`
 }
 
 func toScanJSON(sc store.Scan) scanJSON {
 	return scanJSON{
 		ID: sc.ID, TargetID: sc.TargetID, Domain: sc.Domain, Modules: sc.Modules, RequestedBy: sc.RequestedBy,
 		Status: sc.Status, Attempts: sc.Attempt, Error: sc.Error, CreatedAt: sc.CreatedAt,
-		StartedAt: sc.StartedAt, FinishedAt: sc.FinishedAt,
+		StartedAt: sc.StartedAt, FinishedAt: sc.FinishedAt, NewFindings: sc.NewFindings, FixedFindings: sc.FixedFindings,
 	}
 }
 
@@ -205,6 +211,48 @@ func (s *Server) listScans(w http.ResponseWriter, r *http.Request, req orgReques
 	out := make([]scanJSON, 0, len(scans))
 	for _, sc := range scans {
 		out = append(out, toScanJSON(sc))
+	}
+	writeJSON(w, http.StatusOK, listOf(out))
+}
+
+// recentScans lists the organization's latest scans, all targets, for
+// the scans screen's history.
+func (s *Server) recentScans(w http.ResponseWriter, r *http.Request, req orgRequest) {
+	limit, ok := intParam(w, r, "limit", 20, 1, 100)
+	if !ok {
+		return
+	}
+	scans, err := req.org.RecentScans(r.Context(), limit)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	out := make([]scanJSON, 0, len(scans))
+	for _, sc := range scans {
+		out = append(out, toScanJSON(sc))
+	}
+	writeJSON(w, http.StatusOK, listOf(out))
+}
+
+type moduleJSON struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Kind   string `json:"kind"`   // passive or active (active: verified targets only)
+	Checks int    `json:"checks"` // checks in its catalog
+}
+
+// listModules lists the modules a scan may request, so the dashboard
+// offers only what the engine runs.
+func (s *Server) listModules(w http.ResponseWriter, r *http.Request, req orgRequest) {
+	out := make([]moduleJSON, 0, len(s.cfg.Modules))
+	for _, id := range s.cfg.Modules {
+		m := moduleJSON{ID: id}
+		for _, info := range s.cfg.Catalog {
+			if info.ID == id {
+				m.Name, m.Kind, m.Checks = info.Name, string(info.Kind), len(info.Checks)
+			}
+		}
+		out = append(out, m)
 	}
 	writeJSON(w, http.StatusOK, listOf(out))
 }

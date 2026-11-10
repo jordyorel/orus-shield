@@ -2,6 +2,9 @@ package store
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -114,5 +117,77 @@ func TestNewAssets(t *testing.T) {
 		if n != want {
 			t.Errorf("NewAssets(since %s) = %d, want %d", since.Format("01-02"), n, want)
 		}
+	}
+}
+
+func TestUpdateTargetSettings(t *testing.T) {
+	l := newLifecycle(t)
+	ctx := context.Background()
+	rate := 20.0
+	got, err := l.org.UpdateTargetSettings(ctx, l.target.ID, TargetSettings{RatePerSec: &rate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RatePerSec != 20 || string(got.Exclusions) != "{}" {
+		t.Errorf("rate only: %+v", got)
+	}
+	excl := json.RawMessage(`{"paths":["/admin"]}`)
+	got, err = l.org.UpdateTargetSettings(ctx, l.target.ID, TargetSettings{Exclusions: excl})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RatePerSec != 20 || !strings.Contains(string(got.Exclusions), "/admin") {
+		t.Errorf("exclusions only: %+v", got)
+	}
+	zero := 0.0
+	if _, err := l.org.UpdateTargetSettings(ctx, l.target.ID, TargetSettings{RatePerSec: &zero}); err == nil {
+		t.Error("a zero rate was accepted")
+	}
+
+	// Another organization cannot change it.
+	other, err := l.s.CreateOrganization(ctx, "Other", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	oh, err := l.s.Org(other.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := oh.UpdateTargetSettings(ctx, l.target.ID, TargetSettings{RatePerSec: &rate}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("other organization's update = %v, want ErrNotFound", err)
+	}
+}
+
+func TestRecentScansCounts(t *testing.T) {
+	l := newLifecycle(t)
+	ctx := context.Background()
+	spf := makeFinding("email", "spf-missing", "example.com")
+	l.mustScan(t1, []string{"email"}, nil, spf) // opens spf
+	l.mustScan(t2, []string{"email"}, nil)      // fixes it
+	if _, err := l.org.EnqueueScan(ctx, l.target.ID, []string{"email"}, "jordy"); err != nil {
+		t.Fatal(err)
+	}
+
+	scans, err := l.org.RecentScans(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scans) != 3 {
+		t.Fatalf("scans = %d, want 3", len(scans))
+	}
+	queued, second, first := scans[0], scans[1], scans[2]
+	if queued.Status != "queued" || queued.NewFindings != nil || queued.FixedFindings != nil {
+		t.Errorf("queued scan = %+v, want no counts", queued)
+	}
+	if second.NewFindings == nil || *second.NewFindings != 0 || second.FixedFindings == nil || *second.FixedFindings != 1 {
+		t.Errorf("second scan counts = %v/%v, want 0 new, 1 fixed", second.NewFindings, second.FixedFindings)
+	}
+	if first.NewFindings == nil || *first.NewFindings != 1 {
+		t.Errorf("first scan new = %v, want 1", first.NewFindings)
+	}
+	// The per-target listing has the same counts.
+	byTarget, err := l.org.ListScans(ctx, l.target.ID, 10)
+	if err != nil || len(byTarget) != 3 || byTarget[1].FixedFindings == nil || *byTarget[1].FixedFindings != 1 {
+		t.Errorf("ListScans = %+v, %v", byTarget, err)
 	}
 }
