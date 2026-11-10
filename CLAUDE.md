@@ -171,7 +171,13 @@ go run ./cmd/worker                 # in one terminal
 go run ./cmd/orusctl target add <domain> && go run ./cmd/orusctl scan <domain>
 go run ./cmd/api                    # API on 127.0.0.1:8080 (needs ORUS_MFA_KEY in .env)
 go run ./cmd/orusctl user add -role admin you@example.com   # prints a one-time setup token
+cd web && npm ci && npm run dev     # dashboard on http://localhost:5173, /api relayed to :8080
+npm test && npm run typecheck       # from web/
 ```
+
+The dashboard sets a `Secure` session cookie: Brave, Chrome and Firefox accept it on
+`http://localhost`, Safari does not (use another browser locally). Restart `go run ./cmd/api`
+after changing Go code: it does not reload by itself. Vite reloads the dashboard live.
 
 Accounts are invitation-only: `orusctl user add` creates the account and prints a setup
 token; the user sets their password on the dashboard page `/setup-password` (or with
@@ -224,6 +230,7 @@ tools below before the roadmap step listed for it.
 | PostgreSQL | Main database: customers, assets, scans, findings (`JSONB`) | Adopted: PostgreSQL 18 (uuidv7), driver pgx v5 (MIT) | Step 4 |
 | Docker / Compose | Local dev environment; isolation of heavy scanners | Adopted for local dev (`docker-compose.yml`) | Step 4 |
 | Queue | Scan jobs for workers | Adopted: PostgreSQL (`SELECT ... FOR UPDATE SKIP LOCKED`), leases + fencing; no extra service | Step 4 |
+| React + TypeScript (Vite) | Dashboard in `web/`. Exact versions, each at least two weeks old when added; `.npmrc` sets `save-exact` and `ignore-scripts`; CI runs `npm ci` and `npm audit`. Deps: react, react-dom (MIT); dev: typescript (Apache-2.0), vite, @vitejs/plugin-react, vitest, jsdom, @testing-library/react and /dom, @types/react(-dom) (MIT). No UI kit (styles come from the mockups), no router library | Adopted 2026-11-10 | Step 7 |
 | golang.org/x/crypto | argon2id password hashing (stdlib only has PBKDF2, which is not memory-hard) | Adopted (BSD-3-Clause, maintained by the Go team) | Step 7.6 |
 | Redis or Valkey | Shared rate limiting and cache across workers | Defer until several workers run; check Redis's current license first, prefer Valkey (BSD) if in doubt | After step 4 |
 | Nuclei | Template-based vulnerability detection (Go, MIT) | Adopt as a library, wrapped in a module | After step 6 |
