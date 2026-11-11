@@ -7,8 +7,9 @@ attention to French-speaking Africa (local payment methods, French-first reports
 
 Status: roadmap steps 1 to 6 are done (finding schema, Module interface, gated DNS
 resolver and dialer, email and TLS modules, PostgreSQL storage and queue, gate, worker,
-orusctl, ownership verification, per-IP ownership and the ports module). The ports module
-still needs a real-world test on a server Jordy owns. Step 7 follows the order in
+orusctl, ownership verification, per-IP ownership and the ports module, tested for real on
+the lab server on 2026-11-11). The passive `web` module (HTTPS redirect, security headers,
+cookies, disclosed versions) is done too. Step 7 follows the order in
 `docs/ui-adaptation.md`: organizations (multi-tenant scoping, `store.Org` + PostgreSQL
 row-level security), the findings lifecycle (`fixed_at`, `finding_events` history) and the
 asset inventory (`module.Result` with findings and assets, `assets` table) and the check
@@ -82,7 +83,7 @@ engine/
   internal/totp/     TOTP codes (RFC 6238), stdlib only
   internal/seal/     AES-256-GCM sealing of TOTP secrets (key from ORUS_MFA_KEY)
   internal/module/   the Module interface and the registry
-  internal/modules/  one package per check (email, tls, ports, cdn, ...)
+  internal/modules/  one package per check (email, tls, ports, cdn, web, ...)
   internal/finding/  finding schema and validation
   internal/asset/    asset schema (hostname, ip, service, certificate) and validation
   internal/dnsname/  DNS name normalization, shared by module and asset
@@ -95,7 +96,7 @@ engine/
                      audit log; org-scoped handle (store.Org) + row-level security
   internal/worker/   claims scans, runs modules, records results
   internal/modules/all/  the list of shipped modules
-deploy/              local infrastructure files (PostgreSQL init)
+deploy/              local infrastructure files (PostgreSQL init; lab/setup.sh: the test lab server)
 web/                 dashboard (React + TypeScript, Vite)
 docs/
 ```
@@ -215,8 +216,12 @@ production the worker needs a role with `BYPASSRLS` and the API a login role gra
 `orus_app`: a role with neither sees no rows at all.
 
 Only scan domains you own, even passively. The lab domain is `orushield.xyz` (verified;
-the product domain will be a .io or .com). For TLS test cases, badssl.com subdomains are
-built for that purpose. The test lab domain is deliberately misconfigured: never reuse the
+the product domain will be a .io or .com). Its lab server is a DigitalOcean droplet named
+`orushield.xyz` (so its PTR is under the domain), set up with `deploy/lab/setup.sh`:
+configuration defects only, never a really vulnerable application. Run scans from a normal
+network: a mobile hotspot may cache stale DNS answers and intercept ports (21 answered on
+every IP through one), which skews ownership checks and port results. For TLS test cases,
+badssl.com subdomains are built for that purpose. The test lab domain is deliberately misconfigured: never reuse the
 product's own domain for it.
 
 ## Roadmap
@@ -226,7 +231,7 @@ product's own domain for it.
 3. TLS/certificate module (passive). (done)
 4. Worker, queue and storage. (done)
 5. Ownership verification (DNS TXT). (done)
-6. Ports module (active, verified targets only). (done; real-world test on a VPS pending)
+6. Ports module (active, verified targets only). (done; tested on the lab VPS 2026-11-11)
 7. API, then dashboard. Mockups are in `docs/design/` (see its README); how each screen
    maps to engine data, and the backend work it needs, is in `docs/ui-adaptation.md`.
 
