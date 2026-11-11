@@ -76,6 +76,43 @@ describe("App", () => {
     expect(window.location.hash).toBe("");
   });
 
+  it("signs up: form, emailed link, password, then sign in", async () => {
+    const calls = mockApi({
+      "GET /auth/me": fail(401),
+      "POST /auth/signup": () => ({ status: 202 }),
+      "POST /auth/signup/complete": () => ({ status: 204 }),
+    });
+    start("/login");
+    fireEvent.click(await screen.findByRole("link", { name: "Créer un compte" }));
+    expect(await screen.findByRole("heading", { name: "Créer un compte" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Adresse e-mail professionnelle"), { target: { value: "dg@startup.example" } });
+    fireEvent.change(screen.getByLabelText("Nom de votre organisation"), { target: { value: " Startup SA " } });
+    fireEvent.click(screen.getByRole("button", { name: "Recevoir le lien de confirmation" }));
+    expect(await screen.findByText(/Un email vient d’être envoyé à dg@startup\.example/)).toBeTruthy();
+    expect(calls.find((c) => c.key === "POST /auth/signup")?.body).toEqual({ email: "dg@startup.example", organization: "Startup SA" });
+  });
+
+  it("completes a signup from the emailed link", async () => {
+    const calls = mockApi({ "GET /auth/me": fail(401), "POST /auth/signup/complete": () => ({ status: 204 }) });
+    start("/signup/complete#token=sig-1");
+    const pw = (await screen.findByLabelText("Mot de passe")) as HTMLInputElement;
+    expect(window.location.hash).toBe("");
+    fireEvent.change(pw, { target: { value: "a long enough passphrase" } });
+    fireEvent.change(screen.getByLabelText("Confirmez le mot de passe"), { target: { value: "a long enough passphrase" } });
+    fireEvent.click(screen.getByRole("button", { name: "Créer mon compte" }));
+    expect(await screen.findByText(/Votre compte est créé/)).toBeTruthy();
+    expect(calls.find((c) => c.key === "POST /auth/signup/complete")?.body).toEqual({ token: "sig-1", password: "a long enough passphrase" });
+  });
+
+  it("says when the signup address already has an account", async () => {
+    mockApi({ "GET /auth/me": fail(401), "POST /auth/signup/complete": fail(409, "exists", "account_exists") });
+    start("/signup/complete#token=sig-2");
+    fireEvent.change(await screen.findByLabelText("Mot de passe"), { target: { value: "a long enough passphrase" } });
+    fireEvent.change(screen.getByLabelText("Confirmez le mot de passe"), { target: { value: "a long enough passphrase" } });
+    fireEvent.click(screen.getByRole("button", { name: "Créer mon compte" }));
+    expect(await screen.findByText(/Un compte existe déjà pour cette adresse/)).toBeTruthy();
+  });
+
   it("logs in with a second factor", async () => {
     let codeTries = 0;
     const calls = mockApi({

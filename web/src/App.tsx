@@ -13,6 +13,8 @@ import { OverviewPage } from "./pages/OverviewPage";
 import { ScansPage } from "./pages/ScansPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SetupPasswordPage } from "./pages/SetupPasswordPage";
+import { SignupCompletePage } from "./pages/SignupCompletePage";
+import { SignupPage } from "./pages/SignupPage";
 import { VulnerabilitiesPage } from "./pages/VulnerabilitiesPage";
 import { match, Redirect, useLocation } from "./router";
 
@@ -25,6 +27,8 @@ export function App() {
   // Pages open to everyone.
   if (path === "/setup-password") return <SetupPasswordPage />;
   if (path === "/forgot-password") return <ForgotPasswordPage />;
+  if (path === "/signup") return state.status === "signed-in" ? <Redirect to="/" /> : <SignupPage />;
+  if (path === "/signup/complete") return <SignupCompletePage />;
   if (path === "/login") return state.status === "signed-in" ? <Redirect to="/" /> : <LoginPage />;
   if (state.status === "signed-out") return <Redirect to="/login" />;
 

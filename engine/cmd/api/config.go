@@ -18,6 +18,7 @@ type config struct {
 	mfaKey         []byte
 	publicURL      string
 	smtp           *mailer.SMTP // nil: mail not configured
+	signupClosed   bool
 }
 
 // loadConfig reads:
@@ -40,6 +41,8 @@ type config struct {
 //	ORUS_SMTP_PASSWORD        SMTP password
 //	ORUS_MAIL_FROM            sender, e.g. "Orus Shield <no-reply@example.com>";
 //	                          required with ORUS_SMTP_ADDR
+//	ORUS_SIGNUP               "open" (default) or "closed": self-service signup;
+//	                          closed means accounts by invitation only
 func loadConfig(getenv func(string) string) (config, error) {
 	cfg := config{
 		databaseURL: getenv("ORUS_DATABASE_URL"),
@@ -69,6 +72,13 @@ func loadConfig(getenv func(string) string) (config, error) {
 	}
 	if cfg.smtp, err = mailer.FromEnv(getenv); err != nil {
 		return config{}, err
+	}
+	switch strings.TrimSpace(getenv("ORUS_SIGNUP")) {
+	case "", "open":
+	case "closed":
+		cfg.signupClosed = true
+	default:
+		return config{}, errors.New(`ORUS_SIGNUP must be "open" or "closed"`)
 	}
 	return cfg, nil
 }

@@ -56,6 +56,8 @@ type Config struct {
 	Mailer mailer.Sender
 	// PublicURL is the dashboard's address, for links in emails.
 	PublicURL string
+	// SignupClosed hides self-service signup (accounts by invitation only).
+	SignupClosed bool
 }
 
 const (
@@ -119,6 +121,10 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/auth/me", s.withSession(s.me))
 	mux.HandleFunc("POST /api/v1/auth/setup-password", s.setupPassword)
 	mux.HandleFunc("POST /api/v1/auth/forgot-password", s.forgotPassword)
+	if !s.cfg.SignupClosed {
+		mux.HandleFunc("POST /api/v1/auth/signup", s.signup)
+		mux.HandleFunc("POST /api/v1/auth/signup/complete", s.completeSignup)
+	}
 	mux.HandleFunc("POST /api/v1/auth/login/mfa", s.loginMFA)
 	mux.HandleFunc("POST /api/v1/auth/mfa/setup", s.withSession(s.mfaSetup))
 	mux.HandleFunc("POST /api/v1/auth/mfa/confirm", s.withSession(s.mfaConfirm))

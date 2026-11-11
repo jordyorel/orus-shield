@@ -213,3 +213,49 @@ func FindingsLink(publicURL, orgID, findingID string) string {
 	}
 	return u
 }
+
+// ConfirmSignup is the email that confirms a signup: the link creates the
+// account and the organization.
+func ConfirmSignup(to, org, link string, valid time.Duration) Message {
+	org = oneLine(org, 80)
+	return Message{
+		To:      to,
+		Subject: "Confirmez la création de votre compte Orus Shield",
+		Text: fmt.Sprintf(`Bonjour,
+
+Pour créer votre compte Orus Shield et l'organisation « %s », confirmez
+votre adresse en ouvrant ce lien, puis choisissez votre mot de passe
+(valable %s, utilisable une seule fois) :
+
+%s
+
+Rien n'est créé tant que vous n'avez pas ouvert ce lien. Si vous n'êtes pas
+à l'origine de cette demande, ignorez cet email.
+%s
+`, org, frenchDuration(valid), link, signature),
+	}
+}
+
+// AlreadyRegistered answers a signup for an address that has an account:
+// the form gives the same answer either way, the email tells the owner.
+func AlreadyRegistered(to, loginURL, forgotURL string) Message {
+	return Message{
+		To:      to,
+		Subject: "Vous avez déjà un compte Orus Shield",
+		Text: fmt.Sprintf(`Bonjour,
+
+Quelqu'un (vous, probablement) a demandé à créer un compte Orus Shield
+avec cette adresse. Vous en avez déjà un : connectez-vous ici
+
+%s
+
+Mot de passe oublié ? Choisissez-en un nouveau ici :
+
+%s
+
+Si vous n'êtes pas à l'origine de cette demande, ignorez cet email :
+rien n'a changé sur votre compte.
+%s
+`, loginURL, forgotURL, signature),
+	}
+}

@@ -71,7 +71,7 @@ func run(log *slog.Logger) error {
 	}
 	srv, err := api.New(st, api.Config{
 		TrustedOrigins: cfg.trustedOrigins, Modules: modules, Catalog: catalog, MFAKey: cfg.mfaKey,
-		Mailer: mail, PublicURL: cfg.publicURL,
+		Mailer: mail, PublicURL: cfg.publicURL, SignupClosed: cfg.signupClosed,
 	}, log)
 	if err != nil {
 		return err

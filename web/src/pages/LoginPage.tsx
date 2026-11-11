@@ -125,6 +125,9 @@ export function LoginPage() {
           <Link to="/forgot-password">Mot de passe oublié ?</Link>
         </p>
         <p className="small muted">
+          Pas encore de compte ? <Link to="/signup">Créer un compte</Link>
+        </p>
+        <p className="small muted">
           Première connexion ? <Link to="/setup-password">Définissez votre mot de passe</Link> avec le code d’activation reçu de votre administrateur.
         </p>
       </div>

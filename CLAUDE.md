@@ -195,8 +195,13 @@ The dashboard sets a `Secure` session cookie: Brave, Chrome and Firefox accept i
 `http://localhost`, Safari does not (use another browser locally). Restart `go run ./cmd/api`
 after changing Go code: it does not reload by itself. Vite reloads the dashboard live.
 
-Accounts are invitation-only: an organization admin invites from Paramètres > Équipe
-(the dashboard shows the setup code once), or `orusctl user add` creates the account and
+Accounts: self-service signup at `/signup` (email + organization name): nothing is created
+until the emailed link is used, then the account, the organization and the admin membership
+are created together (migration 0013; the auth role creates organizations only through
+`signup_create_organization`, for a request consumed in the same transaction). Same answer
+whether the address has an account; 3 requests per hour per address, 5 per IP.
+`ORUS_SIGNUP=closed` turns it off (invitation only). An organization admin invites from
+Paramètres > Équipe, or `orusctl user add` creates the account and
 prints a setup token; the user sets their password on the dashboard page `/setup-password` (or with
 `POST /api/v1/auth/setup-password`). Session
 cookies are `Secure`: browsers accept them on `localhost`, anywhere else the API must be

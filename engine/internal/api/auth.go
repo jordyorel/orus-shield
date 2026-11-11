@@ -50,6 +50,13 @@ func (s *Server) accountError(w http.ResponseWriter, r *http.Request, err error,
 	case errors.Is(err, account.ErrRateLimited):
 		w.Header().Set("Retry-After", strconv.Itoa(int(account.LoginWindow.Seconds())))
 		writeError(w, http.StatusTooManyRequests, err.Error())
+	case errors.Is(err, account.ErrSignupRateLimited):
+		w.Header().Set("Retry-After", strconv.Itoa(int(account.SignupWindow.Seconds())))
+		writeError(w, http.StatusTooManyRequests, err.Error())
+	case errors.Is(err, account.ErrInvalidSignup), errors.Is(err, account.ErrInvalidSignupToken):
+		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, account.ErrAccountExists):
+		writeErrorCode(w, http.StatusConflict, "account_exists", err.Error())
 	case errors.Is(err, account.ErrResetRateLimited):
 		w.Header().Set("Retry-After", strconv.Itoa(int(account.ResetWindow.Seconds())))
 		writeError(w, http.StatusTooManyRequests, err.Error())
@@ -159,6 +166,40 @@ func (s *Server) forgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
+}
+
+type signupRequest struct {
+	Email        string `json:"email"`
+	Organization string `json:"organization"`
+}
+
+// signup emails a confirmation link (or, for an address with an account, a
+// note to sign in). 202 either way; 400 for a malformed form, 429 over the
+// rate limit, 404 when signup is closed (ORUS_SIGNUP=closed).
+func (s *Server) signup(w http.ResponseWriter, r *http.Request) {
+	var req signupRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	if err := s.acct.Signup(r.Context(), req.Email, req.Organization, account.ClientFrom(r)); err != nil {
+		s.accountError(w, r, err, http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+}
+
+// completeSignup creates the account and the organization from the
+// emailed link and a password.
+func (s *Server) completeSignup(w http.ResponseWriter, r *http.Request) {
+	var req setupPasswordRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	if err := s.acct.CompleteSignup(r.Context(), req.Token, req.Password, account.ClientFrom(r)); err != nil {
+		s.accountError(w, r, err, http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // sessionHandler is a handler that runs only with a valid session.

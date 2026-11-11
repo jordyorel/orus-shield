@@ -30,7 +30,14 @@ func TestLoadConfig(t *testing.T) {
 	if err != nil || cfg.publicURL != "https://app.example" || cfg.smtp == nil || cfg.smtp.Addr != "127.0.0.1:1025" {
 		t.Errorf("mail config = %+v, %v", cfg, err)
 	}
+	if cfg.signupClosed {
+		t.Error("signup closed by default, want open")
+	}
+	if cfg, err = loadConfig(env(map[string]string{"ORUS_DATABASE_URL": "postgres://x", "ORUS_MFA_KEY": key, "ORUS_SIGNUP": "closed"})); err != nil || !cfg.signupClosed {
+		t.Errorf("ORUS_SIGNUP=closed: %+v, %v", cfg.signupClosed, err)
+	}
 	for name, m := range map[string]map[string]string{
+		"signup typo":         {"ORUS_DATABASE_URL": "postgres://x", "ORUS_MFA_KEY": key, "ORUS_SIGNUP": "yes"},
 		"smtp without sender": {"ORUS_DATABASE_URL": "postgres://x", "ORUS_MFA_KEY": key, "ORUS_SMTP_ADDR": "127.0.0.1:1025"},
 		"smtp without port":   {"ORUS_DATABASE_URL": "postgres://x", "ORUS_MFA_KEY": key, "ORUS_SMTP_ADDR": "smtp.example", "ORUS_MAIL_FROM": "a@example.com"},
 		"bad public url":      {"ORUS_DATABASE_URL": "postgres://x", "ORUS_MFA_KEY": key, "ORUS_PUBLIC_URL": "app.example"},

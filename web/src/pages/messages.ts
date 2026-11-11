@@ -8,6 +8,11 @@ export const msg = {
   badPassword: "Mot de passe incorrect.",
   rateLimited: "Trop de tentatives échouées. Réessayez dans 15 minutes.",
   resetRateLimited: "Trop de demandes de réinitialisation. Réessayez dans une heure.",
+  signupRateLimited: "Trop de demandes d’inscription. Réessayez dans une heure.",
+  signupInvalid: "Vérifiez l’adresse e-mail et le nom de l’organisation.",
+  signupClosed: "Les inscriptions sont fermées pour le moment : demandez une invitation à votre administrateur.",
+  signupLink: "Ce lien d’inscription est invalide, expiré ou déjà utilisé. Recommencez l’inscription pour en recevoir un nouveau.",
+  accountExists: "Un compte existe déjà pour cette adresse : connectez-vous, ou utilisez « Mot de passe oublié ».",
   badCode: "Code incorrect. Vérifiez l’heure de votre téléphone et saisissez le code affiché maintenant.",
   badRecovery: "Code incorrect, ou déjà utilisé.",
   loginExpired: "La vérification a expiré. Saisissez à nouveau votre mot de passe.",
@@ -23,6 +28,7 @@ export const msg = {
 export const notices: Record<string, string> = {
   password: "Votre mot de passe est enregistré. Vous pouvez vous connecter.",
   logout: "Vous êtes déconnecté.",
+  signup: "Votre compte est créé. Connectez-vous : vous activerez ensuite la double authentification.",
 };
 
 /** PASSWORD_MIN_LENGTH mirrors the engine's password.MinLength. */
