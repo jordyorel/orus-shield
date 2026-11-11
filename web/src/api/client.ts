@@ -49,6 +49,7 @@ export const api = {
   loginMfa: (mfa_token: string, code: string) => request<Me>("POST", "/auth/login/mfa", { mfa_token, code }),
   logout: () => request<void>("POST", "/auth/logout"),
   setupPassword: (token: string, password: string) => request<void>("POST", "/auth/setup-password", { token, password }),
+  forgotPassword: (email: string) => request<void>("POST", "/auth/forgot-password", { email }),
   mfaSetup: (password: string) => request<MfaSetup>("POST", "/auth/mfa/setup", { password }),
   mfaConfirm: (code: string) => request<RecoveryCodes>("POST", "/auth/mfa/confirm", { code }),
   changePassword: (current_password: string, new_password: string) =>
@@ -60,7 +61,7 @@ export const api = {
     request<void>("PUT", `${org(orgId)}/members/${encodeURIComponent(userId)}/role`, { role }),
   removeMember: (orgId: string, userId: string) => request<void>("DELETE", `${org(orgId)}/members/${encodeURIComponent(userId)}`),
   newSetupToken: (orgId: string, userId: string) =>
-    request<{ setup_token: string }>("POST", `${org(orgId)}/members/${encodeURIComponent(userId)}/setup-token`),
+    request<{ setup_token: string; emailed: boolean }>("POST", `${org(orgId)}/members/${encodeURIComponent(userId)}/setup-token`),
   orgAssets: (orgId: string, signal?: AbortSignal) => request<List<OrgAsset>>("GET", `${org(orgId)}/assets`, undefined, signal),
   checks: (orgId: string, signal?: AbortSignal) => request<List<Check>>("GET", `${org(orgId)}/checks`, undefined, signal),
   trends: (orgId: string, months: number, signal?: AbortSignal) =>

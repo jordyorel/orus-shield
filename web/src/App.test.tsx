@@ -49,6 +49,33 @@ describe("App", () => {
     expect(window.location.pathname).toBe("/login");
   });
 
+  it("sends a reset link from the login page, with the same answer for every address", async () => {
+    const calls = mockApi({ "GET /auth/me": fail(401), "POST /auth/forgot-password": () => ({ status: 202 }) });
+    start("/login");
+    fireEvent.click(await screen.findByRole("link", { name: "Mot de passe oublié ?" }));
+    expect(await screen.findByRole("heading", { name: "Mot de passe oublié" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Adresse e-mail"), { target: { value: " alice@example.com " } });
+    fireEvent.click(screen.getByRole("button", { name: "Envoyer le lien" }));
+    expect(await screen.findByText(/Si un compte existe pour cette adresse/)).toBeTruthy();
+    expect(calls.find((c) => c.key === "POST /auth/forgot-password")?.body).toEqual({ email: "alice@example.com" });
+  });
+
+  it("says when too many reset links were asked", async () => {
+    mockApi({ "GET /auth/me": fail(401), "POST /auth/forgot-password": fail(429) });
+    start("/forgot-password");
+    fireEvent.change(await screen.findByLabelText("Adresse e-mail"), { target: { value: "alice@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Envoyer le lien" }));
+    expect(await screen.findByText("Trop de demandes de réinitialisation. Réessayez dans une heure.")).toBeTruthy();
+  });
+
+  it("fills the code from an emailed link and removes it from the address bar", async () => {
+    mockApi({ "GET /auth/me": fail(401) });
+    start("/setup-password#token=abc123");
+    expect(((await screen.findByLabelText("Code d’activation")) as HTMLInputElement).value).toBe("abc123");
+    expect(screen.getByText(/Le code de votre lien est déjà saisi/)).toBeTruthy();
+    expect(window.location.hash).toBe("");
+  });
+
   it("logs in with a second factor", async () => {
     let codeTries = 0;
     const calls = mockApi({

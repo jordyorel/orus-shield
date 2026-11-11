@@ -210,6 +210,8 @@ export interface Member {
 export interface Invitation {
   member: Member;
   setup_token?: string;
+  /** An email was sent to the invitee (false: mail is not configured). */
+  emailed: boolean;
 }
 
 /** orgAssetJSON */

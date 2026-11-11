@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/api"
+	"github.com/jordyorel/orus-shield/engine/internal/mailer"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/all"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
@@ -57,7 +58,21 @@ func run(log *slog.Logger) error {
 		modules = append(modules, m.Info().ID)
 		catalog = append(catalog, m.Info())
 	}
-	srv, err := api.New(st, api.Config{TrustedOrigins: cfg.trustedOrigins, Modules: modules, Catalog: catalog, MFAKey: cfg.mfaKey}, log)
+	var mail mailer.Sender
+	if cfg.smtp != nil {
+		mail = *cfg.smtp
+	} else {
+		log.Warn("ORUS_SMTP_ADDR is not set: no email will be sent")
+		// Also in plain text: a JSON log line is easy to miss, and a
+		// missing email looks like a bug in the reset flow.
+		fmt.Fprintln(os.Stderr, "\n*** WARNING: email is not configured (ORUS_SMTP_ADDR is not set).\n"+
+			"*** Password reset and invitation emails will NOT be sent.\n"+
+			"*** In development: docker-compose up -d mailpit, then reload .env (set -a; . ../.env; set +a).")
+	}
+	srv, err := api.New(st, api.Config{
+		TrustedOrigins: cfg.trustedOrigins, Modules: modules, Catalog: catalog, MFAKey: cfg.mfaKey,
+		Mailer: mail, PublicURL: cfg.publicURL,
+	}, log)
 	if err != nil {
 		return err
 	}

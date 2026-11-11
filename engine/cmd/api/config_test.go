@@ -20,12 +20,25 @@ func TestLoadConfig(t *testing.T) {
 	if err != nil || cfg.addr != ":9000" || !slices.Equal(cfg.trustedOrigins, []string{"http://localhost:5173", "https://app.example"}) {
 		t.Errorf("config = %+v, %v", cfg, err)
 	}
+	if cfg.publicURL != "http://localhost:5173" || cfg.smtp != nil {
+		t.Errorf("mail defaults: public URL %q, smtp %+v", cfg.publicURL, cfg.smtp)
+	}
+	cfg, err = loadConfig(env(map[string]string{
+		"ORUS_DATABASE_URL": "postgres://x", "ORUS_MFA_KEY": key, "ORUS_PUBLIC_URL": "https://app.example/",
+		"ORUS_SMTP_ADDR": "127.0.0.1:1025", "ORUS_MAIL_FROM": "Orus Shield <no-reply@app.example>",
+	}))
+	if err != nil || cfg.publicURL != "https://app.example" || cfg.smtp == nil || cfg.smtp.Addr != "127.0.0.1:1025" {
+		t.Errorf("mail config = %+v, %v", cfg, err)
+	}
 	for name, m := range map[string]map[string]string{
-		"no database":   {"ORUS_MFA_KEY": key},
-		"bad address":   {"ORUS_DATABASE_URL": "postgres://x", "ORUS_API_ADDR": "8080", "ORUS_MFA_KEY": key},
-		"no MFA key":    {"ORUS_DATABASE_URL": "postgres://x"},
-		"short MFA key": {"ORUS_DATABASE_URL": "postgres://x", "ORUS_MFA_KEY": "AAECAwQFBgcICQoLDA0ODw=="},
-		"not base64":    {"ORUS_DATABASE_URL": "postgres://x", "ORUS_MFA_KEY": "not base64!"},
+		"smtp without sender": {"ORUS_DATABASE_URL": "postgres://x", "ORUS_MFA_KEY": key, "ORUS_SMTP_ADDR": "127.0.0.1:1025"},
+		"smtp without port":   {"ORUS_DATABASE_URL": "postgres://x", "ORUS_MFA_KEY": key, "ORUS_SMTP_ADDR": "smtp.example", "ORUS_MAIL_FROM": "a@example.com"},
+		"bad public url":      {"ORUS_DATABASE_URL": "postgres://x", "ORUS_MFA_KEY": key, "ORUS_PUBLIC_URL": "app.example"},
+		"no database":         {"ORUS_MFA_KEY": key},
+		"bad address":         {"ORUS_DATABASE_URL": "postgres://x", "ORUS_API_ADDR": "8080", "ORUS_MFA_KEY": key},
+		"no MFA key":          {"ORUS_DATABASE_URL": "postgres://x"},
+		"short MFA key":       {"ORUS_DATABASE_URL": "postgres://x", "ORUS_MFA_KEY": "AAECAwQFBgcICQoLDA0ODw=="},
+		"not base64":          {"ORUS_DATABASE_URL": "postgres://x", "ORUS_MFA_KEY": "not base64!"},
 	} {
 		if _, err := loadConfig(env(m)); err == nil {
 			t.Errorf("%s: loadConfig = nil, want error", name)

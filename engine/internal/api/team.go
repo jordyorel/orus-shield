@@ -59,10 +59,13 @@ type inviteRequest struct {
 
 type invitationJSON struct {
 	Member memberJSON `json:"member"`
-	// SetupToken is shown once to the admin, who sends it to the invitee
-	// over a trusted channel (no email sending yet). Empty when the account
-	// was already activated.
+	// SetupToken is shown once to the admin. The invitee also gets it by
+	// email (Emailed); without mail, the admin passes it on over a trusted
+	// channel. Empty when the account was already activated.
 	SetupToken string `json:"setup_token,omitempty"`
+	// Emailed: an email was sent to the invitee (activation link, or a
+	// note that they have access).
+	Emailed bool `json:"emailed"`
 }
 
 func (s *Server) inviteMember(w http.ResponseWriter, r *http.Request, req orgRequest) {
@@ -78,7 +81,7 @@ func (s *Server) inviteMember(w http.ResponseWriter, r *http.Request, req orgReq
 		writeError(w, http.StatusBadRequest, "invalid email address")
 		return
 	}
-	inv, err := s.acct.Invite(r.Context(), req.org.ID(), body.Email, body.Role, req.sess)
+	inv, emailed, err := s.acct.Invite(r.Context(), req.org.ID(), body.Email, body.Role, req.sess)
 	switch {
 	case errors.Is(err, account.ErrMemberExists):
 		writeError(w, http.StatusConflict, err.Error())
@@ -90,7 +93,7 @@ func (s *Server) inviteMember(w http.ResponseWriter, r *http.Request, req orgReq
 	if !s.audit(w, r, req, actionMemberInvited, map[string]any{"user_id": inv.Member.UserID, "email": inv.Member.Email, "role": inv.Member.Role}) {
 		return
 	}
-	writeJSON(w, http.StatusCreated, invitationJSON{Member: toMemberJSON(inv.Member), SetupToken: inv.Token})
+	writeJSON(w, http.StatusCreated, invitationJSON{Member: toMemberJSON(inv.Member), SetupToken: inv.Token, Emailed: emailed})
 }
 
 type roleRequest struct {
@@ -129,10 +132,12 @@ func (s *Server) removeMember(w http.ResponseWriter, r *http.Request, req orgReq
 
 type setupTokenJSON struct {
 	SetupToken string `json:"setup_token"`
+	// Emailed: the new link was sent to the member.
+	Emailed bool `json:"emailed"`
 }
 
 func (s *Server) reissueSetupToken(w http.ResponseWriter, r *http.Request, req orgRequest) {
-	token, err := s.acct.ReissueSetupToken(r.Context(), req.org.ID(), r.PathValue("user"), req.sess)
+	token, emailed, err := s.acct.ReissueSetupToken(r.Context(), req.org.ID(), r.PathValue("user"), req.sess)
 	if errors.Is(err, account.ErrAlreadyActivated) {
 		writeError(w, http.StatusConflict, err.Error())
 		return
@@ -140,7 +145,7 @@ func (s *Server) reissueSetupToken(w http.ResponseWriter, r *http.Request, req o
 	if !s.teamError(w, r, err) {
 		return
 	}
-	writeJSON(w, http.StatusOK, setupTokenJSON{SetupToken: token})
+	writeJSON(w, http.StatusOK, setupTokenJSON{SetupToken: token, Emailed: emailed})
 }
 
 // teamError answers a team error; it returns true when err is nil.

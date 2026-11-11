@@ -1,4 +1,7 @@
-# Go build output
+# Go build output (go build ./cmd/... from engine/ writes the binaries there)
+/engine/api
+/engine/worker
+/engine/orusctl
 /bin/
 /dist/
 *.exe

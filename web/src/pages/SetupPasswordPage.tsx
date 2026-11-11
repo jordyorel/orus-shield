@@ -44,7 +44,11 @@ export function SetupPasswordPage() {
       <div className="stack">
         <div className="stack-sm">
           <h1>Définir votre mot de passe</h1>
-          <p className="muted">Votre administrateur vous a transmis un code d’activation. Il est valable 24 heures et ne sert qu’une fois.</p>
+          <p className="muted">
+            {initialToken
+              ? "Le code de votre lien est déjà saisi : choisissez votre nouveau mot de passe."
+              : "Saisissez le code d’activation transmis par votre administrateur. Il ne sert qu’une fois."}
+          </p>
         </div>
         {error && <Alert kind="error">{error}</Alert>}
         <form className="stack" onSubmit={submit}>

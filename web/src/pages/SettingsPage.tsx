@@ -192,7 +192,8 @@ function Team({ me, org }: { me: Me; org: Membership }) {
   const [members, setMembers] = useState<Member[] | null>(null);
   const [error, setError] = useState("");
   const [inviting, setInviting] = useState(false);
-  const [token, setToken] = useState<{ email: string; token: string } | null>(null);
+  const [token, setToken] = useState<{ email: string; token: string; emailed: boolean } | null>(null);
+  const [added, setAdded] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -230,7 +231,8 @@ function Team({ me, org }: { me: Me; org: Membership }) {
     void act(async () => {
       const inv = await api.invite(org.org_id, email, String(data.get("role")) as Role);
       setInviting(false);
-      setToken(inv.setup_token ? { email: inv.member.email, token: inv.setup_token } : null);
+      setToken(inv.setup_token ? { email: inv.member.email, token: inv.setup_token, emailed: inv.emailed } : null);
+      setAdded(inv.setup_token ? "" : `${inv.member.email} a maintenant accès à ${org.org_name}${inv.emailed ? " ; un email l’en a informé" : ""}.`);
       if (!inv.setup_token) setError("");
     });
   };
@@ -266,12 +268,14 @@ function Team({ me, org }: { me: Me; org: Membership }) {
           </button>
         </form>
       )}
+      {added && <Alert kind="notice">{added}</Alert>}
       {token && (
         <div className="verify-box">
-          <p className="strong">Code d’activation pour {token.email}</p>
+          <p className="strong">{token.emailed ? `Invitation envoyée à ${token.email}` : `Code d’activation pour ${token.email}`}</p>
           <p className="verify-text">
-            Transmettez-le par un canal de confiance. La personne l’utilise sur {setupUrl} pour choisir son mot de passe. Valable 24 heures, une seule fois ;
-            il ne sera plus affiché.
+            {token.emailed
+              ? "Un email avec le lien d’activation vient de lui être envoyé (valable 24 heures, une seule fois). S’il ne le reçoit pas, transmettez-lui ce code par un canal de confiance ; il ne sera plus affiché."
+              : `Transmettez-le par un canal de confiance. La personne l’utilise sur ${setupUrl} pour choisir son mot de passe. Valable 24 heures, une seule fois ; il ne sera plus affiché.`}
           </p>
           <pre className="record">{token.token}</pre>
           <div className="button-row verify-actions">
@@ -329,7 +333,7 @@ function Team({ me, org }: { me: Me; org: Membership }) {
                           onClick={() =>
                             void act(async () => {
                               const res = await api.newSetupToken(org.org_id, m.user_id);
-                              setToken({ email: m.email, token: res.setup_token });
+                              setToken({ email: m.email, token: res.setup_token, emailed: res.emailed });
                             })
                           }
                         >

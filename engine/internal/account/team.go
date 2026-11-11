@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/jordyorel/orus-shield/engine/internal/mailer"
 	"github.com/jordyorel/orus-shield/engine/internal/password"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
@@ -33,25 +34,68 @@ func (s *Service) Members(ctx context.Context, orgID string) ([]store.Member, er
 	return s.auth.Members(ctx, orgID)
 }
 
-// Invite adds email to the organization; see store.Auth.Invite.
-func (s *Service) Invite(ctx context.Context, orgID, email, role string, by store.Session) (store.Invitation, error) {
-	inv, err := s.auth.Invite(ctx, orgID, email, role, SetupTokenTTL, by.Email)
+// Invite adds email to the organization; see store.Auth.Invite. The invitee
+// is emailed in the background: a link to activate a new account, or a note
+// that they have access, for an account that already exists. emailed says
+// whether an email was sent (false when mail is not configured): the
+// dashboard then tells the admin to pass the code on themselves.
+func (s *Service) Invite(ctx context.Context, orgID, email, role string, by store.Session) (inv store.Invitation, emailed bool, err error) {
+	inv, err = s.auth.Invite(ctx, orgID, email, role, SetupTokenTTL, by.Email)
 	if errors.Is(err, store.ErrExists) {
-		return store.Invitation{}, ErrMemberExists
+		return store.Invitation{}, false, ErrMemberExists
 	}
-	return inv, err
+	if err != nil {
+		return store.Invitation{}, false, err
+	}
+	org := s.orgName(ctx, by.UserID, orgID)
+	var m mailer.Message
+	if inv.Token != "" {
+		m = mailer.Invitation(inv.Member.Email, org, by.Email, role == store.RoleAdmin, mailer.SetupLink(s.cfg.PublicURL, inv.Token), SetupTokenTTL)
+	} else {
+		m = mailer.AddedToOrganization(inv.Member.Email, org, by.Email, role == store.RoleAdmin, s.cfg.PublicURL)
+	}
+	return inv, s.sendInBackground(ctx, m, "invitation"), nil
 }
 
-// ReissueSetupToken gives a never activated member a new setup token.
-func (s *Service) ReissueSetupToken(ctx context.Context, orgID, userID string, by store.Session) (string, error) {
-	token, err := s.auth.ReissueSetupToken(ctx, orgID, userID, SetupTokenTTL, by.Email)
+// ReissueSetupToken gives a never activated member a new setup token and
+// emails them the new link.
+func (s *Service) ReissueSetupToken(ctx context.Context, orgID, userID string, by store.Session) (token string, emailed bool, err error) {
+	token, err = s.auth.ReissueSetupToken(ctx, orgID, userID, SetupTokenTTL, by.Email)
 	switch {
 	case errors.Is(err, store.ErrExists):
-		return "", ErrAlreadyActivated
+		return "", false, ErrAlreadyActivated
 	case errors.Is(err, store.ErrNotFound):
-		return "", ErrNoMember
+		return "", false, ErrNoMember
+	case err != nil:
+		return "", false, err
 	}
-	return token, err
+	members, err := s.auth.Members(ctx, orgID)
+	if err != nil {
+		return "", false, err
+	}
+	for _, mem := range members {
+		if mem.UserID == userID {
+			m := mailer.Invitation(mem.Email, s.orgName(ctx, by.UserID, orgID), by.Email, mem.Role == store.RoleAdmin,
+				mailer.SetupLink(s.cfg.PublicURL, token), SetupTokenTTL)
+			return token, s.sendInBackground(ctx, m, "invitation"), nil
+		}
+	}
+	return token, false, nil
+}
+
+// orgName is the organization's name as the inviting admin sees it, for
+// the email. An empty name only makes the email less precise.
+func (s *Service) orgName(ctx context.Context, userID, orgID string) string {
+	ms, err := s.auth.Memberships(ctx, userID)
+	if err != nil {
+		return ""
+	}
+	for _, m := range ms {
+		if m.OrgID == orgID {
+			return m.OrgName
+		}
+	}
+	return ""
 }
 
 // SetMemberRole changes a member's role, keeping at least one admin.

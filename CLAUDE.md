@@ -178,7 +178,7 @@ These are the product. A breach of them is a bug, never a trade-off.
 
 ```
 cp .env.example .env            # then set a password (never commit .env)
-docker-compose up -d            # PostgreSQL 18 on 127.0.0.1:55432 (ORUS_PG_PORT)
+docker-compose up -d            # PostgreSQL 18 on 127.0.0.1:55432 (ORUS_PG_PORT), Mailpit on :1025/:8025
 set -a; . ./.env; set +a
 cd engine && go test -race ./...    # integration tests run when ORUS_TEST_DATABASE_URL is set
 go run ./cmd/worker                 # in one terminal
@@ -199,6 +199,15 @@ prints a setup token; the user sets their password on the dashboard page `/setup
 `POST /api/v1/auth/setup-password`). Session
 cookies are `Secure`: browsers accept them on `localhost`, anywhere else the API must be
 behind HTTPS.
+
+Email goes over SMTP (package `mailer`, standard library only): in development Mailpit
+catches everything and shows it at http://localhost:8025 (`ORUS_SMTP_ADDR=127.0.0.1:1025`,
+`ORUS_MAIL_FROM` in `.env`; reload `.env` before `go run ./cmd/api`). Without
+`ORUS_SMTP_ADDR` nothing is sent and the API prints a warning. "Mot de passe oublié" emails a
+one-time link (1 hour, 3 requests per hour per address); invitations email the activation
+link, and the admin still sees the code as a fallback. Links carry the token in the URL
+fragment (`#token=`), never sent to a server. Production: a provider's SMTP relay (Brevo,
+Mailjet, SES...) on the product domain, never from the lab domain.
 
 Two-factor authentication (TOTP) is mandatory for admins: an admin session opened without
 a second factor gets `403 {"code": "mfa_required"}` on every route of that organization,

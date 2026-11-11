@@ -1,5 +1,6 @@
 import { needsMfa, useAuth } from "./auth";
 import { sections } from "./components/nav";
+import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MfaSetupPage } from "./pages/MfaSetupPage";
 import { AssetsPage } from "./pages/AssetsPage";
@@ -23,6 +24,7 @@ export function App() {
 
   // Pages open to everyone.
   if (path === "/setup-password") return <SetupPasswordPage />;
+  if (path === "/forgot-password") return <ForgotPasswordPage />;
   if (path === "/login") return state.status === "signed-in" ? <Redirect to="/" /> : <LoginPage />;
   if (state.status === "signed-out") return <Redirect to="/login" />;
 

@@ -26,5 +26,15 @@ services:
       timeout: 3s
       retries: 15
 
+  # Fake mail server for development: it accepts every email and shows it at
+  # http://localhost:8025, delivering nothing. The API sends to it when
+  # ORUS_SMTP_ADDR=127.0.0.1:1025. Pinned to a release at least two weeks old;
+  # MIT license. Both ports on 127.0.0.1 only.
+  mailpit:
+    image: axllent/mailpit:v1.32.0
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+
 volumes:
   postgres-data:

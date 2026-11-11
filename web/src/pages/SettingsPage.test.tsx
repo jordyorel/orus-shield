@@ -57,7 +57,7 @@ describe("SettingsPage", () => {
 
   it("invites a member and shows the setup code once", async () => {
     const calls = start("admin", "equipe", {
-      [`POST ${base}/members`]: ok({ member: { user_id: "u3", email: "dg@acme.example", role: "viewer", activated: false, mfa_enabled: false }, setup_token: "tok-123" }),
+      [`POST ${base}/members`]: ok({ member: { user_id: "u3", email: "dg@acme.example", role: "viewer", activated: false, mfa_enabled: false }, setup_token: "tok-123", emailed: false }),
     });
     await screen.findByText("it@acme.example");
     expect(screen.getByText("Invitation en attente")).toBeTruthy();
@@ -67,6 +67,30 @@ describe("SettingsPage", () => {
     expect(await screen.findByText("Code d’activation pour dg@acme.example")).toBeTruthy();
     expect(screen.getByText("tok-123")).toBeTruthy();
     expect(calls.find((c) => c.key === `POST ${base}/members`)?.body).toEqual({ email: "dg@acme.example", role: "viewer" });
+  });
+
+  it("says the invitation was emailed, and keeps the code as a fallback", async () => {
+    start("admin", "equipe", {
+      [`POST ${base}/members`]: ok({ member: { user_id: "u3", email: "dg@acme.example", role: "viewer", activated: false, mfa_enabled: false }, setup_token: "tok-9", emailed: true }),
+    });
+    await screen.findByText("it@acme.example");
+    fireEvent.click(screen.getByRole("button", { name: "Inviter un membre" }));
+    fireEvent.change(screen.getByLabelText("Adresse e-mail"), { target: { value: "dg@acme.example" } });
+    fireEvent.click(screen.getByRole("button", { name: "Inviter" }));
+    expect(await screen.findByText("Invitation envoyée à dg@acme.example")).toBeTruthy();
+    expect(screen.getByText(/Un email avec le lien d’activation vient de lui être envoyé/)).toBeTruthy();
+    expect(screen.getByText("tok-9")).toBeTruthy();
+  });
+
+  it("tells when an existing account was given access", async () => {
+    start("admin", "equipe", {
+      [`POST ${base}/members`]: ok({ member: { user_id: "u4", email: "cfo@acme.example", role: "viewer", activated: true, mfa_enabled: true }, emailed: true }),
+    });
+    await screen.findByText("it@acme.example");
+    fireEvent.click(screen.getByRole("button", { name: "Inviter un membre" }));
+    fireEvent.change(screen.getByLabelText("Adresse e-mail"), { target: { value: "cfo@acme.example" } });
+    fireEvent.click(screen.getByRole("button", { name: "Inviter" }));
+    expect(await screen.findByText(/cfo@acme\.example a maintenant accès à .* un email l’en a informé\./)).toBeTruthy();
   });
 
   it("explains that the last admin stays", async () => {

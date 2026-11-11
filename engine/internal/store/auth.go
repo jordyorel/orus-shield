@@ -43,6 +43,9 @@ const (
 	AuthMFAEnabled      = "mfa.enabled"
 	AuthMFADisabled     = "mfa.disabled"
 	AuthMFAReset        = "mfa.reset" // by an operator, for a lost phone
+	// AuthPasswordResetAsked is a "forgotten password" request, logged
+	// whether or not the address has an account: the rate limit counts both.
+	AuthPasswordResetAsked = "password_reset.requested"
 )
 
 // Audit action when a user is added to an organization.
@@ -457,4 +460,56 @@ func (a *Auth) Role(ctx context.Context, userID, orgID string) (role string, err
 		return err
 	})
 	return role, err
+}
+
+// RequestPasswordReset records a forgotten-password request for email from
+// ip and, when an enabled account has that address, issues a setup token
+// valid for ttl (previous unused tokens are revoked). ok is false when there
+// is no such account: the caller answers exactly the same way, so nobody
+// learns which addresses have an account.
+func (a *Auth) RequestPasswordReset(ctx context.Context, email, ip string, ttl time.Duration) (token string, ok bool, err error) {
+	e, err := NormalizeEmail(email)
+	if err != nil {
+		return "", false, nil // not an address: no account, same answer
+	}
+	err = a.inTx(ctx, func(tx pgx.Tx) error {
+		u, err := userByEmail(ctx, tx, e)
+		found := err == nil && u.DisabledAt == nil
+		if err != nil && !errors.Is(err, ErrNotFound) {
+			return err
+		}
+		event := AuthEvent{Email: e, Action: AuthPasswordResetAsked, IP: ip, Details: map[string]any{"account": found}}
+		if found {
+			event.UserID = u.ID
+		}
+		if err := logAuth(ctx, tx, event); err != nil {
+			return err
+		}
+		if !found {
+			return nil
+		}
+		token, err = issueToken(ctx, tx, u.ID, u.Email, ttl, "password_reset")
+		ok = err == nil
+		return err
+	})
+	if err != nil {
+		return "", false, fmt.Errorf("request password reset: %w", err)
+	}
+	return token, ok, nil
+}
+
+// RecentResetRequests counts forgotten-password requests since since, for
+// one email and for one IP: the inputs of their rate limit.
+func (a *Auth) RecentResetRequests(ctx context.Context, email, ip string, since time.Time) (byEmail, byIP int, err error) {
+	e, _ := NormalizeEmail(email) // an invalid address counts for the IP only
+	err = a.inTx(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT
+			(SELECT count(*) FROM auth_log WHERE action = $1 AND email = $2 AND at > $4),
+			(SELECT count(*) FROM auth_log WHERE action = $1 AND ip = $3 AND at > $4)`,
+			AuthPasswordResetAsked, e, ip, since).Scan(&byEmail, &byIP)
+	})
+	if err != nil {
+		return 0, 0, fmt.Errorf("recent reset requests: %w", err)
+	}
+	return byEmail, byIP, nil
 }

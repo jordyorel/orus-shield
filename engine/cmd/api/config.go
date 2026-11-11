@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"strings"
 
+	"github.com/jordyorel/orus-shield/engine/internal/mailer"
 	"github.com/jordyorel/orus-shield/engine/internal/seal"
 )
 
@@ -15,6 +17,8 @@ type config struct {
 	addr           string
 	trustedOrigins []string
 	mfaKey         []byte
+	publicURL      string
+	smtp           *mailer.SMTP // nil: mail not configured
 }
 
 // loadConfig reads:
@@ -29,6 +33,14 @@ type config struct {
 //	                          (generate with: openssl rand -base64 32).
 //	                          Losing it disables every user's MFA codes;
 //	                          keep it out of the database backups.
+//	ORUS_PUBLIC_URL           the dashboard's address, for links in emails;
+//	                          default http://localhost:5173 (development)
+//	ORUS_SMTP_ADDR            SMTP server host:port; unset: no email is sent
+//	                          (development: Mailpit, 127.0.0.1:1025)
+//	ORUS_SMTP_USERNAME        SMTP login, if the server needs one
+//	ORUS_SMTP_PASSWORD        SMTP password
+//	ORUS_MAIL_FROM            sender, e.g. "Orus Shield <no-reply@example.com>";
+//	                          required with ORUS_SMTP_ADDR
 func loadConfig(getenv func(string) string) (config, error) {
 	cfg := config{
 		databaseURL: getenv("ORUS_DATABASE_URL"),
@@ -52,6 +64,23 @@ func loadConfig(getenv func(string) string) (config, error) {
 		if o = strings.TrimSpace(o); o != "" {
 			cfg.trustedOrigins = append(cfg.trustedOrigins, o)
 		}
+	}
+	cfg.publicURL = strings.TrimRight(strings.TrimSpace(getenv("ORUS_PUBLIC_URL")), "/")
+	if cfg.publicURL == "" {
+		cfg.publicURL = "http://localhost:5173"
+	}
+	if u, err := url.Parse(cfg.publicURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		return config{}, errors.New("ORUS_PUBLIC_URL must be an http(s) URL, e.g. https://app.example.com")
+	}
+	if addr := strings.TrimSpace(getenv("ORUS_SMTP_ADDR")); addr != "" {
+		s := &mailer.SMTP{
+			Addr: addr, Username: getenv("ORUS_SMTP_USERNAME"), Password: getenv("ORUS_SMTP_PASSWORD"),
+			From: strings.TrimSpace(getenv("ORUS_MAIL_FROM")),
+		}
+		if err := s.Validate(); err != nil {
+			return config{}, fmt.Errorf("ORUS_SMTP_ADDR / ORUS_MAIL_FROM: %w", err)
+		}
+		cfg.smtp = s
 	}
 	return cfg, nil
 }

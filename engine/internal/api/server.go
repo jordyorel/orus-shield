@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/account"
+	"github.com/jordyorel/orus-shield/engine/internal/mailer"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
@@ -51,6 +52,10 @@ type Config struct {
 	// MFAKey encrypts TOTP secrets in the database (seal.KeyLen bytes,
 	// from ORUS_MFA_KEY). Required.
 	MFAKey []byte
+	// Mailer sends account emails; nil: not configured.
+	Mailer mailer.Sender
+	// PublicURL is the dashboard's address, for links in emails.
+	PublicURL string
 }
 
 const (
@@ -83,6 +88,7 @@ func New(st *store.Store, cfg Config, log *slog.Logger) (*Server, error) {
 	}
 	acct, err := account.New(st.Auth(), account.Config{
 		SessionIdle: cfg.SessionIdle, SessionMax: cfg.SessionMax, Now: cfg.Now, MFAKey: cfg.MFAKey,
+		Mailer: cfg.Mailer, PublicURL: cfg.PublicURL, Log: log,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("api: %w", err)
@@ -112,6 +118,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/logout", s.withSession(s.logout))
 	mux.HandleFunc("GET /api/v1/auth/me", s.withSession(s.me))
 	mux.HandleFunc("POST /api/v1/auth/setup-password", s.setupPassword)
+	mux.HandleFunc("POST /api/v1/auth/forgot-password", s.forgotPassword)
 	mux.HandleFunc("POST /api/v1/auth/login/mfa", s.loginMFA)
 	mux.HandleFunc("POST /api/v1/auth/mfa/setup", s.withSession(s.mfaSetup))
 	mux.HandleFunc("POST /api/v1/auth/mfa/confirm", s.withSession(s.mfaConfirm))

@@ -12,11 +12,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/jordyorel/orus-shield/engine/internal/mailer"
 	"github.com/jordyorel/orus-shield/engine/internal/password"
 	"github.com/jordyorel/orus-shield/engine/internal/seal"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
@@ -55,6 +57,9 @@ var (
 	// ErrRateLimited means too many recent failures for the email or the
 	// client address; retry after LoginWindow.
 	ErrRateLimited = errors.New("too many failed attempts, try again later")
+	// ErrResetRateLimited means too many forgotten-password requests for the
+	// email or the client address; retry after ResetWindow.
+	ErrResetRateLimited = errors.New("too many password reset requests, try again later")
 	// ErrBadCode is a wrong, expired or replayed TOTP or recovery code.
 	ErrBadCode = errors.New("invalid code")
 	// ErrChallengeExpired means the MFA login token is unknown, expired or
@@ -90,7 +95,25 @@ type Config struct {
 	// MFAKey encrypts TOTP secrets in the database (seal.KeyLen bytes,
 	// from ORUS_MFA_KEY). Required.
 	MFAKey []byte
+	// Mailer sends the account emails (password reset). nil: no email is
+	// sent and the requests are only logged (mail not configured).
+	Mailer mailer.Sender
+	// PublicURL is the dashboard's address, for links in emails, e.g.
+	// "https://app.example.com".
+	PublicURL string
+	// Log receives delivery failures (emails are sent in the background).
+	Log *slog.Logger
 }
+
+// Forgotten-password limits: requests per email and per client address
+// over ResetWindow, and how long the emailed link works.
+const (
+	ResetWindow         = time.Hour
+	MaxResetsPerEmail   = 3
+	MaxResetsPerIP      = 10
+	ResetTokenTTL       = time.Hour
+	mailDeliveryTimeout = time.Minute
+)
 
 const (
 	defaultSessionIdle = 12 * time.Hour
@@ -115,6 +138,9 @@ func New(auth *store.Auth, cfg Config) (*Service, error) {
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
+	}
+	if cfg.Log == nil {
+		cfg.Log = slog.New(slog.DiscardHandler)
 	}
 	key, err := seal.NewKey(cfg.MFAKey)
 	if err != nil {
@@ -280,6 +306,51 @@ func (s *Service) SetupPassword(ctx context.Context, token, pw string, c Client)
 		return ErrInvalidSetupToken
 	}
 	return err
+}
+
+// ForgotPassword handles "Mot de passe oublié": when email has an enabled
+// account, it emails a link to choose a new password (a one-time setup
+// token, valid ResetTokenTTL). The answer is the same whether the account
+// exists or not, and arrives as fast: the email is sent in the background,
+// so its delivery time cannot reveal anything either. Only the rate limit
+// (per email and per address) is reported, as ErrResetRateLimited.
+//
+// Resetting the password does not touch the second factor: an attacker
+// who reads the victim's mailbox still needs their phone.
+func (s *Service) ForgotPassword(ctx context.Context, email string, c Client) error {
+	byEmail, byIP, err := s.auth.RecentResetRequests(ctx, email, c.IP, s.cfg.Now().Add(-ResetWindow))
+	if err != nil {
+		return err
+	}
+	if byEmail >= MaxResetsPerEmail || byIP >= MaxResetsPerIP {
+		return ErrResetRateLimited
+	}
+	token, ok, err := s.auth.RequestPasswordReset(ctx, email, c.IP, ResetTokenTTL)
+	if err != nil || !ok {
+		return err
+	}
+	to, _ := store.NormalizeEmail(email) // valid: an account has it
+	m := mailer.PasswordReset(to, mailer.SetupLink(s.cfg.PublicURL, token), ResetTokenTTL)
+	s.sendInBackground(ctx, m, "password_reset")
+	return nil
+}
+
+// sendInBackground delivers m without making the caller wait, and reports
+// whether it was handed to a mailer (false: mail not configured). Failures
+// are logged without the address (customer data stays out of logs).
+func (s *Service) sendInBackground(ctx context.Context, m mailer.Message, kind string) bool {
+	if s.cfg.Mailer == nil {
+		s.cfg.Log.Warn("email not sent: mail is not configured (ORUS_SMTP_ADDR)", "kind", kind)
+		return false
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mailDeliveryTimeout)
+		defer cancel()
+		if err := s.cfg.Mailer.Send(ctx, m); err != nil {
+			s.cfg.Log.Error("email delivery failed", "kind", kind, "err", err)
+		}
+	}()
+	return true
 }
 
 // Access returns the user's role in orgID, if it allows minRole. A

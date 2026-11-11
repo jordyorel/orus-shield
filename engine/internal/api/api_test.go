@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jordyorel/orus-shield/engine/internal/mailer"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/password"
 	"github.com/jordyorel/orus-shield/engine/internal/seal"
@@ -30,18 +31,28 @@ type env struct {
 	now     time.Time
 	dns     *fakeDNS
 	secrets map[string][]byte // TOTP secrets of enrolled users, by email
+	mail    *fakeMailer
+}
+
+// fakeMailer records the emails the API sends (in the background).
+type fakeMailer struct{ sent chan mailer.Message }
+
+func (f *fakeMailer) Send(_ context.Context, m mailer.Message) error {
+	f.sent <- m
+	return nil
 }
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	st := storetest.New(t)
-	e := &env{t: t, st: st, now: time.Now(), secrets: map[string][]byte{}}
+	e := &env{t: t, st: st, now: time.Now(), secrets: map[string][]byte{}, mail: &fakeMailer{sent: make(chan mailer.Message, 100)}}
 	e.dns = &fakeDNS{txt: map[string][]string{}}
 	key := make([]byte, seal.KeyLen)
 	if _, err := rand.Read(key); err != nil {
 		t.Fatal(err)
 	}
 	srv, err := New(st, Config{Now: func() time.Time { return e.now }, DNS: e.dns, Modules: []string{"email", "tls"}, MFAKey: key,
+		Mailer: e.mail, PublicURL: "https://app.example",
 		Catalog: []module.Info{{ID: "email", Name: "Email security", Kind: module.KindPassive}, {ID: "tls", Name: "TLS", Kind: module.KindPassive}}},
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {

@@ -50,6 +50,9 @@ func (s *Server) accountError(w http.ResponseWriter, r *http.Request, err error,
 	case errors.Is(err, account.ErrRateLimited):
 		w.Header().Set("Retry-After", strconv.Itoa(int(account.LoginWindow.Seconds())))
 		writeError(w, http.StatusTooManyRequests, err.Error())
+	case errors.Is(err, account.ErrResetRateLimited):
+		w.Header().Set("Retry-After", strconv.Itoa(int(account.ResetWindow.Seconds())))
+		writeError(w, http.StatusTooManyRequests, err.Error())
 	case errors.Is(err, account.ErrBadCode):
 		writeError(w, badCredentials, err.Error())
 	case errors.Is(err, account.ErrChallengeExpired):
@@ -137,6 +140,25 @@ func (s *Server) setupPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type forgotPasswordRequest struct {
+	Email string `json:"email"`
+}
+
+// forgotPassword emails a reset link if the address has an account. The
+// answer is 202 either way: it never tells whether an account exists. Only
+// the rate limit shows (429), and it counts unknown addresses too.
+func (s *Server) forgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req forgotPasswordRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	if err := s.acct.ForgotPassword(r.Context(), req.Email, account.ClientFrom(r)); err != nil {
+		s.accountError(w, r, err, http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
 }
 
 // sessionHandler is a handler that runs only with a valid session.
