@@ -199,3 +199,20 @@ func unobservedAssets(ctx context.Context, tx pgx.Tx, targetID, moduleID string,
 	}
 	return kept, nil
 }
+
+// CurrentHostnames returns the hostnames of a target's inventory that are
+// still current (not gone), sorted. The worker gives them to the modules of
+// a scan (module.Target.Hosts). Cross-organization: worker only.
+func (s *Store) CurrentHostnames(ctx context.Context, targetID string) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT value FROM assets WHERE target_id = $1 AND kind = $2 AND gone_at IS NULL ORDER BY value`,
+		targetID, string(asset.KindHostname))
+	if err != nil {
+		return nil, fmt.Errorf("current hostnames of %s: %w", targetID, err)
+	}
+	names, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, fmt.Errorf("current hostnames of %s: %w", targetID, err)
+	}
+	return names, nil
+}

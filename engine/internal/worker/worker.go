@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +35,7 @@ type Store interface {
 	FailScan(ctx context.Context, scanID string, attempt int, workerID, reason string) error
 	AppendAudit(ctx context.Context, e store.AuditEntry) error
 	EnqueueDueScans(ctx context.Context, now time.Time, limit int) (int, error)
+	CurrentHostnames(ctx context.Context, targetID string) ([]string, error)
 }
 
 // Ownership enforces security rule 1 for active modules (see package
@@ -198,6 +200,13 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 		return w.fail(ctx, sc, fmt.Sprintf("invalid target settings: %v", err))
 	}
 	mt := module.Target{Domain: target.Domain, Verified: w.stillVerified(scanCtx, sc, target, g, log)}
+	// The names to scan: the inventory's current hostnames (subdomains found
+	// by earlier scans), plus what a discovery module finds in this one.
+	known, err := w.store.CurrentHostnames(scanCtx, target.ID)
+	if err != nil {
+		return w.fail(ctx, sc, fmt.Sprintf("load hostnames: %v", err))
+	}
+	mt.Hosts = known
 
 	// Active modules get a stricter gate, built on first use: it only lets
 	// them reach IPs whose ownership is proven (rule 1, per IP).
@@ -230,12 +239,15 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 			return g.Covers(value) || refused.covers(value)
 		},
 	}
-	for _, id := range sc.Modules {
+	for _, id := range w.discoveryFirst(sc.Modules) {
 		if scanCtx.Err() != nil {
 			break
 		}
 		start := time.Now()
 		res, checks, err := w.runModule(scanCtx, id, mt, gateFor(id))
+		if err == nil && w.providesHosts(id) {
+			mt.Hosts = mergeHosts(mt.Hosts, res.Assets)
+		}
 		var refused *refusedError
 		switch {
 		case errors.As(err, &refused):
@@ -356,6 +368,41 @@ type refuseAll struct{}
 
 func (refuseAll) Allow(context.Context, module.Destination) error {
 	return fmt.Errorf("no ownership checker: %w", module.ErrExcluded)
+}
+
+// discoveryFirst orders a scan's modules: discovery modules (ProvidesHosts)
+// first, so the others scan what they find; otherwise the requested order.
+func (w *Worker) discoveryFirst(ids []string) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if w.providesHosts(id) {
+			out = append(out, id)
+		}
+	}
+	for _, id := range ids {
+		if !w.providesHosts(id) {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+func (w *Worker) providesHosts(id string) bool {
+	m, ok := w.modules.Get(id)
+	return ok && m.Info().ProvidesHosts
+}
+
+// mergeHosts adds the hostnames a discovery module reported to hosts. The
+// assets were validated (under the target's domain) by runModule;
+// module.Target.ScanHosts bounds the final list.
+func mergeHosts(hosts []string, assets []asset.Asset) []string {
+	out := slices.Clone(hosts)
+	for _, a := range assets {
+		if a.Kind == asset.KindHostname && !slices.Contains(out, a.Value) {
+			out = append(out, a.Value)
+		}
+	}
+	return out
 }
 
 // wantsActive reports whether one of the requested modules is active.

@@ -4,7 +4,8 @@
 //
 // It is passive: it sends ordinary "GET /" requests, like a browser opening
 // the home page, and reads the response headers only, never the body. It
-// checks the domain and its www. subdomain, on ports 80 and 443.
+// checks the scan's names (the domain, www. and known subdomains), on ports
+// 80 and 443.
 //
 // What it does not do (later modules, or the "Deep" profile): crawl pages,
 // submit forms, test for injections, identify CMS versions from page content.
@@ -14,7 +15,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/asset"
@@ -103,10 +103,7 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 		dial: dialer.Gated{Gate: req.Gate, Inner: m.dial},
 	}
 
-	hosts := []string{domain}
-	if !strings.HasPrefix(domain, "www.") {
-		hosts = append(hosts, "www."+domain)
-	}
+	hosts := req.Target.ScanHosts(domain)
 	var (
 		findings  []finding.Finding
 		assets    asset.Set

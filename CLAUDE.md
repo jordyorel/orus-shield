@@ -9,7 +9,9 @@ Status: roadmap steps 1 to 6 are done (finding schema, Module interface, gated D
 resolver and dialer, email and TLS modules, PostgreSQL storage and queue, gate, worker,
 orusctl, ownership verification, per-IP ownership and the ports module, tested for real on
 the lab server on 2026-11-11). The passive `web` module (HTTPS redirect, security headers,
-cookies, disclosed versions) is done too. Step 7 follows the order in
+cookies, disclosed versions) is done too, and so is attack surface discovery (passive
+`discovery` module: Certificate Transparency through crt.sh and common DNS names; the worker
+runs it first and every module scans `module.Target.Hosts`, at most 25 names). Step 7 follows the order in
 `docs/ui-adaptation.md`: organizations (multi-tenant scoping, `store.Org` + PostgreSQL
 row-level security), the findings lifecycle (`fixed_at`, `finding_events` history) and the
 asset inventory (`module.Result` with findings and assets, `assets` table) and the check
@@ -84,7 +86,7 @@ engine/
   internal/totp/     TOTP codes (RFC 6238), stdlib only
   internal/seal/     AES-256-GCM sealing of TOTP secrets (key from ORUS_MFA_KEY)
   internal/module/   the Module interface and the registry
-  internal/modules/  one package per check (email, tls, ports, cdn, web, ...)
+  internal/modules/  one package per check (email, tls, ports, cdn, web, discovery, ...)
   internal/finding/  finding schema and validation
   internal/asset/    asset schema (hostname, ip, service, certificate) and validation
   internal/dnsname/  DNS name normalization, shared by module and asset

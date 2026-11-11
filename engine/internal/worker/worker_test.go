@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -33,6 +34,7 @@ type fakeStore struct {
 	leaseLost bool // ExtendLease reports the lease as lost
 	extended  int
 
+	hostnames     []string // the inventory's current hostnames
 	scheduleCalls []time.Time
 	scheduleErr   error
 }
@@ -74,6 +76,12 @@ func (f *fakeStore) EnqueueDueScans(ctx context.Context, now time.Time, limit in
 	defer f.mu.Unlock()
 	f.scheduleCalls = append(f.scheduleCalls, now)
 	return 0, f.scheduleErr
+}
+
+func (f *fakeStore) CurrentHostnames(ctx context.Context, targetID string) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.hostnames, nil
 }
 
 func (f *fakeStore) FinishScan(ctx context.Context, r store.ScanResult) error {
@@ -714,5 +722,36 @@ func TestRunQueuesScheduledScans(t *testing.T) {
 	defer st.mu.Unlock()
 	if n := len(st.scheduleCalls); n < 2 || n > 10 {
 		t.Errorf("EnqueueDueScans called %d times in 150ms with a 20ms interval, want a few", n)
+	}
+}
+
+// A discovery module runs first even when listed last, and the modules
+// after it get the inventory's hostnames plus what it found.
+func TestDiscoveryRunsFirstAndFeedsHosts(t *testing.T) {
+	var order []string
+	var tlsHosts []string
+	tls := newModule("tls", module.KindPassive, func(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+		order = append(order, "tls")
+		tlsHosts = req.Target.Hosts
+		return nil, nil
+	})
+	disc := &fakeModule{
+		info:   module.Info{ID: "discovery", Name: "Discovery", Kind: module.KindPassive, ProvidesHosts: true},
+		assets: []asset.Asset{asset.Hostname("vpn.example.com"), asset.Hostname("old.example.com")},
+		run: func(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+			order = append(order, "discovery")
+			return nil, nil
+		},
+	}
+	w, st := setup(t, false, "{}", tls, disc) // queued as [tls discovery]
+	st.hostnames = []string{"old.example.com", "shop.example.com"}
+	if err := runOnce(t, w); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	if !slices.Equal(order, []string{"discovery", "tls"}) {
+		t.Errorf("run order = %v, want discovery first", order)
+	}
+	if want := []string{"old.example.com", "shop.example.com", "vpn.example.com"}; !slices.Equal(tlsHosts, want) {
+		t.Errorf("tls got hosts %v, want %v", tlsHosts, want)
 	}
 }

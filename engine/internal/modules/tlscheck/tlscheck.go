@@ -87,8 +87,8 @@ var certChecks = []string{
 	CheckCertHostnameMismatch, CheckCertUntrusted, CheckCertWeakKey,
 }
 
-// Run implements module.Module. It checks the domain and its www. subdomain
-// on port 443. req.Config is ignored for now.
+// Run implements module.Module. It checks the scan's names (the domain, www.
+// and known subdomains: module.Target.ScanHosts) on port 443. req.Config is ignored for now.
 //
 // A host that does not resolve, or does not accept connections, produces no
 // finding: we only report what we could observe. DNS failures other than
@@ -109,10 +109,7 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 		evaluated: &[]string{},
 	}
 
-	hosts := []string{domain}
-	if !strings.HasPrefix(domain, "www.") {
-		hosts = append(hosts, "www."+domain)
-	}
+	hosts := req.Target.ScanHosts(domain)
 
 	var findings []finding.Finding
 	for _, host := range hosts {

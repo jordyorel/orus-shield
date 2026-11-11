@@ -192,3 +192,19 @@ func TestSameAssetInTwoTargets(t *testing.T) {
 		}
 	}
 }
+
+func TestCurrentHostnames(t *testing.T) {
+	l := newLifecycle(t)
+	l.mustScanAssets(t1, nil, map[string][]asset.Asset{
+		"tls": {asset.Hostname("vpn.example.com"), asset.Hostname("example.com"), asset.IP(ipA)},
+	})
+	// vpn is gone after scan 2.
+	l.mustScanAssets(t2, nil, map[string][]asset.Asset{"tls": {asset.Hostname("example.com"), asset.Hostname("mail.example.com")}})
+	got, err := l.s.CurrentHostnames(context.Background(), l.target.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, []string{"example.com", "mail.example.com"}) {
+		t.Errorf("CurrentHostnames = %v, want current hostnames only, sorted", got)
+	}
+}

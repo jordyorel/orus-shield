@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"strings"
 
 	"github.com/jordyorel/orus-shield/engine/internal/asset"
 	"github.com/jordyorel/orus-shield/engine/internal/dnsname"
@@ -41,6 +42,10 @@ type Info struct {
 	// Checks is the module's check catalog: every check it can evaluate.
 	// Every finding it returns must use one of these check IDs.
 	Checks []Check
+	// ProvidesHosts marks a discovery module: the worker runs it before
+	// the others of a scan, and the hostnames it reports are added to
+	// Target.Hosts for the modules that follow.
+	ProvidesHosts bool
 }
 
 // Category groups checks for the dashboard's risk categories.
@@ -147,6 +152,39 @@ type Target struct {
 	// Verified is true once ownership has been proven through the
 	// _orus-verify.<domain> TXT record.
 	Verified bool
+	// Hosts are the names under Domain this scan covers: the domain, www.
+	// and the subdomains in the asset inventory or found by a discovery
+	// module earlier in the scan. Set by the worker; empty means only the
+	// domain and www. (see ScanHosts).
+	Hosts []string
+}
+
+// MaxHosts bounds the names one scan covers, so a domain with thousands of
+// subdomains cannot make a scan run for hours.
+const MaxHosts = 25
+
+// ScanHosts returns the names a module should check. domain is the
+// normalized target domain. Names that are not domain or under it are
+// dropped: a module never leaves the customer's domain because of a bad
+// list. The domain comes first, then www., then the rest in order.
+func (t Target) ScanHosts(domain string) []string {
+	out := []string{domain}
+	if !strings.HasPrefix(domain, "www.") {
+		out = append(out, "www."+domain)
+	}
+	seen := map[string]bool{}
+	for _, h := range out {
+		seen[h] = true
+	}
+	for _, h := range t.Hosts {
+		n, err := dnsname.Normalize(h)
+		if err != nil || seen[n] || !strings.HasSuffix(n, "."+domain) || len(out) == MaxHosts {
+			continue
+		}
+		seen[n] = true
+		out = append(out, n)
+	}
+	return out
 }
 
 // Destination is one network endpoint a module is about to contact.

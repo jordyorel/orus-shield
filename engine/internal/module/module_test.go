@@ -3,6 +3,7 @@ package module
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -239,5 +240,28 @@ func TestEvaluate(t *testing.T) {
 func TestRegistryAcceptsInventoryOnlyModule(t *testing.T) {
 	if err := NewRegistry().Register(fakeModule{Info{ID: "cdn", Name: "CDN", Kind: KindPassive}}); err != nil {
 		t.Errorf("module without checks: Register() = %v, want nil", err)
+	}
+}
+
+func TestScanHosts(t *testing.T) {
+	tg := Target{Domain: "example.com", Hosts: []string{
+		"vpn.example.com", "VPN.example.com.", "www.example.com", "example.com", // duplicates
+		"evil.com", "example.com.evil.com", "notexample.com", "bad name", // not ours
+		"mail.example.com",
+	}}
+	got := tg.ScanHosts("example.com")
+	want := []string{"example.com", "www.example.com", "vpn.example.com", "mail.example.com"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("ScanHosts = %v, want %v", got, want)
+	}
+	if got := (Target{Domain: "example.com"}).ScanHosts("example.com"); strings.Join(got, ",") != "example.com,www.example.com" {
+		t.Errorf("no hosts: %v", got)
+	}
+	var many []string
+	for i := range 100 {
+		many = append(many, fmt.Sprintf("h%d.example.com", i))
+	}
+	if got := (Target{Hosts: many}).ScanHosts("example.com"); len(got) != MaxHosts {
+		t.Errorf("len = %d, want MaxHosts %d", len(got), MaxHosts)
 	}
 }

@@ -35,7 +35,7 @@ const ID = "ports"
 
 const (
 	// maxIPs bounds how many addresses of the target are scanned.
-	maxIPs = 4
+	maxIPs = 8
 	// concurrency is how many connection attempts may be in flight. The
 	// gate's rate limiter still decides when each one starts; concurrency
 	// only lets the timeouts of filtered ports overlap.
@@ -102,7 +102,8 @@ func familyCheck(f family, title string) module.Check {
 }
 
 // Run implements module.Module. It scans the addresses of the domain and of
-// its www. subdomain. req.Config is ignored for now.
+// its subdomains known to the scan (module.Target.ScanHosts). req.Config is
+// ignored for now.
 //
 // Assets: each address actually scanned and its host name, and every open
 // port of the catalog. Addresses the gate refused are not reported: we did
@@ -115,7 +116,7 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 	dns := resolver.Gated{Gate: req.Gate, Inner: m.dns}
 	dial := dialer.Gated{Gate: req.Gate, Inner: connectTimeoutDialer{m.dial, m.connectTimeout}}
 
-	targets, err := m.addresses(ctx, dns, domain)
+	targets, err := m.addresses(ctx, dns, req.Target.ScanHosts(domain))
 	if err != nil {
 		return module.Result{}, fmt.Errorf("ports: %w", err)
 	}
@@ -178,13 +179,9 @@ type address struct {
 	ip   netip.Addr
 }
 
-// addresses resolves the domain and its www. subdomain, removes duplicates
+// addresses resolves the scan's names, removes duplicates
 // (both often point to the same server) and keeps at most maxIPs.
-func (m *Module) addresses(ctx context.Context, dns resolver.Resolver, domain string) ([]address, error) {
-	hosts := []string{domain}
-	if !strings.HasPrefix(domain, "www.") {
-		hosts = append(hosts, "www."+domain)
-	}
+func (m *Module) addresses(ctx context.Context, dns resolver.Resolver, hosts []string) ([]address, error) {
 	seen := make(map[netip.Addr]bool)
 	var out []address
 	for _, h := range hosts {

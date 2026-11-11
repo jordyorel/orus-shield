@@ -33,7 +33,7 @@ const PROFILES: ProfileDef[] = [
  * engine is null for a module the engine does not have yet.
  */
 const MODULES: { engine: string | null; name: string; desc: string; tag?: "Intrusif" | "Nouveau" }[] = [
-  { engine: null, name: "Découverte de la surface d’attaque", desc: "Sous-domaines, certificats publics, plages IP associées." },
+  { engine: "discovery", name: "Découverte de la surface d’attaque", desc: "Sous-domaines, certificats publics, plages IP associées." },
   { engine: "ports", name: "Ports et services", desc: "Services exposés, versions et configurations dangereuses." },
   { engine: "web", name: "Applications web", desc: "Injections, authentification, en-têtes, CMS obsolètes." },
   { engine: "email", name: "Sécurité des emails", desc: "SPF, DKIM, DMARC, serveurs de messagerie." },

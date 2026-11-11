@@ -21,7 +21,6 @@ import (
 	"io"
 	"net/http"
 	"net/netip"
-	"strings"
 	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/asset"
@@ -73,8 +72,8 @@ func (m *Module) Info() module.Info {
 	return module.Info{ID: ID, Name: "CDN and web protection", Kind: module.KindPassive}
 }
 
-// Run implements module.Module. It looks at the domain and its www.
-// subdomain. Names that do not resolve are skipped; DNS failures other than
+// Run implements module.Module. It looks at the scan's names (the domain,
+// www. and known subdomains: module.Target.ScanHosts). Names that do not resolve are skipped; DNS failures other than
 // "not found", gate failures and cancellation stop the run.
 func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, error) {
 	domain, err := module.NormalizeDomain(req.Target.Domain)
@@ -84,10 +83,7 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 	dns := resolver.Gated{Gate: req.Gate, Inner: m.dns}
 	dial := dialer.Gated{Gate: req.Gate, Inner: m.dial}
 
-	hosts := []string{domain}
-	if !strings.HasPrefix(domain, "www.") {
-		hosts = append(hosts, "www."+domain)
-	}
+	hosts := req.Target.ScanHosts(domain)
 	var assets asset.Set
 	for _, host := range hosts {
 		addrs, err := dns.LookupIP(ctx, host)

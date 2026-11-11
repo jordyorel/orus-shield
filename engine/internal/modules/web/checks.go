@@ -68,7 +68,7 @@ func analyzeHTTP(domain, host string, chain []*response, httpsWorks bool) (_ *is
 	i.description = fmt.Sprintf("http://%s/ serves the site and no working HTTPS version was found. "+
 		"Everything visitors see and send, including passwords typed into forms, travels in clear text and can be read or changed on the way.", host)
 	i.remediation = []string{
-		"Get a free certificate (Let's Encrypt, or the SSL option of your hosting panel) for " + domain + " and www." + strings.TrimPrefix(domain, "www.") + ".",
+		"Get a free certificate (Let's Encrypt, or the SSL option of your hosting panel) for " + host + ".",
 		"Enable HTTPS on the web server, then redirect every http:// request to https://.",
 	}
 	return &i, true
