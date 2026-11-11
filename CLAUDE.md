@@ -99,6 +99,8 @@ engine/
   internal/store/    PostgreSQL: organizations, targets, scan queue, findings lifecycle,
                      audit log; org-scoped handle (store.Org) + row-level security
   internal/worker/   claims scans, runs modules, records results
+  internal/mailer/   SMTP email and French templates (password reset, invitations, alerts)
+  internal/notify/   delivers queued alert emails (outbox), in the worker process
   internal/modules/all/  the list of shipped modules
 deploy/              local infrastructure files (PostgreSQL init; lab/setup.sh: the test lab server)
 web/                 dashboard (React + TypeScript, Vite)
@@ -208,6 +210,11 @@ one-time link (1 hour, 3 requests per hour per address); invitations email the a
 link, and the admin still sees the code as a fallback. Links carry the token in the URL
 fragment (`#token=`), never sent to a server. Production: a provider's SMTP relay (Brevo,
 Mailjet, SES...) on the product domain, never from the lab domain.
+
+Alerts: a scan that opens or reopens critical or high findings queues one email per activated
+admin in the `notifications` outbox (migration 0012), in FinishScan's transaction; the worker
+process delivers it (package `notify`: lease, retries at 1 min, 5 min, 30 min, 2 h, dropped
+after a day). The worker needs the same `ORUS_SMTP_*` and `ORUS_PUBLIC_URL` as the API.
 
 Two-factor authentication (TOTP) is mandatory for admins: an admin session opened without
 a second factor gets `403 {"code": "mfa_required"}` on every route of that organization,

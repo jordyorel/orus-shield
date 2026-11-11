@@ -13,6 +13,7 @@ import (
 	"syscall"
 
 	"github.com/jordyorel/orus-shield/engine/internal/modules/all"
+	"github.com/jordyorel/orus-shield/engine/internal/notify"
 	"github.com/jordyorel/orus-shield/engine/internal/ownership"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
@@ -54,5 +55,13 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	verifier := ownership.New(st, resolver.NewSystem())
+
+	// Email alerts: delivered from the outbox next to the scans. Without
+	// mail they stay queued, and expire after a day.
+	if cfg.smtp != nil {
+		go notify.New(st, *cfg.smtp, cfg.publicURL, log.With("component", "notify")).Run(ctx, notify.DefaultInterval)
+	} else {
+		log.Warn("ORUS_SMTP_ADDR is not set: email alerts will not be sent")
+	}
 	return worker.New(st, registry, verifier, cfg.worker, log).Run(ctx)
 }

@@ -63,3 +63,26 @@ func TestLoadConfigRejects(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadConfigMail(t *testing.T) {
+	base := map[string]string{"ORUS_DATABASE_URL": "postgres://x"}
+	get := func(extra map[string]string) func(string) string {
+		return func(k string) string {
+			if v, ok := extra[k]; ok {
+				return v
+			}
+			return base[k]
+		}
+	}
+	c, err := loadConfig(get(nil))
+	if err != nil || c.smtp != nil || c.publicURL != "http://localhost:5173" {
+		t.Errorf("no mail: %+v, %v", c, err)
+	}
+	c, err = loadConfig(get(map[string]string{"ORUS_SMTP_ADDR": "127.0.0.1:1025", "ORUS_MAIL_FROM": "Orus <a@example.com>", "ORUS_PUBLIC_URL": "https://app.example"}))
+	if err != nil || c.smtp == nil || c.publicURL != "https://app.example" {
+		t.Errorf("mail: %+v, %v", c, err)
+	}
+	if _, err := loadConfig(get(map[string]string{"ORUS_SMTP_ADDR": "127.0.0.1:1025"})); err == nil {
+		t.Error("SMTP without a sender: nil error")
+	}
+}

@@ -64,6 +64,10 @@ type ScanResult struct {
 //     then it is left unchanged;
 //   - accepted_risk is the customer's decision and is never changed here.
 //
+// Findings it opens or reopens that are Alertable are queued as email
+// notifications to the organization's admins (notifications table), in the
+// same transaction.
+//
 // Every status change (opened, fixed, reopened) is also recorded in
 // finding_events, in the same transaction, for remediation history. The
 // asset inventory is updated in the same transaction too (see saveAssets).
@@ -94,6 +98,7 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 
 	seen := make([]string, 0, len(r.Findings))
 	created, reopened := 0, 0
+	var alerts []AlertFinding // opened or reopened by this scan, worth an email
 	for _, f := range r.Findings {
 		f.FirstSeen, f.LastSeen, f.Status = at, at, finding.StatusOpen
 		if err := f.Validate(); err != nil {
@@ -128,6 +133,9 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 			targetID, f.ID, f.ModuleID, f.CheckID, string(f.Severity), at, data, orgID).Scan(&previous)
 		if err != nil {
 			return fmt.Errorf("finish scan %s: save finding %s: %w", r.ScanID, f.ID, err)
+		}
+		if (previous == nil || *previous == string(finding.StatusFixed)) && Alertable(f) {
+			alerts = append(alerts, AlertFinding{ID: f.ID, Title: f.Title, Asset: f.Asset, Severity: f.Severity, Reopened: previous != nil})
 		}
 		switch {
 		case previous == nil:
@@ -184,6 +192,11 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 	if err != nil {
 		return fmt.Errorf("finish scan %s: %w", r.ScanID, err)
 	}
+	// Same transaction: the alerts exist if and only if the results do.
+	notified, err := queueAlerts(ctx, tx, orgID, targetID, r.ScanID, domain, alerts)
+	if err != nil {
+		return fmt.Errorf("finish scan %s: %w", r.ScanID, err)
+	}
 
 	// Empty lists, not null, so the audit JSON has one shape.
 	succeeded := append([]string{}, r.Succeeded...)
@@ -194,8 +207,8 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 			"scan_id": r.ScanID, "attempt": r.Attempt,
 			"succeeded": succeeded, "failed": failed,
 			"findings": len(r.Findings), "new": created, "fixed": fixed, "reopened": reopened,
-			"unobserved": unobserved,
-			"assets":     assets.reported, "assets_new": assets.created, "assets_back": assets.back, "assets_gone": assets.gone,
+			"unobserved": unobserved, "alerts": len(alerts), "notified": notified,
+			"assets": assets.reported, "assets_new": assets.created, "assets_back": assets.back, "assets_gone": assets.gone,
 			"assets_unobserved": assets.unobserved,
 			"score":             score,
 		},

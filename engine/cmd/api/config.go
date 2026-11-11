@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/url"
 	"strings"
 
 	"github.com/jordyorel/orus-shield/engine/internal/mailer"
@@ -65,22 +64,11 @@ func loadConfig(getenv func(string) string) (config, error) {
 			cfg.trustedOrigins = append(cfg.trustedOrigins, o)
 		}
 	}
-	cfg.publicURL = strings.TrimRight(strings.TrimSpace(getenv("ORUS_PUBLIC_URL")), "/")
-	if cfg.publicURL == "" {
-		cfg.publicURL = "http://localhost:5173"
+	if cfg.publicURL, err = mailer.PublicURLFromEnv(getenv); err != nil {
+		return config{}, err
 	}
-	if u, err := url.Parse(cfg.publicURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
-		return config{}, errors.New("ORUS_PUBLIC_URL must be an http(s) URL, e.g. https://app.example.com")
-	}
-	if addr := strings.TrimSpace(getenv("ORUS_SMTP_ADDR")); addr != "" {
-		s := &mailer.SMTP{
-			Addr: addr, Username: getenv("ORUS_SMTP_USERNAME"), Password: getenv("ORUS_SMTP_PASSWORD"),
-			From: strings.TrimSpace(getenv("ORUS_MAIL_FROM")),
-		}
-		if err := s.Validate(); err != nil {
-			return config{}, fmt.Errorf("ORUS_SMTP_ADDR / ORUS_MAIL_FROM: %w", err)
-		}
-		cfg.smtp = s
+	if cfg.smtp, err = mailer.FromEnv(getenv); err != nil {
+		return config{}, err
 	}
 	return cfg, nil
 }

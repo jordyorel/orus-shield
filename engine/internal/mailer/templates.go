@@ -131,3 +131,85 @@ donné, ou ignorez cet email.
 `, oneLine(inviter, 254), org, roleText(admin), strings.TrimRight(publicURL, "/")+"/login", signature),
 	}
 }
+
+// AlertItem is one finding listed in an alert.
+type AlertItem struct {
+	Severity string // "critical", "high"...
+	Title    string // the module's English title (finding texts stay English)
+	Asset    string
+	Reopened bool
+	Link     string // the finding in the dashboard
+}
+
+var severityFR = map[string]string{"critical": "Critique", "high": "Élevée", "medium": "Moyenne", "low": "Faible", "info": "Info"}
+
+// NewFindings is the alert sent after a scan that opened or reopened
+// critical or high findings.
+func NewFindings(to, org, domain string, items []AlertItem, total int, listLink string) Message {
+	domain = oneLine(domain, 253)
+	var critical int
+	for _, it := range items {
+		if it.Severity == "critical" {
+			critical++
+		}
+	}
+	subject := fmt.Sprintf("Orus Shield : %d nouvelle%s vulnérabilité%s sur %s", total, plural(total), plural(total), domain)
+	if critical > 0 {
+		subject = fmt.Sprintf("Orus Shield : %d vulnérabilité%s critique%s sur %s", critical, plural(critical), plural(critical), domain)
+	}
+
+	var b strings.Builder
+	for _, it := range items {
+		label := severityFR[it.Severity]
+		if label == "" {
+			label = oneLine(it.Severity, 20)
+		}
+		back := ""
+		if it.Reopened {
+			back = " (de retour : elle avait été corrigée)"
+		}
+		fmt.Fprintf(&b, "- [%s] %s%s\n  %s\n  %s\n", label, oneLine(it.Title, 200), back, oneLine(it.Asset, 253), it.Link)
+	}
+	more := ""
+	if total > len(items) {
+		more = fmt.Sprintf("\n... et %d autre%s.\n", total-len(items), plural(total-len(items)))
+	}
+	org = oneLine(org, 80)
+	return Message{
+		To:      to,
+		Subject: subject,
+		Text: fmt.Sprintf(`Bonjour,
+
+Le dernier scan de %s (organisation « %s ») a trouvé %d vulnérabilité%s
+critique%s ou élevée%s nouvelle%s ou revenue%s :
+
+%s%s
+Chaque lien ouvre l'explication et les étapes de correction. Toutes les
+vulnérabilités ouvertes :
+
+%s
+
+Vous recevez cet email parce que vous êtes administrateur de « %s ».
+Seules les vulnérabilités critiques et élevées déclenchent une alerte.
+%s
+`, domain, org, total, plural(total), plural(total), plural(total), plural(total), plural(total), b.String(), more, listLink, org, signature),
+	}
+}
+
+func plural(n int) string {
+	if n > 1 {
+		return "s"
+	}
+	return ""
+}
+
+// FindingsLink is the dashboard's vulnerabilities page, optionally on one
+// finding.
+func FindingsLink(publicURL, orgID, findingID string) string {
+	// The path is the dashboard's French route for the vulnerabilities screen (nav.tsx).
+	u := strings.TrimRight(publicURL, "/") + "/orgs/" + url.PathEscape(orgID) + "/vulnerabilites" //nolint:misspell // French route name, not a typo
+	if findingID != "" {
+		u += "?id=" + url.QueryEscape(findingID)
+	}
+	return u
+}

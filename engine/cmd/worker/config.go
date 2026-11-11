@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/jordyorel/orus-shield/engine/internal/mailer"
 	"github.com/jordyorel/orus-shield/engine/internal/worker"
 )
 
@@ -14,6 +15,10 @@ import (
 type config struct {
 	databaseURL string
 	worker      worker.Config
+	// smtp sends the alerts the scans queue; nil: mail not configured, the
+	// alerts wait in the outbox (and expire after a day).
+	smtp      *mailer.SMTP
+	publicURL string
 }
 
 // loadConfig reads the configuration through getenv (os.Getenv in
@@ -24,6 +29,9 @@ type config struct {
 //	ORUS_WORKER_LEASE     optional duration, e.g. 5m
 //	ORUS_MODULE_TIMEOUT   optional duration, e.g. 2m
 //	ORUS_POLL_INTERVAL    optional duration, e.g. 2s
+//	ORUS_SMTP_ADDR, ORUS_SMTP_USERNAME, ORUS_SMTP_PASSWORD, ORUS_MAIL_FROM
+//	                      email alerts (see mailer.FromEnv); unset: no alert is sent
+//	ORUS_PUBLIC_URL       the dashboard's address, for links in alerts
 func loadConfig(getenv func(string) string) (config, error) {
 	var c config
 	c.databaseURL = getenv("ORUS_DATABASE_URL")
@@ -62,6 +70,13 @@ func loadConfig(getenv func(string) string) (config, error) {
 	if c.worker.Lease > 0 && c.worker.ModuleTimeout > 0 && c.worker.ModuleTimeout >= c.worker.Lease {
 		// Not fatal thanks to the heartbeat, but a sign of a mistake.
 		return config{}, errors.New("ORUS_MODULE_TIMEOUT must be shorter than ORUS_WORKER_LEASE")
+	}
+	var err error
+	if c.smtp, err = mailer.FromEnv(getenv); err != nil {
+		return config{}, err
+	}
+	if c.publicURL, err = mailer.PublicURLFromEnv(getenv); err != nil {
+		return config{}, err
 	}
 	return c, nil
 }
