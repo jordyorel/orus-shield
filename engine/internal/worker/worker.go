@@ -33,6 +33,7 @@ type Store interface {
 	FinishScan(ctx context.Context, r store.ScanResult) error
 	FailScan(ctx context.Context, scanID string, attempt int, workerID, reason string) error
 	AppendAudit(ctx context.Context, e store.AuditEntry) error
+	EnqueueDueScans(ctx context.Context, now time.Time, limit int) (int, error)
 }
 
 // Ownership enforces security rule 1 for active modules (see package
@@ -51,6 +52,10 @@ type Config struct {
 	ModuleTimeout time.Duration // maximum duration of one module run
 	PollInterval  time.Duration // wait between polls when the queue is empty
 	MaxAttempts   int           // claims before a crashing scan is abandoned
+	// ScheduleInterval is how often the worker queues the scheduled scans
+	// that are due. Every worker does it; the store makes sure each due
+	// scan is queued once.
+	ScheduleInterval time.Duration
 }
 
 const (
@@ -58,6 +63,11 @@ const (
 	defaultModuleTimeout = 2 * time.Minute
 	defaultPollInterval  = 2 * time.Second
 	defaultMaxAttempts   = 3
+	// Schedules are set to the hour, so a minute of delay is invisible.
+	defaultScheduleInterval = time.Minute
+	// scheduleBatch bounds the targets handled per transaction; the rest
+	// waits for the next tick.
+	scheduleBatch = 500
 
 	// maxFindingsPerModule bounds one module's output (rule 7): a bug or a
 	// hostile target must not flood the database.
@@ -100,6 +110,9 @@ func New(st Store, modules *module.Registry, owner Ownership, cfg Config, log *s
 	if cfg.MaxAttempts <= 0 {
 		cfg.MaxAttempts = defaultMaxAttempts
 	}
+	if cfg.ScheduleInterval <= 0 {
+		cfg.ScheduleInterval = defaultScheduleInterval
+	}
 	return &Worker{store: st, modules: modules, owner: owner, cfg: cfg, log: log.With("worker", cfg.ID), now: time.Now}
 }
 
@@ -108,7 +121,12 @@ func New(st Store, modules *module.Registry, owner Ownership, cfg Config, log *s
 // picks it up.
 func (w *Worker) Run(ctx context.Context) error {
 	w.log.Info("worker started")
+	var lastSchedule time.Time
 	for {
+		if time.Since(lastSchedule) >= w.cfg.ScheduleInterval {
+			w.EnqueueScheduled(ctx)
+			lastSchedule = time.Now()
+		}
 		worked, err := w.RunOnce(ctx)
 		if ctx.Err() != nil {
 			w.log.Info("worker stopped")
@@ -126,6 +144,19 @@ func (w *Worker) Run(ctx context.Context) error {
 			return nil
 		case <-time.After(w.cfg.PollInterval):
 		}
+	}
+}
+
+// EnqueueScheduled queues the scheduled scans that are due. Errors are
+// logged, not returned: the queue keeps being served, and the next tick
+// tries again.
+func (w *Worker) EnqueueScheduled(ctx context.Context) {
+	n, err := w.store.EnqueueDueScans(ctx, w.now(), scheduleBatch)
+	if err != nil && ctx.Err() == nil {
+		w.log.Error("enqueue scheduled scans", "err", err)
+	}
+	if n > 0 {
+		w.log.Info("scheduled scans queued", "count", n)
 	}
 }
 

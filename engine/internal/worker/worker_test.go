@@ -32,6 +32,9 @@ type fakeStore struct {
 	audit     []store.AuditEntry
 	leaseLost bool // ExtendLease reports the lease as lost
 	extended  int
+
+	scheduleCalls []time.Time
+	scheduleErr   error
 }
 
 func (f *fakeStore) ClaimScan(ctx context.Context, workerID string, lease time.Duration, maxAttempts int) (store.Scan, bool, error) {
@@ -64,6 +67,13 @@ func (f *fakeStore) ExtendLease(ctx context.Context, scanID string, attempt int,
 		return store.ErrLeaseLost
 	}
 	return nil
+}
+
+func (f *fakeStore) EnqueueDueScans(ctx context.Context, now time.Time, limit int) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.scheduleCalls = append(f.scheduleCalls, now)
+	return 0, f.scheduleErr
 }
 
 func (f *fakeStore) FinishScan(ctx context.Context, r store.ScanResult) error {
@@ -683,5 +693,26 @@ func TestUnobservedCoversExclusionsAndRefusedIPs(t *testing.T) {
 		if got := unobserved(tt.kind, tt.value); got != tt.want {
 			t.Errorf("Unobserved(%q, %q) = %v, want %v", tt.kind, tt.value, got, tt.want)
 		}
+	}
+}
+
+// Run queues the due scheduled scans when it starts, then every
+// ScheduleInterval; an error there does not stop the worker.
+func TestRunQueuesScheduledScans(t *testing.T) {
+	w, st := setup(t, false, "{}")
+	st.queue = nil
+	st.scheduleErr = errors.New("database unavailable")
+	w.cfg.PollInterval = 5 * time.Millisecond
+	w.cfg.ScheduleInterval = 20 * time.Millisecond
+
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	if err := w.Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if n := len(st.scheduleCalls); n < 2 || n > 10 {
+		t.Errorf("EnqueueDueScans called %d times in 150ms with a 20ms interval, want a few", n)
 	}
 }

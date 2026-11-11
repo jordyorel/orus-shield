@@ -167,7 +167,24 @@ export interface Target {
   rate_per_sec: number;
   exclusions: unknown;
   created_at: string;
+  /** null: scanned on demand only. */
+  schedule: Schedule | null;
 }
+
+export type Frequency = "daily" | "weekly" | "monthly";
+
+/** scheduleJSON: when a target is scanned. weekday: 0 is Sunday. */
+export interface Schedule {
+  frequency: Frequency;
+  weekday: number;
+  hour: number;
+  timezone: string;
+  modules: string[];
+  next_scan_at: string;
+}
+
+/** What PATCH /targets/{id} accepts: the server computes next_scan_at. */
+export type ScheduleInput = Omit<Schedule, "next_scan_at">;
 
 /** instructionsJSON: the DNS record that proves ownership. */
 export interface Instructions {

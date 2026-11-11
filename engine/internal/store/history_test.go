@@ -141,8 +141,10 @@ func TestFindingHistoryMigrationBackfill(t *testing.T) {
 		t.Fatal(err)
 	}
 	org := defaultOrg(t, s)
-	target, err := org.CreateTarget(ctx, NewTarget{Domain: "orushield.xyz"})
-	if err != nil {
+	// Raw SQL, not CreateTarget: the code reads columns of later migrations.
+	var target struct{ ID string }
+	if err := s.pool.QueryRow(ctx, "INSERT INTO targets (org_id, domain) VALUES ($1, 'orushield.xyz') RETURNING id::text",
+		org.ID()).Scan(&target.ID); err != nil {
 		t.Fatal(err)
 	}
 	scanEnd := t3

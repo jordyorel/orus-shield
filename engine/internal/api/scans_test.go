@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
@@ -112,5 +113,75 @@ func TestOrgAssetsChecksTrends(t *testing.T) {
 	}
 	if r := e.do("GET", base+"/trends?months=25", a.viewer, nil); r.status != http.StatusBadRequest {
 		t.Errorf("months=25 = %d, want 400", r.status)
+	}
+}
+
+func TestTargetSchedule(t *testing.T) {
+	e := newEnv(t)
+	a := e.tenant("A", "example.com")
+	path := "/api/v1/orgs/" + a.orgID + "/targets/" + a.target.ID
+
+	var got targetJSON
+	e.do("GET", path, a.session, nil).json(t, &got)
+	if got.Schedule != nil {
+		t.Fatalf("new target schedule = %+v, want null", got.Schedule)
+	}
+
+	sched := map[string]any{"frequency": "weekly", "weekday": 0, "hour": 2, "timezone": "Africa/Douala", "modules": []string{"tls", "email", "tls"}}
+	r := e.do("PATCH", path, a.session, map[string]any{"schedule": sched})
+	r.json(t, &got)
+	if r.status != http.StatusOK || got.Schedule == nil {
+		t.Fatalf("set schedule = %d %s", r.status, r.body)
+	}
+	douala, _ := time.LoadLocation("Africa/Douala")
+	if s := got.Schedule; s.Frequency != "weekly" || s.Weekday != 0 || s.Hour != 2 || s.TimeZone != "Africa/Douala" ||
+		strings.Join(s.Modules, ",") != "email,tls" {
+		t.Errorf("schedule = %+v", s)
+	}
+	// The first run is the next Sunday 02:00 in Douala after the API's now.
+	next := got.Schedule.NextScanAt.In(douala)
+	if next.Weekday() != time.Sunday || next.Hour() != 2 || !next.After(e.now) || next.Sub(e.now) > 7*24*time.Hour {
+		t.Errorf("next scan at %v, now %v", next, e.now)
+	}
+
+	// Other updates keep it; null removes it.
+	e.do("PATCH", path, a.session, map[string]any{"rate_per_sec": 10}).json(t, &got)
+	if got.Schedule == nil {
+		t.Error("rate update removed the schedule")
+	}
+	e.do("PATCH", path, a.session, map[string]any{"schedule": nil}).json(t, &got)
+	if got.Schedule != nil {
+		t.Errorf("after schedule: null = %+v", got.Schedule)
+	}
+
+	withField := func(k string, v any) map[string]any {
+		m := map[string]any{}
+		for key, val := range sched {
+			m[key] = val
+		}
+		if v == nil {
+			delete(m, k)
+		} else {
+			m[k] = v
+		}
+		return map[string]any{"schedule": m}
+	}
+	for name, body := range map[string]any{
+		"unknown frequency": withField("frequency", "hourly"),
+		"hour 24":           withField("hour", 24),
+		"weekday 7":         withField("weekday", 7),
+		"unknown zone":      withField("timezone", "Mars/Olympus"),
+		"no zone":           withField("timezone", nil),
+		"unknown module":    withField("modules", []string{"nmap"}),
+		"no modules":        withField("modules", []string{}),
+		"unknown field":     withField("minute", 30),
+		"not an object":     map[string]any{"schedule": "weekly"},
+	} {
+		if r := e.do("PATCH", path, a.session, body); r.status != http.StatusBadRequest {
+			t.Errorf("%s = %d %s, want 400", name, r.status, r.body)
+		}
+	}
+	if r := e.do("PATCH", path, a.viewer, map[string]any{"schedule": sched}); r.status != http.StatusForbidden {
+		t.Errorf("viewer = %d, want 403", r.status)
 	}
 }

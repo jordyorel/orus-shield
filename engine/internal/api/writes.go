@@ -12,6 +12,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/gate"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/ownership"
+	"github.com/jordyorel/orus-shield/engine/internal/schedule"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
@@ -91,6 +92,56 @@ func (s *Server) createTarget(w http.ResponseWriter, r *http.Request, req orgReq
 type updateTargetRequest struct {
 	Exclusions json.RawMessage `json:"exclusions,omitempty"`
 	RatePerSec *float64        `json:"rate_per_sec,omitempty"`
+	// Schedule: an object sets it, null removes it, absent keeps it.
+	Schedule json.RawMessage `json:"schedule,omitempty"`
+}
+
+type scheduleRequest struct {
+	Frequency string   `json:"frequency"`
+	Weekday   int      `json:"weekday"`
+	Hour      int      `json:"hour"`
+	TimeZone  string   `json:"timezone"`
+	Modules   []string `json:"modules"`
+}
+
+// parseSchedule reads the schedule of an update. The first run is computed
+// here, from now: saving a schedule never starts a scan by itself.
+func (s *Server) parseSchedule(raw json.RawMessage, now time.Time) (ts store.TargetSettings, msg string) {
+	if raw == nil {
+		return ts, ""
+	}
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		ts.ClearSchedule = true
+		return ts, ""
+	}
+	var body scheduleRequest
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil {
+		return ts, "invalid schedule: " + err.Error()
+	}
+	if len(body.Modules) == 0 {
+		return ts, "invalid schedule: modules required"
+	}
+	for _, m := range body.Modules {
+		if !slices.Contains(s.cfg.Modules, m) {
+			return ts, "invalid schedule: unknown module " + m
+		}
+	}
+	sched := schedule.Schedule{
+		Frequency: schedule.Frequency(body.Frequency), Weekday: time.Weekday(body.Weekday),
+		Hour: body.Hour, TimeZone: body.TimeZone,
+	}
+	next, err := sched.Next(now)
+	if err != nil {
+		return ts, err.Error()
+	}
+	ts.Schedule = &store.TargetSchedule{
+		Schedule:   sched,
+		Modules:    slices.Compact(slices.Sorted(slices.Values(body.Modules))),
+		NextScanAt: next,
+	}
+	return ts, ""
 }
 
 // updateTarget changes a target's exclusions (rule 2) and rate (rule 3).
@@ -101,8 +152,13 @@ func (s *Server) updateTarget(w http.ResponseWriter, r *http.Request, req orgReq
 	if !decode(w, r, &body) {
 		return
 	}
-	if body.Exclusions == nil && body.RatePerSec == nil {
-		writeError(w, http.StatusBadRequest, "nothing to update: send exclusions and/or rate_per_sec")
+	if body.Exclusions == nil && body.RatePerSec == nil && body.Schedule == nil {
+		writeError(w, http.StatusBadRequest, "nothing to update: send exclusions, rate_per_sec and/or schedule")
+		return
+	}
+	settings, msg := s.parseSchedule(body.Schedule, s.cfg.Now())
+	if msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
 	if body.Exclusions != nil {
@@ -121,7 +177,8 @@ func (s *Server) updateTarget(w http.ResponseWriter, r *http.Request, req orgReq
 		writeError(w, http.StatusBadRequest, "rate_per_sec must be greater than 0 and at most 200")
 		return
 	}
-	updated, err := req.org.UpdateTargetSettings(r.Context(), t.ID, store.TargetSettings{Exclusions: body.Exclusions, RatePerSec: body.RatePerSec})
+	settings.Exclusions, settings.RatePerSec = body.Exclusions, body.RatePerSec
+	updated, err := req.org.UpdateTargetSettings(r.Context(), t.ID, settings)
 	if err != nil {
 		s.internalError(w, r, err)
 		return
@@ -130,8 +187,8 @@ func (s *Server) updateTarget(w http.ResponseWriter, r *http.Request, req orgReq
 		Actor: actor(req), Action: actionTargetUpdated, Target: t.Domain,
 		Details: map[string]any{
 			"target_id": t.ID,
-			"before":    map[string]any{"rate_per_sec": t.RatePerSec, "exclusions": t.Exclusions},
-			"after":     map[string]any{"rate_per_sec": updated.RatePerSec, "exclusions": updated.Exclusions},
+			"before":    map[string]any{"rate_per_sec": t.RatePerSec, "exclusions": t.Exclusions, "schedule": toTargetJSON(t).Schedule},
+			"after":     map[string]any{"rate_per_sec": updated.RatePerSec, "exclusions": updated.Exclusions, "schedule": toTargetJSON(updated).Schedule},
 		},
 	}); err != nil {
 		s.internalError(w, r, err)

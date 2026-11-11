@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../api/client";
-import type { Me, Membership, ModuleInfo, Scan, Target } from "../api/types";
+import type { Frequency, Me, Membership, ModuleInfo, Scan, Target } from "../api/types";
 import { AppShell } from "../components/AppShell";
 import { Alert } from "../components/AuthLayout";
 import { formatExclusions, parseExclusions } from "../exclusions";
@@ -45,9 +45,39 @@ const MODULES: { engine: string | null; name: string; desc: string; tag?: "Intru
   { engine: null, name: "Audit de l’usage de l’IA", desc: "Clés d’API exposées, chatbots vulnérables à l’injection de prompt.", tag: "Nouveau" },
 ];
 
-const FREQUENCIES = ["Quotidienne", "Hebdomadaire", "Mensuelle", "Continue (surveillance)"];
-const DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
-const HOURS = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, "0")}:00`);
+/** The mockup's frequencies. "Continue" needs change detection: not yet. */
+const FREQUENCIES: { id: Frequency | "continuous"; label: string; soon?: boolean }[] = [
+  { id: "daily", label: "Quotidienne" },
+  { id: "weekly", label: "Hebdomadaire" },
+  { id: "monthly", label: "Mensuelle" },
+  { id: "continuous", label: "Continue (surveillance) : bientôt", soon: true },
+];
+/** In the mockup's order; value is the weekday number of the API (0 = Sunday). */
+const DAYS: { label: string; value: number }[] = [
+  { label: "Lundi", value: 1 },
+  { label: "Mardi", value: 2 },
+  { label: "Mercredi", value: 3 },
+  { label: "Jeudi", value: 4 },
+  { label: "Vendredi", value: 5 },
+  { label: "Samedi", value: 6 },
+  { label: "Dimanche", value: 0 },
+];
+const HOURS = Array.from({ length: 24 }, (_, h) => h);
+const hourLabel = (h: number) => `${String(h).padStart(2, "0")}:00`;
+const dayLabel = (wd: number) => DAYS.find((d) => d.value === wd)?.label ?? "";
+
+/** The browser's time zone: schedules are wall-clock times there. */
+function browserTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
+
+/** "dimanche 15/11 à 02:00", in the viewer's time zone. */
+function nextRunText(iso: string): string {
+  const d = new Date(iso);
+  const weekday = d.toLocaleDateString("fr-FR", { weekday: "long" });
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${weekday} ${p(d.getDate())}/${p(d.getMonth() + 1)} à ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 
 const POLL_MS = 3000;
 const ADMIN_ONLY = "Réservé aux administrateurs";
@@ -126,9 +156,9 @@ export function ScansPage({ me, org }: { me: Me; org: Membership }) {
   const [scans, setScans] = useState<Scan[]>([]);
   const [profile, setProfile] = useState<ProfileId>("standard");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [frequency, setFrequency] = useState("Hebdomadaire");
-  const [day, setDay] = useState("Dimanche");
-  const [hour, setHour] = useState("02:00");
+  const [frequency, setFrequency] = useState<Frequency>("weekly");
+  const [day, setDay] = useState(0);
+  const [hour, setHour] = useState(2);
   const [rate, setRate] = useState(5);
   const [exclusions, setExclusions] = useState("");
   const [error, setError] = useState("");
@@ -154,6 +184,15 @@ export function ScansPage({ me, org }: { me: Me; org: Membership }) {
         if (first) {
           setRate(Math.min(200, Math.max(5, Math.round(first.rate_per_sec / 5) * 5)));
           setExclusions(formatExclusions(first.exclusions));
+        }
+        // The schedule shown is the first saved one; its modules become
+        // the selection, so saving again keeps them.
+        const planned = t.items.find((x) => x.schedule)?.schedule;
+        if (planned) {
+          setFrequency(planned.frequency);
+          setDay(planned.weekday);
+          setHour(planned.hour);
+          setSelected(new Set(planned.modules.filter((id) => m.items.some((x) => x.id === id))));
         }
       })
       .catch((err: unknown) => {
@@ -219,6 +258,10 @@ export function ScansPage({ me, org }: { me: Me; org: Membership }) {
       setNotice({ kind: "warning", text: "Ajoutez d’abord un domaine dans Actifs : l’intensité et les exclusions s’appliquent à vos domaines." });
       return;
     }
+    if (selected.size === 0) {
+      setNotice({ kind: "warning", text: "Activez au moins un module : ce sont eux que les scans planifiés lanceront." });
+      return;
+    }
     const parsed = parseExclusions(exclusions);
     if (parsed.errors.length > 0) {
       setNotice({ kind: "error", text: `Exclusions illisibles : ${parsed.errors.join(", ")}. Un chemin (/admin), une adresse ou plage IP, un port ou un nom d’hôte par ligne.` });
@@ -228,17 +271,24 @@ export function ScansPage({ me, org }: { me: Me; org: Membership }) {
     setNotice(null);
     try {
       const updated: Target[] = [];
-      for (const t of targets) updated.push(await api.updateTarget(org.org_id, t.id, { rate_per_sec: rate, exclusions: parsed.value }));
+      const schedule = { frequency, weekday: day, hour, timezone: browserTimeZone(), modules: [...selected].sort() };
+      for (const t of targets) updated.push(await api.updateTarget(org.org_id, t.id, { rate_per_sec: rate, exclusions: parsed.value, schedule }));
       setTargets(updated);
       setSavedMsg("Configuration enregistrée");
     } catch (err) {
-      setNotice({ kind: "error", text: err instanceof ApiError && err.status === 400 ? "Configuration refusée : vérifiez les exclusions et l’intensité." : fallback(err) });
+      setNotice({ kind: "error", text: err instanceof ApiError && err.status === 400 ? "Configuration refusée : vérifiez les exclusions, l’intensité et la planification." : fallback(err) });
     } finally {
       setBusy(false);
     }
   };
 
   const runs = catalog ? groupRuns(scans) : [];
+  /** The earliest scheduled run among the domains. */
+  const nextRun =
+    targets
+      ?.map((t) => t.schedule?.next_scan_at)
+      .filter((x): x is string => !!x)
+      .sort()[0] ?? null;
   /** Average duration of the past launches with this profile's modules. */
   const typical = (p: ProfileDef): string => {
     if (!catalog) return "";
@@ -338,32 +388,43 @@ export function ScansPage({ me, org }: { me: Me; org: Membership }) {
                 <div className="stack plan">
                   <div className="field">
                     <label htmlFor="freq">Fréquence</label>
-                    <select id="freq" value={frequency} onChange={(e) => (setFrequency(e.target.value), changed())}>
+                    <select id="freq" value={frequency} onChange={(e) => (setFrequency(e.target.value as Frequency), changed())}>
                       {FREQUENCIES.map((f) => (
-                        <option key={f}>{f}</option>
+                        <option key={f.id} value={f.id} disabled={f.soon}>
+                          {f.label}
+                        </option>
                       ))}
                     </select>
                   </div>
                   <div className="two-cols">
                     <div className="field">
                       <label htmlFor="day">Jour</label>
-                      <select id="day" value={day} onChange={(e) => (setDay(e.target.value), changed())}>
+                      <select id="day" value={day} disabled={frequency === "daily"} onChange={(e) => (setDay(Number(e.target.value)), changed())}>
                         {DAYS.map((d) => (
-                          <option key={d}>{d}</option>
+                          <option key={d.value} value={d.value}>
+                            {d.label}
+                          </option>
                         ))}
                       </select>
                     </div>
                     <div className="field">
                       <label htmlFor="hour">Heure</label>
-                      <select id="hour" value={hour} onChange={(e) => (setHour(e.target.value), changed())}>
+                      <select id="hour" value={hour} onChange={(e) => (setHour(Number(e.target.value)), changed())}>
                         {HOURS.map((h) => (
-                          <option key={h}>{h}</option>
+                          <option key={h} value={h}>
+                            {hourLabel(h)}
+                          </option>
                         ))}
                       </select>
                     </div>
                   </div>
-                  <p className="small muted">Fuseau horaire : {timeZoneLabel()}</p>
-                  <p className="small soon">Les scans planifiés démarreront automatiquement dès que le planificateur du moteur sera en place (bientôt).</p>
+                  <p className="small muted">
+                    {frequency === "monthly" && `Le premier ${dayLabel(day).toLowerCase()} de chaque mois. `}
+                    Fuseau horaire : {timeZoneLabel()}
+                  </p>
+                  <p className="small muted" role="status">
+                    {nextRun ? `Prochain scan planifié : ${nextRunText(nextRun)}.` : "Aucun scan planifié : enregistrez la configuration pour activer la planification."}
+                  </p>
                 </div>
               </section>
 

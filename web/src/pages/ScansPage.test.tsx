@@ -21,7 +21,7 @@ const modules: ModuleInfo[] = [
 ];
 
 const target = (id: string, domain: string, verified: boolean): Target => ({
-  id, domain, verified, verified_at: null, verify_checked_at: null, rate_per_sec: 5, exclusions: { paths: ["/admin"], ports: [3389] }, created_at: "",
+  id, domain, verified, verified_at: null, verify_checked_at: null, rate_per_sec: 5, exclusions: { paths: ["/admin"], ports: [3389] }, created_at: "", schedule: null,
 });
 
 const scan = (id: string, status: Scan["status"], mods: string[], extra: Partial<Scan> = {}): Scan => ({
@@ -120,7 +120,41 @@ describe("ScansPage", () => {
     expect(await screen.findByText("Configuration enregistrée")).toBeTruthy();
     const patches = calls.filter((c) => c.key.startsWith("PATCH"));
     expect(patches.map((c) => c.key)).toEqual([`PATCH ${base}/targets/t1`, `PATCH ${base}/targets/t2`]);
-    expect(patches[0]?.body).toEqual({ rate_per_sec: 50, exclusions: { ips: ["192.0.2.10"], ports: [3389], paths: ["/admin"], hosts: [] } });
+    expect(patches[0]?.body).toEqual({
+      rate_per_sec: 50,
+      exclusions: { ips: ["192.0.2.10"], ports: [3389], paths: ["/admin"], hosts: [] },
+      // The mockup's defaults: weekly, Sunday, 02:00, in the browser's zone,
+      // with the selected modules.
+      schedule: { frequency: "weekly", weekday: 0, hour: 2, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, modules: ["cdn", "email", "ports", "tls"] },
+    });
+  });
+
+  it("shows the saved schedule and the next run, and saves a change", async () => {
+    const next = new Date(2026, 10, 12, 6, 0).toISOString();
+    const planned = { ...target("t1", "acme.example", true), schedule: { frequency: "daily" as const, weekday: 0, hour: 6, timezone: "Africa/Douala", modules: ["email", "tls"], next_scan_at: next } };
+    const calls = start("admin", {
+      [`GET ${base}/targets`]: ok({ items: [planned] }),
+      [`PATCH ${base}/targets/t1`]: (body) => ({ status: 200, json: { ...planned, ...(body as object), schedule: { ...(body as { schedule: object }).schedule, next_scan_at: next } } }),
+    });
+    expect(await screen.findByText(/Prochain scan planifié : jeudi 12\/11 à 06:00/)).toBeTruthy();
+    expect((screen.getByLabelText("Fréquence") as HTMLSelectElement).value).toBe("daily");
+    expect((screen.getByLabelText("Jour") as HTMLSelectElement).disabled).toBe(true); // daily: no day
+    expect((screen.getByLabelText("Heure") as HTMLSelectElement).value).toBe("6");
+    expect(screen.getByText("2 modules actifs")).toBeTruthy(); // the schedule's modules
+
+    fireEvent.change(screen.getByLabelText("Fréquence"), { target: { value: "monthly" } });
+    fireEvent.change(screen.getByLabelText("Jour"), { target: { value: "1" } });
+    expect(screen.getByText(/Le premier lundi de chaque mois/)).toBeTruthy();
+    expect((screen.getByRole("option", { name: /Continue/ }) as HTMLOptionElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
+    expect(await screen.findByText("Configuration enregistrée")).toBeTruthy();
+    const body = calls.find((c) => c.key === `PATCH ${base}/targets/t1`)?.body as { schedule: object };
+    expect(body.schedule).toMatchObject({ frequency: "monthly", weekday: 1, hour: 6, modules: ["email", "tls"] });
+  });
+
+  it("says when nothing is scheduled yet", async () => {
+    start("admin");
+    expect(await screen.findByText(/Aucun scan planifié : enregistrez la configuration/)).toBeTruthy();
   });
 
   it("refuses unreadable exclusions before sending them", async () => {

@@ -30,8 +30,9 @@ through `PATCH /targets/{id}`, live history) and settings (profile: password cha
 team: invite with a one-time setup code, roles, removal, at least one admin kept; migration
 0009 lets the auth role do exactly that), attack surface, posture, prioritization and
 governance (from `/orgs/{org}/assets`, `/checks`, `/trends`) screens are done: every menu
-entry works, data without a source is shown as "Bientôt"; scheduling does not exist yet,
-the other menu entries show "Bientôt disponible". Finding texts stay in the modules'
+entry works, data without a source is shown as "Bientôt"; scheduled scans run (package `schedule`,
+migration 0010, the worker queues due scans every minute), the other menu entries show
+"Bientôt disponible". Finding texts stay in the modules'
 English (decided 2026-11-10); the dashboard's own wording is French.
 
 ## How to work on this repo
@@ -88,6 +89,7 @@ engine/
   internal/asset/    asset schema (hostname, ip, service, certificate) and validation
   internal/dnsname/  DNS name normalization, shared by module and asset
   internal/posture/  posture score from check statuses (pure, deterministic)
+  internal/schedule/ next run of a scheduled scan (pure; wall-clock time in the customer's zone)
   internal/resolver/ DNS lookups for modules, gated (exclusions + rate limit) per scan
   internal/dialer/   TCP connections for modules, to gate-approved IPs only
   internal/gate/     per-scan module.Gate: customer exclusions + rate limiter

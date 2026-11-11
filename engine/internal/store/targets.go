@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/jordyorel/orus-shield/engine/internal/module"
+	"github.com/jordyorel/orus-shield/engine/internal/schedule"
 )
 
 // DefaultRatePerSec is the outbound request rate of a new target.
@@ -33,6 +34,19 @@ type Target struct {
 	VerifyToken          string
 	VerifyTokenExpiresAt *time.Time // deadline to publish it; nil once verified
 	VerifyCheckedAt      *time.Time // last successful check of the record
+
+	// Schedule is nil when the target is only scanned on demand.
+	Schedule *TargetSchedule
+}
+
+// TargetSchedule is a target's scheduled scan (migration 0010).
+type TargetSchedule struct {
+	schedule.Schedule
+	// Modules run by each scheduled scan. The API checks them against the
+	// catalog; the worker refuses unknown ones, like for any scan.
+	Modules []string
+	// NextScanAt is when the scheduler queues the next scan.
+	NextScanAt time.Time
 }
 
 // Verified reports whether ownership of the target has been proven.
@@ -46,14 +60,32 @@ type NewTarget struct {
 }
 
 const targetColumns = `id::text, org_id::text, domain, verified_at, exclusions, rate_per_sec, created_at,
-	coalesce(verify_token, ''), verify_token_expires_at, verify_checked_at`
+	coalesce(verify_token, ''), verify_token_expires_at, verify_checked_at,
+	schedule_frequency, schedule_weekday, schedule_hour, schedule_timezone, schedule_modules, next_scan_at`
 
 func scanTarget(row pgx.Row) (Target, error) {
 	var t Target
+	var (
+		frequency, timezone *string
+		weekday, hour       *int16
+		modules             []string
+		next                *time.Time
+	)
 	err := row.Scan(&t.ID, &t.OrgID, &t.Domain, &t.VerifiedAt, &t.Exclusions, &t.RatePerSec, &t.CreatedAt,
-		&t.VerifyToken, &t.VerifyTokenExpiresAt, &t.VerifyCheckedAt)
+		&t.VerifyToken, &t.VerifyTokenExpiresAt, &t.VerifyCheckedAt,
+		&frequency, &weekday, &hour, &timezone, &modules, &next)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Target{}, ErrNotFound
+	}
+	// The table constraint sets all schedule columns together.
+	if err == nil && frequency != nil && weekday != nil && hour != nil && timezone != nil && next != nil {
+		t.Schedule = &TargetSchedule{
+			Schedule: schedule.Schedule{
+				Frequency: schedule.Frequency(*frequency), Weekday: time.Weekday(*weekday),
+				Hour: int(*hour), TimeZone: *timezone,
+			},
+			Modules: modules, NextScanAt: *next,
+		}
 	}
 	return t, err
 }
@@ -103,6 +135,10 @@ type TargetSettings struct {
 	// checks them with the worker's parser before calling.
 	Exclusions json.RawMessage
 	RatePerSec *float64 // > 0
+	// Schedule replaces the target's schedule; the caller validates it and
+	// computes NextScanAt. ClearSchedule removes it (on-demand scans only).
+	Schedule      *TargetSchedule
+	ClearSchedule bool
 }
 
 // UpdateTargetSettings changes a target's exclusions and rate and returns
@@ -116,19 +152,41 @@ func (o *Org) UpdateTargetSettings(ctx context.Context, id string, ts TargetSett
 	if ts.RatePerSec != nil && *ts.RatePerSec <= 0 {
 		return Target{}, fmt.Errorf("update target %s: rate must be positive", id)
 	}
+	if ts.Schedule != nil && ts.ClearSchedule {
+		return Target{}, fmt.Errorf("update target %s: schedule set and cleared at once", id)
+	}
 	var exclusions any
 	if ts.Exclusions != nil {
 		exclusions = ts.Exclusions
+	}
+	var sched TargetSchedule
+	if ts.Schedule != nil {
+		if err := ts.Schedule.Validate(); err != nil {
+			return Target{}, fmt.Errorf("update target %s: %w", id, err)
+		}
+		if len(ts.Schedule.Modules) == 0 || ts.Schedule.NextScanAt.IsZero() {
+			return Target{}, fmt.Errorf("update target %s: schedule needs modules and a next scan time", id)
+		}
+		sched = *ts.Schedule
 	}
 	tx, err := o.begin(ctx)
 	if err != nil {
 		return Target{}, fmt.Errorf("update target %s: %w", id, err)
 	}
 	defer tx.Rollback(ctx)
+	// $5 sets the schedule from $6..$11, $12 clears it, neither keeps it.
 	t, err := scanTarget(tx.QueryRow(ctx, `
-		UPDATE targets SET exclusions = coalesce($3::jsonb, exclusions), rate_per_sec = coalesce($4, rate_per_sec)
+		UPDATE targets SET exclusions = coalesce($3::jsonb, exclusions), rate_per_sec = coalesce($4, rate_per_sec),
+			schedule_frequency = CASE WHEN $5 THEN $6 WHEN $12 THEN NULL ELSE schedule_frequency END,
+			schedule_weekday   = CASE WHEN $5 THEN $7 WHEN $12 THEN NULL ELSE schedule_weekday END,
+			schedule_hour      = CASE WHEN $5 THEN $8 WHEN $12 THEN NULL ELSE schedule_hour END,
+			schedule_timezone  = CASE WHEN $5 THEN $9 WHEN $12 THEN NULL ELSE schedule_timezone END,
+			schedule_modules   = CASE WHEN $5 THEN $10::text[] WHEN $12 THEN NULL ELSE schedule_modules END,
+			next_scan_at       = CASE WHEN $5 THEN $11::timestamptz WHEN $12 THEN NULL ELSE next_scan_at END
 		WHERE id = $1 AND org_id = $2
-		RETURNING `+targetColumns, id, o.orgID, exclusions, ts.RatePerSec))
+		RETURNING `+targetColumns, id, o.orgID, exclusions, ts.RatePerSec,
+		ts.Schedule != nil, string(sched.Frequency), int16(sched.Weekday), int16(sched.Hour), sched.TimeZone, //nolint:gosec // G115: Validate bounds weekday 0-6 and hour 0-23
+		sched.Modules, sched.NextScanAt, ts.ClearSchedule))
 	if err != nil {
 		return Target{}, fmt.Errorf("update target %s: %w", id, err)
 	}

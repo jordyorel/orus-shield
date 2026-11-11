@@ -466,9 +466,14 @@ func (c cli) targetShow(ctx context.Context, args []string) error {
 	case t.VerifyToken != "" && t.VerifyTokenExpiresAt != nil:
 		verified = "no, token pending until " + t.VerifyTokenExpiresAt.Format(time.RFC3339)
 	}
+	sched := "none (on demand only)"
+	if s := t.Schedule; s != nil {
+		sched = fmt.Sprintf("%s, weekday %s, %02d:00 %s, modules %s; next %s", s.Frequency, s.Weekday, s.Hour, s.TimeZone,
+			strings.Join(s.Modules, ", "), s.NextScanAt.Format(time.RFC3339))
+	}
 	w := tabwriter.NewWriter(c.out, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "domain\t%s\norganization\t%s\nid\t%s\nverified\t%s\nrate\t%g req/s\nexclusions\t%s\ncreated\t%s\n",
-		t.Domain, org.Name, t.ID, verified, t.RatePerSec, t.Exclusions, t.CreatedAt.Format(time.RFC3339))
+	fmt.Fprintf(w, "domain\t%s\norganization\t%s\nid\t%s\nverified\t%s\nrate\t%g req/s\nexclusions\t%s\nschedule\t%s\ncreated\t%s\n",
+		t.Domain, org.Name, t.ID, verified, t.RatePerSec, t.Exclusions, sched, t.CreatedAt.Format(time.RFC3339))
 	return w.Flush()
 }
 

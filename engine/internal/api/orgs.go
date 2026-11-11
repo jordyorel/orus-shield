@@ -101,13 +101,32 @@ type targetJSON struct {
 	RatePerSec      float64         `json:"rate_per_sec"`
 	Exclusions      json.RawMessage `json:"exclusions"`
 	CreatedAt       time.Time       `json:"created_at"`
+	// Schedule is null for a target scanned on demand only.
+	Schedule *scheduleJSON `json:"schedule"`
+}
+
+// scheduleJSON is a target's schedule. Weekday: 0 is Sunday, 6 Saturday.
+type scheduleJSON struct {
+	Frequency  string    `json:"frequency"`
+	Weekday    int       `json:"weekday"`
+	Hour       int       `json:"hour"`
+	TimeZone   string    `json:"timezone"`
+	Modules    []string  `json:"modules"`
+	NextScanAt time.Time `json:"next_scan_at"`
 }
 
 func toTargetJSON(t store.Target) targetJSON {
-	return targetJSON{
+	out := targetJSON{
 		ID: t.ID, Domain: t.Domain, Verified: t.Verified(), VerifiedAt: t.VerifiedAt,
 		VerifyCheckedAt: t.VerifyCheckedAt, RatePerSec: t.RatePerSec, Exclusions: t.Exclusions, CreatedAt: t.CreatedAt,
 	}
+	if sc := t.Schedule; sc != nil {
+		out.Schedule = &scheduleJSON{
+			Frequency: string(sc.Frequency), Weekday: int(sc.Weekday), Hour: sc.Hour, TimeZone: sc.TimeZone,
+			Modules: sc.Modules, NextScanAt: sc.NextScanAt,
+		}
+	}
+	return out
 }
 
 type scanJSON struct {

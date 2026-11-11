@@ -1,4 +1,4 @@
-import type { Check, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, Overview, RecoveryCodes, Role, Scan, Target } from "./types";
+import type { Check, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, Overview, RecoveryCodes, Role, Scan, ScheduleInput, Target } from "./types";
 import type { Exclusions } from "../exclusions";
 
 /**
@@ -78,7 +78,7 @@ export const api = {
   startScan: (orgId: string, targetId: string, modules?: string[]) =>
     request<Scan>("POST", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/scans`, modules ? { modules } : {}),
   targets: (orgId: string, signal?: AbortSignal) => request<List<Target>>("GET", `${org(orgId)}/targets`, undefined, signal),
-  updateTarget: (orgId: string, targetId: string, settings: { rate_per_sec?: number; exclusions?: Exclusions }) =>
+  updateTarget: (orgId: string, targetId: string, settings: { rate_per_sec?: number; exclusions?: Exclusions; schedule?: ScheduleInput | null }) =>
     request<Target>("PATCH", `${org(orgId)}/targets/${encodeURIComponent(targetId)}`, settings),
   modules: (orgId: string, signal?: AbortSignal) => request<List<ModuleInfo>>("GET", `${org(orgId)}/modules`, undefined, signal),
   scans: (orgId: string, signal?: AbortSignal) => request<List<Scan>>("GET", `${org(orgId)}/scans?limit=20`, undefined, signal),
