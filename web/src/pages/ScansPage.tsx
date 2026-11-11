@@ -35,7 +35,7 @@ const PROFILES: ProfileDef[] = [
 const MODULES: { engine: string | null; name: string; desc: string; tag?: "Intrusif" | "Nouveau" }[] = [
   { engine: null, name: "Découverte de la surface d’attaque", desc: "Sous-domaines, certificats publics, plages IP associées." },
   { engine: "ports", name: "Ports et services", desc: "Services exposés, versions et configurations dangereuses." },
-  { engine: null, name: "Applications web", desc: "Injections, authentification, en-têtes, CMS obsolètes." },
+  { engine: "web", name: "Applications web", desc: "Injections, authentification, en-têtes, CMS obsolètes." },
   { engine: "email", name: "Sécurité des emails", desc: "SPF, DKIM, DMARC, serveurs de messagerie." },
   { engine: "tls", name: "Certificats et TLS", desc: "Expiration, protocoles faibles, chaînes invalides." },
   { engine: "cdn", name: "CDN et protection web", desc: "Détection des CDN et des pare-feux applicatifs (WAF)." },

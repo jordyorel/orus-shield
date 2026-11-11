@@ -11,6 +11,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/modules/email"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/ports"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/tlscheck"
+	"github.com/jordyorel/orus-shield/engine/internal/modules/web"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 )
 
@@ -24,6 +25,7 @@ func Registry() (*module.Registry, error) {
 		tlscheck.New(dns, dialer.NewSystem()),
 		ports.New(dns, dialer.NewSystem()),
 		cdn.New(dns, dialer.NewSystem()),
+		web.New(dns, dialer.NewSystem()),
 	} {
 		if err := reg.Register(m); err != nil {
 			return nil, err

@@ -112,7 +112,7 @@ export function initial(email: string): string {
 
 /** moduleLabel: the family of a check, as the mockups name them. */
 export function moduleLabel(moduleId: string): string {
-  return ({ email: "Emails", tls: "TLS et certificats", ports: "Ports et services", cdn: "Protection web" } as Record<string, string>)[moduleId] ?? moduleId;
+  return ({ email: "Emails", tls: "TLS et certificats", ports: "Ports et services", cdn: "Protection web", web: "Web" } as Record<string, string>)[moduleId] ?? moduleId;
 }
 
 /** age: "il y a 2 j", as in the vulnerabilities list. */
