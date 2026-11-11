@@ -40,6 +40,14 @@ type ScanResult struct {
 	// Checks are the catalog outcomes of the succeeded modules, by module
 	// ID (module.Evaluate). They update check_status and the posture.
 	Checks map[string][]module.CheckOutcome
+	// Unobserved reports whether something was out of reach in this scan:
+	// covered by a customer exclusion, or an IP whose ownership could not be
+	// verified. value is a finding's asset (kind "") or an inventory asset.
+	// A module skips such destinations, so their absence from its output
+	// proves nothing: their open findings are not marked fixed and their
+	// assets are not retired; both keep their last_seen. nil: everything
+	// was in reach.
+	Unobserved func(kind asset.Kind, value string) bool
 }
 
 // FinishScan records a scan's results in one transaction: the scan is marked
@@ -52,7 +60,8 @@ type ScanResult struct {
 //   - seen again: last_seen = At, first_seen kept; fixed becomes open again
 //     (a regression) and loses its fixed_at;
 //   - open and not seen again by a module that succeeded: fixed, with
-//     fixed_at = At;
+//     fixed_at = At, unless its asset was out of reach (r.Unobserved):
+//     then it is left unchanged;
 //   - accepted_risk is the customer's decision and is never changed here.
 //
 // Every status change (opened, fixed, reopened) is also recorded in
@@ -137,6 +146,17 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 	}
 
 	var fixed int64
+	unobserved := 0
+	if len(r.Succeeded) > 0 && r.Unobserved != nil {
+		kept, err := unobservedFindings(ctx, tx, targetID, r, seen)
+		if err != nil {
+			return fmt.Errorf("finish scan %s: %w", r.ScanID, err)
+		}
+		// Treated like findings seen again by the UPDATE below, without
+		// touching their row: last_seen stays the last real observation.
+		unobserved = len(kept)
+		seen = append(seen, kept...)
+	}
 	if len(r.Succeeded) > 0 {
 		// One statement marks the findings fixed and records one event per
 		// finding, from the rows the UPDATE returns.
@@ -174,8 +194,10 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 			"scan_id": r.ScanID, "attempt": r.Attempt,
 			"succeeded": succeeded, "failed": failed,
 			"findings": len(r.Findings), "new": created, "fixed": fixed, "reopened": reopened,
-			"assets": assets.reported, "assets_new": assets.created, "assets_back": assets.back, "assets_gone": assets.gone,
-			"score": score,
+			"unobserved": unobserved,
+			"assets":     assets.reported, "assets_new": assets.created, "assets_back": assets.back, "assets_gone": assets.gone,
+			"assets_unobserved": assets.unobserved,
+			"score":             score,
 		},
 	}); err != nil {
 		return err
@@ -184,6 +206,34 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 		return fmt.Errorf("finish scan %s: %w", r.ScanID, err)
 	}
 	return nil
+}
+
+// unobservedFindings returns the open findings of the succeeded modules that
+// were not seen again and whose asset was out of reach in this scan.
+func unobservedFindings(ctx context.Context, tx pgx.Tx, targetID string, r ScanResult, seen []string) ([]string, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT id, data->>'asset' FROM findings
+		WHERE target_id = $1 AND status = 'open' AND module_id = ANY($2) AND NOT (id = ANY($3))`,
+		targetID, r.Succeeded, seen)
+	if err != nil {
+		return nil, fmt.Errorf("list findings not seen again: %w", err)
+	}
+	type candidate struct{ id, asset string }
+	candidates, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (candidate, error) {
+		var c candidate
+		err := row.Scan(&c.id, &c.asset)
+		return c, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list findings not seen again: %w", err)
+	}
+	var kept []string
+	for _, c := range candidates {
+		if r.Unobserved("", c.asset) {
+			kept = append(kept, c.id)
+		}
+	}
+	return kept, nil
 }
 
 // failureSummary turns module errors into one message, in module order.

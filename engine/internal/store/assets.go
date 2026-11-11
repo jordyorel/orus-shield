@@ -29,6 +29,7 @@ type Asset struct {
 // assetCounts summarizes what a scan changed in the inventory.
 type assetCounts struct {
 	reported, created, back, gone int
+	unobserved                    int // not reported, but out of reach: kept as is
 }
 
 // saveAssets records the assets of a finished scan, inside FinishScan's
@@ -36,7 +37,8 @@ type assetCounts struct {
 //   - reported by module M: created, or last_seen moved and M added to its
 //     sources; a gone asset seen again is back (gone_at cleared);
 //   - not reported by M although M succeeded: M is removed from its sources;
-//     with no source left, the asset is gone;
+//     with no source left, the asset is gone. Unless it was out of reach in
+//     this scan (r.Unobserved): then it is left unchanged;
 //   - modules that failed change nothing.
 func saveAssets(ctx context.Context, tx pgx.Tx, orgID, targetID, domain string, at time.Time, r ScanResult) (assetCounts, error) {
 	var c assetCounts
@@ -88,6 +90,20 @@ func saveAssets(ctx context.Context, tx pgx.Tx, orgID, targetID, domain string, 
 			c.reported++
 			kinds = append(kinds, string(a.Kind))
 			values = append(values, a.Value)
+		}
+
+		if r.Unobserved != nil {
+			kept, err := unobservedAssets(ctx, tx, targetID, moduleID, kinds, values, r.Unobserved)
+			if err != nil {
+				return c, err
+			}
+			// Added to the "reported" lists only for the retirement query
+			// below: their row is not updated.
+			for _, a := range kept {
+				kinds = append(kinds, string(a.Kind))
+				values = append(values, a.Value)
+			}
+			c.unobserved += len(kept)
 		}
 
 		rows, err := tx.Query(ctx, `
@@ -148,4 +164,38 @@ func (o *Org) ListAssets(ctx context.Context, targetID string, includeGone bool)
 		return nil, fmt.Errorf("list assets: %w", err)
 	}
 	return assets, tx.Commit(ctx)
+}
+
+// unobservedAssets returns the assets of moduleID that it did not report in
+// this run (kinds and values are what it reported) but that were out of
+// reach, so their absence proves nothing.
+func unobservedAssets(ctx context.Context, tx pgx.Tx, targetID, moduleID string, kinds, values []string,
+	unobserved func(asset.Kind, string) bool) ([]asset.Asset, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT a.kind, a.value FROM assets a
+		WHERE a.target_id = $1 AND $2 = ANY(a.sources)
+		  AND NOT EXISTS (
+			SELECT 1 FROM unnest($3::text[], $4::text[]) AS r(kind, value)
+			WHERE r.kind = a.kind AND r.value = a.value)`,
+		targetID, moduleID, kinds, values)
+	if err != nil {
+		return nil, fmt.Errorf("list assets not reported by %s: %w", moduleID, err)
+	}
+	candidates, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (asset.Asset, error) {
+		var a asset.Asset
+		var kind string
+		err := row.Scan(&kind, &a.Value)
+		a.Kind = asset.Kind(kind)
+		return a, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list assets not reported by %s: %w", moduleID, err)
+	}
+	var kept []asset.Asset
+	for _, a := range candidates {
+		if unobserved(a.Kind, a.Value) {
+			kept = append(kept, a)
+		}
+	}
+	return kept, nil
 }

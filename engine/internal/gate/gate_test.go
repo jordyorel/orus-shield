@@ -217,3 +217,34 @@ func TestFromTarget(t *testing.T) {
 		t.Error("FromTarget(rate 0) = nil, want error")
 	}
 }
+
+func TestCovers(t *testing.T) {
+	rules, err := ParseExclusions(json.RawMessage(`{"ips": ["198.51.100.0/24"], "ports": [8080], "hosts": ["staging.example.com"], "paths": ["/admin"]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		value string
+		want  bool
+	}{
+		{"203.0.113.5:8080", true},            // finding asset of the ports module
+		{"203.0.113.5:8080/tcp", true},        // service asset
+		{"203.0.113.5:8443/tcp", false},       // another port
+		{"198.51.100.7", true},                // ip asset in an excluded range
+		{"198.51.100.7:22", true},             // any port of an excluded ip
+		{"[2001:db8::1]:8080", true},          // IPv6 with port
+		{"api.staging.example.com:443", true}, // subdomain of an excluded host
+		{"staging.example.com", true},
+		{"www.example.com:443", false},
+		{"www.example.com", false},
+		{"_dmarc.example.com", false},
+		{"www.example.com:99999", false}, // not a valid port: not covered
+		{"", false},
+		{"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", false}, // certificate hash
+	}
+	for _, tt := range tests {
+		if got := rules.Covers(tt.value); got != tt.want {
+			t.Errorf("Covers(%q) = %v, want %v", tt.value, got, tt.want)
+		}
+	}
+}

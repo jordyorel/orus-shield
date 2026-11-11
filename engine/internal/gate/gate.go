@@ -11,8 +11,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/netip"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -146,6 +148,41 @@ func (r Rules) Match(dest module.Destination) string {
 	return ""
 }
 
+// Covers reports whether an exclusion applies to value, the asset of a
+// finding or an inventory asset value: "203.0.113.5", "203.0.113.5:8080",
+// "203.0.113.5:8080/tcp", "www.example.com:443" or "www.example.com".
+//
+// The worker uses it after a scan: a module that skipped an excluded
+// destination did not observe it, so findings and assets on it must not be
+// marked fixed or gone. Path exclusions cannot be matched this way (assets
+// carry no path); see the worker for that limit.
+func (r Rules) Covers(value string) bool {
+	dest, ok := destinationOf(value)
+	return ok && r.Match(dest) != ""
+}
+
+// destinationOf parses an asset value into the destination it designates.
+func destinationOf(value string) (module.Destination, bool) {
+	v := strings.TrimSuffix(value, "/tcp")
+	if ap, err := netip.ParseAddrPort(v); err == nil {
+		return module.Destination{IP: ap.Addr(), Port: int(ap.Port())}, true
+	}
+	if a, err := netip.ParseAddr(v); err == nil {
+		return module.Destination{IP: a}, true
+	}
+	if host, port, err := net.SplitHostPort(v); err == nil {
+		n, err := strconv.Atoi(port)
+		if err != nil || n < 1 || n > 65535 {
+			return module.Destination{}, false
+		}
+		return module.Destination{Host: host, Port: n}, true
+	}
+	if v == "" || strings.ContainsAny(v, "/: ") {
+		return module.Destination{}, false
+	}
+	return module.Destination{Host: v}, true
+}
+
 // Limiter spaces requests evenly: at most one every 1/rate seconds. It is
 // safe for concurrent use; concurrent callers are served in turn.
 type Limiter struct {
@@ -212,6 +249,10 @@ func New(rules Rules, ratePerSec float64) (*Gate, error) {
 	}
 	return &Gate{rules: rules, limiter: l}, nil
 }
+
+// Covers reports whether the gate's exclusions apply to an asset value; see
+// Rules.Covers.
+func (g *Gate) Covers(value string) bool { return g.rules.Covers(value) }
 
 // ErrRateLimitWait wraps a context error that interrupted the rate limiter.
 var ErrRateLimitWait = errors.New("waiting for rate limiter")

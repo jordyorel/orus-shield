@@ -647,3 +647,41 @@ func TestUndeclaredCheckFailsTheModule(t *testing.T) {
 		})
 	}
 }
+
+// The worker tells the store what was out of reach: excluded destinations
+// and IPs refused to active modules. Their findings must not become "fixed".
+func TestUnobservedCoversExclusionsAndRefusedIPs(t *testing.T) {
+	refusedIP := netip.MustParseAddr("198.51.100.20")
+	ports := newModule("ports", module.KindActive, func(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+		_ = req.Gate.Allow(ctx, module.Destination{Host: "example.com", IP: refusedIP, Port: 22})
+		return nil, nil
+	})
+	w, st := setup(t, true, `{"ports": [8080], "hosts": ["staging.example.com"]}`, ports)
+	w.owner = ipOwnership{refused: refusedIP}
+	if err := runOnce(t, w); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	if len(st.finished) != 1 || st.finished[0].Unobserved == nil {
+		t.Fatalf("finished = %+v, want one result with Unobserved", st.finished)
+	}
+	unobserved := st.finished[0].Unobserved
+	tests := []struct {
+		kind  asset.Kind
+		value string
+		want  bool
+	}{
+		{"", "192.0.2.10:8080", true},                    // excluded port, finding asset
+		{asset.KindService, "192.0.2.10:8080/tcp", true}, // excluded port, service asset
+		{"", "192.0.2.10:22", false},                     // probed: absence means closed
+		{"", "staging.example.com:443", true},            // excluded host
+		{"", "198.51.100.20:22", true},                   // IP refused to the active module
+		{asset.KindIP, "198.51.100.20", true},
+		{"", "www.example.com:443", false},
+		{asset.KindCertificate, "staging.example.com", false}, // certificates are hashes, never destinations
+	}
+	for _, tt := range tests {
+		if got := unobserved(tt.kind, tt.value); got != tt.want {
+			t.Errorf("Unobserved(%q, %q) = %v, want %v", tt.kind, tt.value, got, tt.want)
+		}
+	}
+}

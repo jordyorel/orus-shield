@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"strings"
 	"sync"
 	"time"
 
@@ -170,13 +171,14 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 	// Active modules get a stricter gate, built on first use: it only lets
 	// them reach IPs whose ownership is proven (rule 1, per IP).
 	var activeGate module.Gate
+	refused := &ipSet{}
 	gateFor := func(id string) module.Gate {
 		m, ok := w.modules.Get(id)
 		if !ok || m.Info().Kind != module.KindActive {
 			return g
 		}
 		if activeGate == nil {
-			activeGate = w.activeGate(scanCtx, sc, target, g, log)
+			activeGate = w.activeGate(scanCtx, sc, target, g, refused, log)
 		}
 		return activeGate
 	}
@@ -186,6 +188,16 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 		Failed: make(map[string]string),
 		Assets: make(map[string][]asset.Asset),
 		Checks: make(map[string][]module.CheckOutcome),
+		// What modules skipped is not "gone": see store.ScanResult. Path
+		// exclusions are not covered: assets carry no path. An IP refused
+		// to active modules is out of reach for every module here, which
+		// errs on the safe side (kept rather than wrongly marked fixed).
+		Unobserved: func(kind asset.Kind, value string) bool {
+			if kind == asset.KindCertificate {
+				return false // a hash, not a destination
+			}
+			return g.Covers(value) || refused.covers(value)
+		},
 	}
 	for _, id := range sc.Modules {
 		if scanCtx.Err() != nil {
@@ -259,11 +271,12 @@ func (w *Worker) stillVerified(ctx context.Context, sc store.Scan, t store.Targe
 
 // activeGate returns the gate for active modules: g restricted to verified
 // IPs. Each refused IP is logged and written to the audit log once.
-func (w *Worker) activeGate(ctx context.Context, sc store.Scan, t store.Target, g module.Gate, log *slog.Logger) module.Gate {
+func (w *Worker) activeGate(ctx context.Context, sc store.Scan, t store.Target, g module.Gate, refused *ipSet, log *slog.Logger) module.Gate {
 	if w.owner == nil {
 		return refuseAll{}
 	}
 	return w.owner.IPGate(g, t.Domain, func(ip netip.Addr, reason string) {
+		refused.add(ip)
 		log.Warn("IP refused for active scan", "ip", ip, "reason", reason)
 		if err := w.store.AppendAudit(ctx, store.AuditEntry{
 			OrgID: t.OrgID, Actor: w.cfg.ID, Action: store.ActionIPNotVerified, Target: t.Domain,
@@ -272,6 +285,39 @@ func (w *Worker) activeGate(ctx context.Context, sc store.Scan, t store.Target, 
 			log.Error("audit IP refusal", "err", err)
 		}
 	})
+}
+
+// ipSet collects the IPs refused during a scan. Modules may probe in
+// parallel, hence the lock.
+type ipSet struct {
+	mu  sync.Mutex
+	ips map[netip.Addr]bool
+}
+
+func (s *ipSet) add(ip netip.Addr) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.ips == nil {
+		s.ips = make(map[netip.Addr]bool)
+	}
+	s.ips[ip.Unmap()] = true
+}
+
+// covers reports whether value ("ip", "ip:port" or "ip:port/tcp") is on a
+// refused IP.
+func (s *ipSet) covers(value string) bool {
+	v := strings.TrimSuffix(value, "/tcp")
+	ip, err := netip.ParseAddr(v)
+	if err != nil {
+		ap, err := netip.ParseAddrPort(v)
+		if err != nil {
+			return false
+		}
+		ip = ap.Addr()
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ips[ip.Unmap()]
 }
 
 // refuseAll is the active gate when no ownership checker is configured.
