@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/jordyorel/orus-shield/engine/internal/mailer"
+	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 	"github.com/jordyorel/orus-shield/engine/internal/seal"
 )
 
@@ -19,6 +20,7 @@ type config struct {
 	publicURL      string
 	smtp           *mailer.SMTP // nil: mail not configured
 	signupClosed   bool
+	dns            *resolver.System
 }
 
 // loadConfig reads:
@@ -41,6 +43,8 @@ type config struct {
 //	ORUS_SMTP_PASSWORD        SMTP password
 //	ORUS_MAIL_FROM            sender, e.g. "Orus Shield <no-reply@example.com>";
 //	                          required with ORUS_SMTP_ADDR
+//	ORUS_DNS_SERVER           DNS server for ownership checks, e.g. 1.1.1.1;
+//	                          unset: the system's (see resolver.NewWithServer)
 //	ORUS_SIGNUP               "open" (default) or "closed": self-service signup;
 //	                          closed means accounts by invitation only
 func loadConfig(getenv func(string) string) (config, error) {
@@ -72,6 +76,9 @@ func loadConfig(getenv func(string) string) (config, error) {
 	}
 	if cfg.smtp, err = mailer.FromEnv(getenv); err != nil {
 		return config{}, err
+	}
+	if cfg.dns, err = resolver.FromEnv(getenv); err != nil {
+		return config{}, fmt.Errorf("ORUS_DNS_SERVER: %w", err)
 	}
 	switch strings.TrimSpace(getenv("ORUS_SIGNUP")) {
 	case "", "open":

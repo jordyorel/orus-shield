@@ -226,6 +226,34 @@ func TestOpenPorts(t *testing.T) {
 	}
 }
 
+// A service that always greets first but stayed silent is reported as
+// "not confirmed", at low severity: on a mobile network, a proxy answered
+// every connection to port 21 and the module reported FTP on every server.
+func TestSilentGreetingServiceIsNotConfirmed(t *testing.T) {
+	m, _, dial, g := newTest()
+	dial.routes[route(ip1, 21)] = ""                        // FTP always sends "220 ..."
+	dial.routes[route(ip1, 3306)] = "J\x00\x00\x00\n8.0.36" // a real MySQL greeting
+	findings, err := run(context.Background(), m, g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byPort := make(map[string]finding.Finding)
+	for _, f := range findings {
+		byPort[f.Asset] = f
+	}
+	ftp := byPort["192.0.2.10:21"]
+	if ftp.Severity != finding.SeverityLow || ftp.Title != "Port 21 open, FTP not confirmed" ||
+		!strings.Contains(ftp.Description, "firewall or proxy") || !strings.Contains(ftp.Remediation[0], "ss -ltnp") {
+		t.Errorf("silent FTP = %+v", ftp)
+	}
+	if ftp.ID != finding.NewID(ID, fileSharing.checkID, "example.com", "192.0.2.10:21") {
+		t.Error("the unconfirmed finding must keep the ID of the confirmed one")
+	}
+	if db := byPort["192.0.2.10:3306"]; db.Severity != finding.SeverityHigh || strings.Contains(db.Title, "not confirmed") {
+		t.Errorf("MySQL that greeted = %+v", db)
+	}
+}
+
 func TestNothingOpen(t *testing.T) {
 	m, _, _, g := newTest()
 	findings, err := run(context.Background(), m, g)

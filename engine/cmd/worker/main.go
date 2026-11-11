@@ -15,7 +15,6 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/modules/all"
 	"github.com/jordyorel/orus-shield/engine/internal/notify"
 	"github.com/jordyorel/orus-shield/engine/internal/ownership"
-	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 	"github.com/jordyorel/orus-shield/engine/internal/worker"
 )
@@ -50,11 +49,12 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
-	registry, err := all.Registry()
+	// One resolver for modules and ownership checks (ORUS_DNS_SERVER).
+	registry, err := all.Registry(cfg.dns)
 	if err != nil {
 		return err
 	}
-	verifier := ownership.New(st, resolver.NewSystem())
+	verifier := ownership.New(st, cfg.dns)
 
 	// Email alerts: delivered from the outbox next to the scans. Without
 	// mail they stay queued, and expire after a day.

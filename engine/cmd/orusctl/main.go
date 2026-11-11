@@ -140,7 +140,11 @@ func main() {
 			return err
 		}
 		defer st.Close()
-		reg, err := all.Registry()
+		dns, err := resolver.FromEnv(os.Getenv) // ORUS_DNS_SERVER, like the worker
+		if err != nil {
+			return fmt.Errorf("ORUS_DNS_SERVER: %w", err)
+		}
+		reg, err := all.Registry(dns)
 		if err != nil {
 			return err
 		}
@@ -149,7 +153,7 @@ func main() {
 			ids = append(ids, m.Info().ID)
 		}
 		c := cli{
-			admin: st, openOrg: storeOpener(st),
+			admin: st, openOrg: storeOpener(st, dns),
 			out: os.Stdout, modules: ids, defaultActor: defaultActor(os.Getenv),
 			defaultOrg: cmp.Or(os.Getenv("ORUS_ORG"), defaultOrg),
 		}
@@ -168,7 +172,7 @@ func main() {
 
 // storeOpener resolves organizations in st. The verifier gets the org-scoped
 // handle too, so verifying cannot touch another organization's target.
-func storeOpener(st *store.Store) OrgOpener {
+func storeOpener(st *store.Store, dns resolver.Resolver) OrgOpener {
 	return func(ctx context.Context, ref string) (store.Organization, OrgStore, Verifier, error) {
 		org, err := st.FindOrganization(ctx, ref)
 		if err != nil {
@@ -178,7 +182,7 @@ func storeOpener(st *store.Store) OrgOpener {
 		if err != nil {
 			return store.Organization{}, nil, nil, err
 		}
-		return org, h, ownership.New(h, resolver.NewSystem()), nil
+		return org, h, ownership.New(h, dns), nil
 	}
 }
 

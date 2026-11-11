@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/mailer"
+	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 	"github.com/jordyorel/orus-shield/engine/internal/worker"
 )
 
@@ -19,6 +20,7 @@ type config struct {
 	// alerts wait in the outbox (and expire after a day).
 	smtp      *mailer.SMTP
 	publicURL string
+	dns       *resolver.System
 }
 
 // loadConfig reads the configuration through getenv (os.Getenv in
@@ -32,6 +34,9 @@ type config struct {
 //	ORUS_SMTP_ADDR, ORUS_SMTP_USERNAME, ORUS_SMTP_PASSWORD, ORUS_MAIL_FROM
 //	                      email alerts (see mailer.FromEnv); unset: no alert is sent
 //	ORUS_PUBLIC_URL       the dashboard's address, for links in alerts
+//	ORUS_DNS_SERVER       DNS server for every lookup (modules, ownership), e.g.
+//	                      127.0.0.1 (Unbound) or 1.1.1.1; unset: the system's.
+//	                      Production should set it: see resolver.NewWithServer
 func loadConfig(getenv func(string) string) (config, error) {
 	var c config
 	c.databaseURL = getenv("ORUS_DATABASE_URL")
@@ -77,6 +82,9 @@ func loadConfig(getenv func(string) string) (config, error) {
 	}
 	if c.publicURL, err = mailer.PublicURLFromEnv(getenv); err != nil {
 		return config{}, err
+	}
+	if c.dns, err = resolver.FromEnv(getenv); err != nil {
+		return config{}, fmt.Errorf("ORUS_DNS_SERVER: %w", err)
 	}
 	return c, nil
 }

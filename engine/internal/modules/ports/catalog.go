@@ -18,6 +18,13 @@ type service struct {
 	family family
 	// severity overrides the family's when set.
 	severity finding.Severity
+	// greets is true for protocols where the server always speaks first
+	// (FTP "220", SSH "SSH-2.0", MySQL handshake, POP3 "+OK", IMAP "* OK",
+	// VNC "RFB"). Such a port that accepts the connection but stays silent
+	// is probably not that service: a transparent proxy or a firewall of
+	// the network we scan from can answer every connection to a port (a
+	// mobile network did for port 21 during the lab test).
+	greets bool
 }
 
 func (s service) sev() finding.Severity {
@@ -135,8 +142,8 @@ var (
 // they are expected to be open, and the TLS module covers 443.
 var catalog = []service{
 	{port: 3389, name: "Remote Desktop (RDP)", family: remoteDesktop},
-	{port: 5900, name: "VNC remote desktop", family: remoteDesktop},
-	{port: 5901, name: "VNC remote desktop", family: remoteDesktop},
+	{port: 5900, name: "VNC remote desktop", family: remoteDesktop, greets: true},
+	{port: 5901, name: "VNC remote desktop", family: remoteDesktop, greets: true},
 
 	{port: 135, name: "Windows RPC", family: windowsSharing},
 	{port: 139, name: "NetBIOS file sharing", family: windowsSharing},
@@ -152,7 +159,7 @@ var catalog = []service{
 
 	{port: 1433, name: "Microsoft SQL Server", family: database},
 	{port: 1521, name: "Oracle database", family: database},
-	{port: 3306, name: "MySQL / MariaDB", family: database},
+	{port: 3306, name: "MySQL / MariaDB", family: database, greets: true},
 	{port: 5432, name: "PostgreSQL", family: database},
 	{port: 5984, name: "CouchDB", family: database},
 	{port: 6379, name: "Redis", family: database},
@@ -161,7 +168,7 @@ var catalog = []service{
 	{port: 11211, name: "Memcached", family: database},
 	{port: 27017, name: "MongoDB", family: database},
 
-	{port: 21, name: "FTP", family: fileSharing},
+	{port: 21, name: "FTP", family: fileSharing, greets: true},
 	{port: 111, name: "RPC portmapper", family: fileSharing, severity: finding.SeverityMedium},
 	{port: 873, name: "rsync", family: fileSharing},
 	{port: 2049, name: "NFS", family: fileSharing},
@@ -191,9 +198,9 @@ var catalog = []service{
 
 	{port: 5060, name: "SIP telephony", family: voip},
 
-	{port: 110, name: "POP3 (unencrypted)", family: cleartextMail},
-	{port: 143, name: "IMAP (unencrypted)", family: cleartextMail},
+	{port: 110, name: "POP3 (unencrypted)", family: cleartextMail, greets: true},
+	{port: 143, name: "IMAP (unencrypted)", family: cleartextMail, greets: true},
 
-	{port: 22, name: "SSH", family: ssh},
-	{port: 2222, name: "SSH (alternate port)", family: ssh},
+	{port: 22, name: "SSH", family: ssh, greets: true},
+	{port: 2222, name: "SSH (alternate port)", family: ssh, greets: true},
 }

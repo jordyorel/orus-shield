@@ -48,7 +48,7 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
-	reg, err := all.Registry()
+	reg, err := all.Registry(cfg.dns)
 	if err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func run(log *slog.Logger) error {
 	}
 	srv, err := api.New(st, api.Config{
 		TrustedOrigins: cfg.trustedOrigins, Modules: modules, Catalog: catalog, MFAKey: cfg.mfaKey,
-		Mailer: mail, PublicURL: cfg.publicURL, SignupClosed: cfg.signupClosed,
+		Mailer: mail, PublicURL: cfg.publicURL, SignupClosed: cfg.signupClosed, DNS: cfg.dns,
 	}, log)
 	if err != nil {
 		return err

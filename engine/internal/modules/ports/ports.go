@@ -333,7 +333,7 @@ func (o openPort) finding(domain string, a address) finding.Finding {
 	if banner == "" {
 		banner = "(none: the service waits for the client to speak first)"
 	}
-	return finding.Finding{
+	f := finding.Finding{
 		SchemaVersion: finding.SchemaVersion,
 		ID:            finding.NewID(ID, o.svc.family.checkID, domain, asset.String()),
 		ModuleID:      ID,
@@ -347,4 +347,18 @@ func (o openPort) finding(domain string, a address) finding.Finding {
 			a.host, a.ip, o.svc.port, o.svc.name, banner)),
 		Remediation: o.svc.family.fix,
 	}
+	if o.svc.greets && o.banner == "" {
+		// The port is open, but the service did not greet as it always
+		// does: we cannot confirm what answers. Reported, at low severity,
+		// so that a proxy of the scanning network never raises a false
+		// critical; the same finding ID, so a later confirmed scan
+		// updates it.
+		f.Severity = finding.SeverityLow
+		f.Title = fmt.Sprintf("Port %d open, %s not confirmed", o.svc.port, o.svc.name)
+		f.Description = fmt.Sprintf("Port %d accepts connections, but nothing answered the way %s always does when a client connects. "+
+			"Another service may listen there, or a firewall or proxy may answer instead of the server. Check what listens on this port. %s",
+			o.svc.port, o.svc.name, o.svc.family.why)
+		f.Remediation = append([]string{"Check on the server which program listens on this port (for example: ss -ltnp)."}, o.svc.family.fix...)
+	}
+	return f
 }

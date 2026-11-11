@@ -1,9 +1,13 @@
 package all
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/jordyorel/orus-shield/engine/internal/resolver"
+)
 
 func TestRegistry(t *testing.T) {
-	reg, err := Registry()
+	reg, err := Registry(resolver.NewSystem())
 	if err != nil {
 		t.Fatalf("Registry: %v", err)
 	}

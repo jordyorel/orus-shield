@@ -86,3 +86,26 @@ func TestLoadConfigMail(t *testing.T) {
 		t.Error("SMTP without a sender: nil error")
 	}
 }
+
+func TestLoadConfigDNS(t *testing.T) {
+	get := func(v string) func(string) string {
+		return func(k string) string {
+			switch k {
+			case "ORUS_DATABASE_URL":
+				return "postgres://x"
+			case "ORUS_DNS_SERVER":
+				return v
+			}
+			return ""
+		}
+	}
+	if c, err := loadConfig(get("")); err != nil || c.dns == nil {
+		t.Errorf("default resolver: %+v, %v", c.dns, err)
+	}
+	if c, err := loadConfig(get("127.0.0.1:53")); err != nil || c.dns == nil {
+		t.Errorf("ORUS_DNS_SERVER=127.0.0.1:53: %v", err)
+	}
+	if _, err := loadConfig(get("unbound.local")); err == nil {
+		t.Error("ORUS_DNS_SERVER with a name: nil error")
+	}
+}

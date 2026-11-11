@@ -221,6 +221,11 @@ admin in the `notifications` outbox (migration 0012), in FinishScan's transactio
 process delivers it (package `notify`: lease, retries at 1 min, 5 min, 30 min, 2 h, dropped
 after a day). The worker needs the same `ORUS_SMTP_*` and `ORUS_PUBLIC_URL` as the API.
 
+DNS: `ORUS_DNS_SERVER` (an IP, e.g. 127.0.0.1 for Unbound or 1.1.1.1) sends every lookup of
+the worker, the API and orusctl to one server; unset, the machine's resolver is used. Set it
+in production: a network's resolver kept a stale NXDOMAIN for over an hour during the lab
+test, which made per-IP ownership refuse a valid IP.
+
 Two-factor authentication (TOTP) is mandatory for admins: an admin session opened without
 a second factor gets `403 {"code": "mfa_required"}` on every route of that organization,
 reads included. Enrolment is `POST /auth/mfa/setup` (password) then `/auth/mfa/confirm`

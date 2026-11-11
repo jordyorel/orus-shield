@@ -16,10 +16,9 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 )
 
-// Registry returns a registry with every module, using the real DNS
-// resolver and dialer.
-func Registry() (*module.Registry, error) {
-	dns := resolver.NewSystem()
+// Registry returns a registry with every module, using dns (see
+// resolver.FromEnv) and the real dialer.
+func Registry(dns resolver.Resolver) (*module.Registry, error) {
 	reg := module.NewRegistry()
 	for _, m := range []module.Module{
 		email.New(dns),
