@@ -1,7 +1,7 @@
 // Messages shown to the user. Every wrong password gets the same one,
 // whatever the reason: the page never tells whether an account exists.
 
-import { ApiError } from "../api/client";
+import { ApiError } from "./api/client";
 
 export const msg = {
   badCredentials: "Adresse e-mail ou mot de passe incorrect.",
@@ -20,6 +20,8 @@ export const msg = {
   passwordShort: "Le mot de passe doit contenir au moins 12 caractères.",
   passwordMatch: "Les deux mots de passe ne correspondent pas.",
   adminNeedsMfa: "Votre rôle d’administrateur exige la double authentification. Activez-la pour accéder à votre organisation.",
+  cookieRefused:
+    "Votre navigateur a refusé le cookie de session, la connexion ne peut pas tenir. Sur Safari, ouvrez le tableau de bord en HTTPS (ou utilisez un autre navigateur en local).",
   unexpected: "Une erreur inattendue s’est produite. Réessayez dans quelques instants.",
   offline: "Le serveur ne répond pas. Vérifiez votre connexion et réessayez.",
 };

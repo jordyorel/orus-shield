@@ -21,6 +21,10 @@ export interface Me {
   /** This session was opened with it. Admins need it for their organizations. */
   mfa_session: boolean;
   orgs: Membership[];
+  /** Display name, "" until the user sets one in Profil. */
+  name: string;
+  password_changed_at: string | null;
+  recovery_codes_left: number;
 }
 
 /** mfaChallengeResponse: correct password, a code is expected next. */
@@ -122,6 +126,24 @@ export interface Finding {
   last_seen: string;
   status: FindingStatus;
   fixed_at?: string;
+  /** Computed by the API for the dashboard (findingExtras). */
+  category?: Category;
+  /** Estimated minutes to fix. */
+  minutes: number;
+  /** Points the target's score wins once fixed (open findings only). */
+  gain: number;
+  /** From a recent CVE template matched to a detected technology. */
+  emerging: boolean;
+  cve?: CVE;
+}
+
+/** cveJSON */
+export interface CVE {
+  id?: string;
+  name?: string;
+  cvss?: number;
+  epss?: number;
+  kev: boolean;
 }
 
 export interface List<T> {
@@ -248,4 +270,84 @@ export interface Month {
   month: string;
   opened: number;
   fixed: number;
+}
+
+/** planJSON: limits, 0 is unlimited. Prices per month. */
+export interface Plan {
+  id: "discovery" | "sme" | "pro" | "enterprise";
+  name: string;
+  domains: number;
+  hosts_per_scan: number;
+  members: number;
+  active_modules: boolean;
+  max_frequency: Frequency;
+  alerts: boolean;
+  reports: boolean;
+  threats: boolean;
+  usd_monthly: number;
+  usd_yearly: number;
+  xaf_monthly: number;
+  xaf_yearly: number;
+  on_quote: boolean;
+}
+
+/** subscriptionJSON */
+export interface Subscription {
+  plan: Plan;
+  status: "trialing" | "active" | "canceled" | "none";
+  until: string | null;
+  in_grace: boolean;
+  lapsed: boolean;
+  usage: { domains: number; members: number };
+  plans: Plan[];
+}
+
+export type AlertLevel = "critical" | "high" | "all";
+
+/** orgSettingsJSON: Réglages. weekday 0 is Sunday; frequency "" until chosen. */
+export interface OrgSettings {
+  alert_level: AlertLevel;
+  email_alerts: boolean;
+  profile: "quick" | "standard";
+  disabled_modules: string[];
+  frequency: Frequency | "";
+  weekday: number;
+  hour: number;
+  timezone: string;
+  rate_per_sec: number;
+}
+
+/** activityJSON */
+export interface Activity {
+  kind: "finding" | "scan";
+  at: string;
+  target_id: string;
+  domain: string;
+  finding_id?: string;
+  title?: string;
+  asset?: string;
+  severity?: Severity;
+  /** Absent: first seen. */
+  from?: FindingStatus;
+  to?: FindingStatus;
+  scan_id?: string;
+  requested_by?: string;
+  assets?: number;
+}
+
+/** sessionJSON */
+export interface DeviceSession {
+  id: string;
+  created_at: string;
+  last_seen_at: string;
+  ip: string;
+  user_agent: string;
+  current: boolean;
+}
+
+/** authActivityJSON */
+export interface AuthActivity {
+  at: string;
+  action: string;
+  ip: string;
 }

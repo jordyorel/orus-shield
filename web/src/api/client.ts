@@ -1,4 +1,4 @@
-import type { Check, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, Overview, RecoveryCodes, Role, Scan, ScheduleInput, Target } from "./types";
+import type { Activity, AuthActivity, Check, DeviceSession, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, OrgSettings, Overview, Plan, RecoveryCodes, Role, Scan, ScheduleInput, Subscription, Target } from "./types";
 import type { Exclusions } from "../exclusions";
 
 /**
@@ -71,8 +71,8 @@ export const api = {
   overview: (orgId: string, days: number, signal?: AbortSignal) =>
     request<Overview>("GET", `${org(orgId)}/overview?days=${days}`, undefined, signal),
   findings: (orgId: string, signal?: AbortSignal) => request<List<Finding>>("GET", `${org(orgId)}/findings`, undefined, signal),
-  /** setFindingStatus: accepted_risk, or open to withdraw it. "fixed" is decided by scans only. */
-  setFindingStatus: (orgId: string, targetId: string, findingId: string, status: Exclude<FindingStatus, "fixed">) =>
+  /** setFindingStatus: fixed (the API queues a verification scan), accepted_risk, or open to withdraw either. */
+  setFindingStatus: (orgId: string, targetId: string, findingId: string, status: FindingStatus) =>
     request<void>(
       "PUT",
       `${org(orgId)}/targets/${encodeURIComponent(targetId)}/findings/${encodeURIComponent(findingId)}/status`,
@@ -93,6 +93,15 @@ export const api = {
     request<Target>("POST", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/verify`),
   scan: (orgId: string, scanId: string, signal?: AbortSignal) =>
     request<Scan>("GET", `${org(orgId)}/scans/${encodeURIComponent(scanId)}`, undefined, signal),
+  plans: (signal?: AbortSignal) => request<List<Plan>>("GET", "/plans", undefined, signal),
+  subscription: (orgId: string, signal?: AbortSignal) => request<Subscription>("GET", `${org(orgId)}/subscription`, undefined, signal),
+  settings: (orgId: string, signal?: AbortSignal) => request<OrgSettings>("GET", `${org(orgId)}/settings`, undefined, signal),
+  saveSettings: (orgId: string, s: OrgSettings) => request<OrgSettings>("PUT", `${org(orgId)}/settings`, s),
+  activity: (orgId: string, signal?: AbortSignal) => request<List<Activity>>("GET", `${org(orgId)}/activity?days=7&limit=10`, undefined, signal),
+  updateMe: (name: string) => request<Me>("PATCH", "/auth/me", { name }),
+  sessions: (signal?: AbortSignal) => request<List<DeviceSession>>("GET", "/auth/sessions", undefined, signal),
+  endSession: (id: string) => request<void>("DELETE", `/auth/sessions/${encodeURIComponent(id)}`),
+  authActivity: (signal?: AbortSignal) => request<List<AuthActivity>>("GET", "/auth/activity", undefined, signal),
 };
 
 /** The URL of an organization's PDF report: the API builds it on demand, the browser downloads it. */

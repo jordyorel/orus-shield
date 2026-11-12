@@ -33,16 +33,30 @@ for admins (packages `totp` and `seal`); the authentication flows live in packag
 (score pooled across domains with `posture.Series`, daily trend, remediation time against
 the previous period, new assets, rule-based priorities); `GET /orgs/{org}/findings` lists
 every target's findings. The dashboard is a React + TypeScript app in `web/` that consumes
-the API (an earlier server-rendered Go version was dropped on 2026-11-10 in favor of
-React): sign-in, MFA, password setup, the overview, vulnerabilities, assets (add a domain, DNS
-TXT verification, first scan), scans (modules, launch, per-domain rate and exclusions
-through `PATCH /targets/{id}`, live history) and settings (profile: password change, MFA;
-team: invite with a one-time setup code, roles, removal, at least one admin kept; migration
-0009 lets the auth role do exactly that), attack surface, posture, prioritization and
-governance (from `/orgs/{org}/assets`, `/checks`, `/trends`) screens are done: every menu
-entry works, data without a source is shown as "Bientôt"; scheduled scans run (package `schedule`,
-migration 0010, the worker queues due scans every minute), the other menu entries show
-"Bientôt disponible". Finding texts stay in the modules'
+the API. Since 2026-11-12 it reproduces the single-file mockup
+`docs/design/nouveau-tableau-de-bord.html`, element for element, with the project's falcon
+logo (`docs/design/logos/`, resized in `web/public/logo-mark.png`) in place of the mockup's
+shield: public site (`/`, `/tarifs`,
+`/paiement`), `/connexion` (password, 6-digit code or recovery code, forgotten password),
+`/inscription` (emailed link, then `/signup/complete`), `/setup-password`, `/mfa/setup`, and
+five tabs under `/orgs/{org}/`: `aujourdhui` (actions of the day, radar, activity),
+`problemes`, `actifs` (inventory, add and verify a domain), `rapports` (weekly score, heat map,
+PDFs), `reglages` (checks, profile, schedule, rate, alerts, theme, kept from the old
+dashboard: per-domain exclusions, team, latest scans; subscription), plus `profil` (name,
+MFA, password, devices, activity). Code lives in `web/src/ui/` (`model.ts` maps API data to
+the mockup's vocabulary). Offers are named Gratuit / Essentiel / Pro / Sur devis (plan IDs
+discovery, sme, pro, enterprise) with the prices of package `plan`, not the mockup's.
+Anything without a real source (WhatsApp, data leaks, payment providers, public domain test,
+Monday summary, deep profile, invoices, account deletion, regenerating recovery codes) stays
+in place, greyed, with a "Bientôt" badge: never simulated. Backend for it (migration 0016):
+`users.name`, `PATCH /auth/me`, `GET /auth/sessions`, `DELETE /auth/sessions/{id}`,
+`GET /auth/activity`, `GET|PUT /orgs/{org}/settings` (org-wide alert level, email switch,
+quick/standard profile, switched-off modules, schedule and rate, applied to every target and
+inherited by new ones), `GET /orgs/{org}/activity`, public `GET /plans`; findings carry
+`minutes` (estimate per module), `gain` (posture points), `category`, `emerging`, `cve`; a
+customer may mark a finding fixed, which queues a verification scan of its module (the scan
+reopens it if still there). Scheduled scans run (package `schedule`, migration 0010). Finding
+texts stay in the modules'
 English (decided 2026-11-10); the dashboard's own wording is French.
 
 ## How to work on this repo
@@ -76,7 +90,7 @@ web (dashboard)  ->  api  ->  queue  ->  engine workers  ->  modules  ->  findin
 - **api/**: HTTP API for the dashboard and customers (Go).
 - **web/**: customer dashboard, React + TypeScript built with Vite. It talks only to the
   JSON API, on the same origin (Vite proxies `/api` in development). Screens reproduce the
-  mockups in `docs/design/`; data that does not exist yet is shown as "Bientôt disponible",
+  2026-11-12 mockup `docs/design/nouveau-tableau-de-bord.html`; data that does not exist yet is shown as "Bientôt",
   never as invented figures. Strict CSP: no inline script.
 - **ai layer**: reads findings, explains them, ranks them for the customer's context and
   suggests fixes. It never creates or removes findings.
@@ -314,7 +328,7 @@ tools below before the roadmap step listed for it.
 | PostgreSQL | Main database: customers, assets, scans, findings (`JSONB`) | Adopted: PostgreSQL 18 (uuidv7), driver pgx v5 (MIT) | Step 4 |
 | Docker / Compose | Local dev environment; isolation of heavy scanners | Adopted for local dev (`docker-compose.yml`) | Step 4 |
 | Queue | Scan jobs for workers | Adopted: PostgreSQL (`SELECT ... FOR UPDATE SKIP LOCKED`), leases + fencing; no extra service | Step 4 |
-| Fonts | Inter and Space Grotesk from `@fontsource-variable/*` (OFL-1.1, no dependencies, no install scripts), bundled and served from our origin: never Google Fonts, which would send visitors' addresses to a third party | Adopted 2026-11-10 | Step 7 |
+| Fonts | Figtree and Bricolage Grotesque (the 2026-11-12 mockup's; Inter and Space Grotesk before) from `@fontsource-variable/*` (OFL-1.1, no dependencies, no install scripts), bundled and served from our origin: never Google Fonts, which would send visitors' addresses to a third party | Adopted 2026-11-10 | Step 7 |
 | React + TypeScript (Vite) | Dashboard in `web/`. Exact versions, each at least two weeks old when added; `.npmrc` sets `save-exact` and `ignore-scripts`; CI runs `npm ci` and `npm audit`. Deps: react, react-dom (MIT); dev: typescript (Apache-2.0), vite, @vitejs/plugin-react, vitest, jsdom, @testing-library/react and /dom, @types/react(-dom) (MIT). No UI kit (styles come from the mockups), no router library | Adopted 2026-11-10 | Step 7 |
 | golang.org/x/crypto | argon2id password hashing (stdlib only has PBKDF2, which is not memory-hard) | Adopted (BSD-3-Clause, maintained by the Go team) | Step 7.6 |
 | Redis or Valkey | Shared rate limiting and cache across workers | Defer until several workers run; check Redis's current license first, prefer Valkey (BSD) if in doubt | After step 4 |

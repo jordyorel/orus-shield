@@ -74,6 +74,8 @@ export function Link({ to, onClick, ...rest }: LinkProps) {
 
 /** Redirect replaces the current URL once rendered. */
 export function Redirect({ to }: { to: string }) {
-  useEffect(() => navigate(to, { replace: true }), [to]);
+  useEffect(() => {
+    navigate(to, { replace: true });
+  }, [to]);
   return null;
 }

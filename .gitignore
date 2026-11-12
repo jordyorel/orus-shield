@@ -45,6 +45,7 @@ tmp/
 
 # Web (dashboard)
 node_modules/
+/web/.certs/
 .next/
 .cache/
 build/

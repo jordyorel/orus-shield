@@ -4,8 +4,8 @@ import { App } from "./App";
 import { AuthProvider } from "./auth";
 // Fonts of the mockups, served from our own origin (never Google Fonts:
 // that would send every visitor's address to a third party).
-import "@fontsource-variable/inter";
-import "@fontsource-variable/space-grotesk";
+import "@fontsource-variable/figtree";
+import "@fontsource-variable/bricolage-grotesque";
 import "./styles.css";
 
 const root = document.getElementById("root");
