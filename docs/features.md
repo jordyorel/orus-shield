@@ -5,7 +5,7 @@ This is the list of every feature the product will have once the work chosen on
 prepare the graphical interface: each entry says what the user sees and does, where the
 data comes from, and its status.
 
-Status: **done** (works today), **A** to **G** (the step that builds it, see the end),
+Status: **done** (works today), **A** to **J** (the step that builds it, see the end),
 **later** (planned, no date). Plan: the cheapest offer that includes it (Découverte,
 PME, Pro, Entreprise; prices not validated yet). UI wording stays French; finding texts
 stay in the modules' English (decided 2026-11-10).
@@ -73,7 +73,8 @@ stay in the modules' English (decided 2026-11-10).
 | Rate, exclusions (IPs, ports, paths, hosts) | targets | done |
 | Schedule: daily, weekly, monthly | targets.schedule_* | done |
 | **Scan profiles**: Passif, Standard (+ ports, known vulnerabilities), **Approfondi** (+ deep web application scan, ZAP) | profiles map to module lists | A (Standard), D (Approfondi) |
-| **Deep scan settings**: start URL, pages to skip, optional test account for the app (login form), max duration | ZAP config per target | D |
+| **Deep scan settings**: start URL, pages to skip, max duration | ZAP config per target | later (D runs with defaults) |
+| Test account for the app (login form), so the deep scan reaches pages behind the login | see section 15 | I |
 | **Deep scan warning and consent**: "this scan sends test inputs to your forms; run it on a test environment if you can" | | D |
 | Scan quota display: "3 scans approfondis restants ce mois" | plan limits | F |
 | Rescans triggered by emerging threats, shown with a "Menace émergente" tag | scans.requested_by = threats | C: data done, tag in the UI later |
@@ -98,6 +99,7 @@ stay in the modules' English (decided 2026-11-10).
 | Never show a password, even hashed; show only "a password was exposed" | | G |
 | Actions: force password reset, enable MFA; mark as handled | | G |
 | Alert when a new breach contains the domain's accounts | notifications | G |
+| Scope, said plainly in the UI and the sales material: addresses of the customer's verified domains found in the sources we have a licence for; we never read mailboxes | | G |
 
 ## 9. Emerging threats (Menaces émergentes) — new screen
 
@@ -153,6 +155,35 @@ silent failure. Numbers are a proposal (not validated):
 | Worker health, queue length, failed scans | later |
 | Scanner versions (Nuclei, templates, ZAP) and their update date | A/C |
 
+## 14. API security (Sécurité des API) — added 2026-11-12
+
+| Feature | What the user sees / does | Status |
+|---|---|---|
+| Declare an API: base URL under a verified domain, and its description (OpenAPI / Swagger file or URL, GraphQL endpoint) | per target, in Actifs | H |
+| Discovery of exposed API documentation and endpoints (swagger.json, /graphql, /api-docs) on verified domains | Nuclei and the crawl already see some; listed as assets | H |
+| Active API scan from the description: injections, missing authentication, excessive data exposure, errors leaking internals, CORS, rate limiting absent | ZAP OpenAPI / GraphQL add-ons, through gateproxy | H |
+| Authenticated API scan: an API key or a bearer token of a test account | credentials, section 15 | H + I |
+| Findings in the standard schema, category "API", with the request that proves it | | H |
+
+## 15. Authenticated web scan (Scan web authentifié) — added 2026-11-12
+
+| Feature | What the user sees / does | Status |
+|---|---|---|
+| Give a **test account** of the application (login URL, username, password, or a session cookie / token) and a page that proves the login worked | Réglages, per target; consent like the deep profile; "use a test account, never an administrator's" | I |
+| The deep scan logs in first, keeps the session, re-logs in when it expires, never visits logout | ZAP authentication (form, JSON, header), through gateproxy | I |
+| Findings behind the login marked "authentifié" | | I |
+| Credentials stored sealed (AES-256-GCM, a key of their own, like the MFA secrets), never shown again, never logged, deleted with the target; the customer can replace or delete them | new table, package seal | I |
+
+## 16. Internal scanning with agents (Agents internes) — added 2026-11-12
+
+| Feature | What the user sees / does | Status |
+|---|---|---|
+| Download a small agent (Linux, Windows) and install it on one machine of the internal network, with a one-time enrolment code | Actifs > Réseau interne | J |
+| The agent only calls out (HTTPS to our API, mutual TLS after enrolment): no port opened on the customer's network | | J |
+| The customer declares the internal ranges to scan (e.g. 10.0.0.0/24); the agent scans only those, with the same exclusions and rate limiter | ownership: the customer installed the agent in their own network and declared the ranges | J |
+| Internal checks: ports and services, TLS, known vulnerabilities (the same modules, run by the agent) | results in the standard schema, tagged "interne" | J |
+| Agent health: last contact, version, updates signed by us | | J |
+
 ## Steps
 
 | Step | Builds | Needs from Jordy |
@@ -164,3 +195,6 @@ silent failure. Numbers are a proposal (not validated):
 | E | French PDF reports | approve a PDF library |
 | F | Payment, subscriptions, plan limits | company country, providers, prices |
 | G | Leaks | a breach data provider (paid) |
+| H | API security: declared APIs (OpenAPI, GraphQL), discovery, active API scan with ZAP | which offers include it |
+| I | Authenticated web and API scans with a customer's test account | accept storing customer credentials (sealed, own key), and the offers |
+| J | Internal scanning with agents | supported systems, code signing of the agent, how agents are distributed and updated, and the offers |
