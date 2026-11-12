@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, ApiError } from "../../api/client";
-import type { Instructions, Target } from "../../api/types";
+import type { Agent, Instructions, Target } from "../../api/types";
 import { Tick } from "../icons";
 import { CATS, DOMAIN_RE, RANK, catState, evaluatedCats, worst } from "../model";
 import { useOrg } from "../OrgData";
@@ -16,7 +16,7 @@ function AddPanel() {
   const { org, data, reload, isAdmin } = useOrg();
   const { toast } = useUI();
   // A domain added earlier and not verified yet resumes at its record.
-  const pending = data?.targets.find((t) => !t.verified);
+  const pending = data?.targets.find((t) => !t.verified && !t.internal);
   const [ad, setAd] = useState<Add>({ step: 0, domain: "", err: "" });
   const [busy, setBusy] = useState(false);
 
@@ -265,6 +265,196 @@ export function ActifsPage() {
       <div className="rpanel addpanel">
         <AddPanel />
       </div>
+      <InternalNetworks />
     </>
+  );
+}
+
+/** online: an agent seen in the last few minutes (it polls every 30 s). */
+function agentState(a: Agent, now: Date): [string, "ok" | "high" | "med" | "crit"] {
+  if (a.revoked_at) return ["Révoqué", "crit"];
+  if (!a.enrolled_at) return ["En attente d’installation", "med"];
+  if (a.last_seen_at && now.getTime() - new Date(a.last_seen_at).getTime() < 5 * 60_000) return ["En ligne", "ok"];
+  return ["Hors ligne", "high"];
+}
+
+/** InternalNetworks manages the agents of the organization (step J). */
+function InternalNetworks() {
+  const { org, data, issues, isAdmin, reload } = useOrg();
+  const { toast } = useUI();
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [ranges, setRanges] = useState("");
+  const [err, setErr] = useState("");
+  const [code, setCode] = useState<{ name: string; code: string } | null>(null);
+  const included = data?.subscription.plan.agents ?? false;
+
+  const load = () =>
+    api.agents(org.org_id).then(
+      (r) => setAgents(r.items),
+      () => setAgents([]),
+    );
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [org.org_id]);
+
+  const create = async () => {
+    setErr("");
+    const list = ranges
+      .split(/[\s,]+/)
+      .map((r) => r.trim())
+      .filter(Boolean);
+    try {
+      const res = await api.createAgent(org.org_id, name.trim(), list);
+      setCode({ name: res.agent.name, code: res.enrolment_code });
+      setAdding(false);
+      setName("");
+      setRanges("");
+      void load();
+      void reload();
+    } catch (e) {
+      setErr(
+        e instanceof ApiError && e.code === "plan_limit"
+          ? "Les réseaux internes sont inclus dans l’offre sur devis."
+          : e instanceof ApiError && e.status === 400
+            ? "Vérifiez les plages : des réseaux privés (10.x, 172.16-31.x, 192.168.x), au plus un /20, par exemple 192.168.1.0/24."
+            : "Agent non créé, réessayez.",
+      );
+    }
+  };
+  const newCode = async (a: Agent) => {
+    try {
+      const r = await api.newAgentCode(org.org_id, a.id);
+      setCode({ name: a.name, code: r.enrolment_code });
+      void load();
+    } catch {
+      toast("Code impossible pour le moment");
+    }
+  };
+  const revoke = async (a: Agent) => {
+    if (!window.confirm(`Révoquer l’agent ${a.name} ? Il ne pourra plus rien scanner ni envoyer.`)) return;
+    try {
+      await api.revokeAgent(org.org_id, a.id);
+      toast("Agent révoqué");
+      void load();
+    } catch {
+      toast("Révocation impossible pour le moment");
+    }
+  };
+  const scan = async (a: Agent) => {
+    try {
+      await api.startScan(org.org_id, a.target_id, ["ports"]);
+      toast("Scan demandé : l’agent le lancera à son prochain passage (30 secondes au plus)");
+      void reload();
+    } catch {
+      toast("Scan impossible pour le moment");
+    }
+  };
+  const now = new Date();
+  const field = { height: 44, borderRadius: 14, border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", font: "inherit", padding: "0 14px" };
+  const origin = window.location.origin;
+
+  return (
+    <div className="rpanel addpanel">
+      <h2>
+        Réseaux internes
+        {!included && <span className="soon">Offre sur devis</span>}
+      </h2>
+      <p className="sub">Un petit agent, installé sur une machine de votre réseau, analyse vos adresses privées. Il ne fait que des appels sortants : aucun port à ouvrir chez vous.</p>
+      {agents.length > 0 && (
+        <ul className="sess">
+          {agents.map((a) => {
+            const [label, sev] = agentState(a, now);
+            const open = issues.filter((i) => i.targetId === a.target_id && !i.fixed).length;
+            return (
+              <li key={a.id}>
+                <span className="mico" aria-hidden="true">
+                  {a.os?.startsWith("windows") ? "W" : "L"}
+                </span>
+                <div>
+                  <p className="mt">
+                    {a.name} · {a.ranges.join(", ")}
+                  </p>
+                  <p className="md">
+                    <span className={"sev s-" + sev}>
+                      <i />
+                      {label}
+                    </span>
+                    {a.hostname ? ` · ${a.hostname}` : ""}
+                    {a.version ? ` · version ${a.version}` : ""}
+                    {` · ${open} problème${open > 1 ? "s" : ""} ouvert${open > 1 ? "s" : ""}`}
+                  </p>
+                </div>
+                {isAdmin && !a.revoked_at ? (
+                  <span style={{ display: "flex", gap: 12 }}>
+                    {a.enrolled_at && (
+                      <button className="link" type="button" onClick={() => void scan(a)}>
+                        Scanner
+                      </button>
+                    )}
+                    <button className="link" type="button" onClick={() => void newCode(a)}>
+                      Nouveau code
+                    </button>
+                    <button className="link" type="button" onClick={() => void revoke(a)}>
+                      Révoquer
+                    </button>
+                  </span>
+                ) : (
+                  <span />
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {code && (
+        <div className="record" style={{ marginTop: 14 }}>
+          <div>
+            <small>Code d’installation de {code.name}, valable 24 heures, affiché une seule fois</small>
+            <b>{code.code}</b>
+          </div>
+          <div>
+            <small>Linux (en root)</small>
+            <b>orus-agent enroll -api {origin} -code {code.code} &amp;&amp; systemctl enable --now orus-agent</b>
+          </div>
+          <div>
+            <small>Windows (PowerShell en administrateur)</small>
+            <b>.\orus-agent.exe enroll -api {origin} -code {code.code}</b>
+          </div>
+        </div>
+      )}
+      {isAdmin && included && !adding && (
+        <div className="actions">
+          <button className="btn ghost" type="button" onClick={() => setAdding(true)}>
+            Ajouter un réseau interne
+          </button>
+        </div>
+      )}
+      {adding && (
+        <div className="pwbox">
+          <label className="md" htmlFor="agent-name">
+            Nom (le site ou le bureau)
+          </label>
+          <input id="agent-name" style={field} value={name} placeholder="Siège, Brazzaville" onChange={(e) => setName(e.target.value)} />
+          <label className="md" htmlFor="agent-ranges">
+            Plages d’adresses privées, séparées par des espaces
+          </label>
+          <input id="agent-ranges" style={field} value={ranges} placeholder="192.168.1.0/24 10.0.0.0/24" onChange={(e) => setRanges(e.target.value)} />
+          <p className="err" role="alert">
+            {err}
+          </p>
+          <div className="actions" style={{ marginTop: 0 }}>
+            <button className="btn" type="button" onClick={() => void create()}>
+              Créer et obtenir le code
+            </button>
+            <button className="btn ghost" type="button" onClick={() => setAdding(false)}>
+              Annuler
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

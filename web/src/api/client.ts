@@ -1,4 +1,4 @@
-import type { Activity, DeclaredAPI, TestAccount, AuthActivity, Check, DeviceSession, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, OrgSettings, Overview, Plan, RecoveryCodes, Role, Scan, ScheduleInput, Subscription, Target } from "./types";
+import type { Activity, Agent, DeclaredAPI, TestAccount, AuthActivity, Check, DeviceSession, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, OrgSettings, Overview, Plan, RecoveryCodes, Role, Scan, ScheduleInput, Subscription, Target } from "./types";
 import type { Exclusions } from "../exclusions";
 
 /**
@@ -102,6 +102,12 @@ export const api = {
   sessions: (signal?: AbortSignal) => request<List<DeviceSession>>("GET", "/auth/sessions", undefined, signal),
   endSession: (id: string) => request<void>("DELETE", `/auth/sessions/${encodeURIComponent(id)}`),
   authActivity: (signal?: AbortSignal) => request<List<AuthActivity>>("GET", "/auth/activity", undefined, signal),
+  agents: (orgId: string, signal?: AbortSignal) => request<List<Agent>>("GET", `${org(orgId)}/agents`, undefined, signal),
+  createAgent: (orgId: string, name: string, ranges: string[]) =>
+    request<{ agent: Agent; enrolment_code: string }>("POST", `${org(orgId)}/agents`, { name, ranges }),
+  newAgentCode: (orgId: string, id: string) =>
+    request<{ enrolment_code: string }>("POST", `${org(orgId)}/agents/${encodeURIComponent(id)}/code`),
+  revokeAgent: (orgId: string, id: string) => request<void>("DELETE", `${org(orgId)}/agents/${encodeURIComponent(id)}`),
   apis: (orgId: string, targetId: string, signal?: AbortSignal) =>
     request<List<DeclaredAPI>>("GET", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/apis`, undefined, signal),
   createAPI: (orgId: string, targetId: string, a: { name: string; kind: string; base_url: string; spec_url?: string; spec?: string }) =>

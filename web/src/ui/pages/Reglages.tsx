@@ -47,6 +47,7 @@ export function limitRows(plans: Plan[]): [string, ...string[]][] {
     ["Vulnérabilités connues", ...col((p) => (p.active_modules ? "Oui" : "Non"))],
     ["Analyse des API", ...col((p) => (p.api_scans ? "Oui" : "Non"))],
     ["Scan authentifié (compte de test)", ...col((p) => (p.auth_scans ? "Oui" : "Non"))],
+    ["Réseaux internes (agents)", ...col((p) => (p.agents ? "Oui" : "Sur devis"))],
     ["Fuites de données", "Bientôt", "Bientôt", "Bientôt"],
     ["Menaces émergentes", ...col((p) => (p.threats ? "Oui" : "Non"))],
     ["Alertes email", ...col((p) => (p.alerts ? "Oui" : "Non"))],
@@ -401,7 +402,7 @@ export function ReglagesPage() {
         </div>
       </div>
 
-      <Domains targets={data.targets} />
+      <Domains targets={data.targets.filter((t) => !t.internal)} />
       <Team />
       <ScanHistory />
 

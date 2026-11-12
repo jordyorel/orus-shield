@@ -20,9 +20,9 @@ const me: Me = {
 };
 
 const plans: Plan[] = [
-  { id: "discovery", name: "Gratuit", domains: 1, hosts_per_scan: 5, members: 1, active_modules: false, max_frequency: "monthly", alerts: false, reports: false, threats: false, deep_scans: false, deep_scans_per_month: 0, api_scans: false, auth_scans: false, usd_monthly: 0, usd_yearly: 0, xaf_monthly: 0, xaf_yearly: 0, on_quote: false },
-  { id: "sme", name: "Essentiel", domains: 3, hosts_per_scan: 25, members: 3, active_modules: true, max_frequency: "weekly", alerts: true, reports: true, threats: true, deep_scans: false, deep_scans_per_month: 0, api_scans: false, auth_scans: false, usd_monthly: 35, usd_yearly: 29, xaf_monthly: 20000, xaf_yearly: 16500, on_quote: false },
-  { id: "pro", name: "Pro", domains: 15, hosts_per_scan: 25, members: 10, active_modules: true, max_frequency: "daily", alerts: true, reports: true, threats: true, deep_scans: true, deep_scans_per_month: 4, api_scans: true, auth_scans: true, usd_monthly: 99, usd_yearly: 79, xaf_monthly: 57000, xaf_yearly: 45500, on_quote: false },
+  { id: "discovery", name: "Gratuit", domains: 1, hosts_per_scan: 5, members: 1, active_modules: false, max_frequency: "monthly", alerts: false, reports: false, threats: false, deep_scans: false, deep_scans_per_month: 0, api_scans: false, auth_scans: false, agents: false, usd_monthly: 0, usd_yearly: 0, xaf_monthly: 0, xaf_yearly: 0, on_quote: false },
+  { id: "sme", name: "Essentiel", domains: 3, hosts_per_scan: 25, members: 3, active_modules: true, max_frequency: "weekly", alerts: true, reports: true, threats: true, deep_scans: false, deep_scans_per_month: 0, api_scans: false, auth_scans: false, agents: false, usd_monthly: 35, usd_yearly: 29, xaf_monthly: 20000, xaf_yearly: 16500, on_quote: false },
+  { id: "pro", name: "Pro", domains: 15, hosts_per_scan: 25, members: 10, active_modules: true, max_frequency: "daily", alerts: true, reports: true, threats: true, deep_scans: true, deep_scans_per_month: 4, api_scans: true, auth_scans: true, agents: false, usd_monthly: 99, usd_yearly: 79, xaf_monthly: 57000, xaf_yearly: 45500, on_quote: false },
 ];
 
 const overview: Overview = {
@@ -88,6 +88,7 @@ function orgRoutes(extra: Record<string, ReturnType<typeof ok>> = {}, sub: Subsc
     }),
     [`GET ${base}/scans?limit=20`]: ok({ items: [] }),
     [`GET ${base}/targets/t1/apis`]: ok({ items: [] }),
+    [`GET ${base}/agents`]: ok({ items: [] }),
     [`GET ${base}/targets/t1/credential`]: fail(404, "no test account"),
     ...extra,
   });
@@ -306,6 +307,21 @@ describe("dashboard", () => {
     expect(calls.find((c) => c.key.startsWith("PUT"))?.body).toEqual({ kind: "header", header_name: "Authorization", header_value: "Bearer s3cret", consent: true });
     await waitFor(() => expect(screen.getByText(/en-tête Authorization/)).toBeTruthy());
     expect(screen.queryByText(/s3cret/)).toBeNull();
+  });
+
+  it("creates an internal network and shows its one-time code", async () => {
+    const quote: Subscription = { ...subscription, plan: { ...plans[2]!, id: "enterprise", name: "Sur devis", agents: true }, status: "active", until: null };
+    const agent = { id: "ag1", target_id: "t9", name: "Siège", ranges: ["192.168.1.0/24"], enroll_expires_at: "", enrolled_at: null, last_seen_at: null, revoked_at: null, created_at: "", created_by: "x" };
+    const calls = orgRoutes({ [`POST /orgs/${ORG}/agents`]: () => ({ status: 201, json: { agent, enrolment_code: "CODE-123" } }) }, quote);
+    renderAt(`/orgs/${ORG}/actifs`);
+    fireEvent.click(await screen.findByRole("button", { name: "Ajouter un réseau interne" }));
+    fireEvent.change(screen.getByLabelText(/Nom \(le site/), { target: { value: "Siège" } });
+    fireEvent.change(screen.getByLabelText(/Plages d’adresses privées/), { target: { value: "192.168.1.0/24, 10.0.0.0/24" } });
+    fireEvent.click(screen.getByRole("button", { name: "Créer et obtenir le code" }));
+    await waitFor(() => expect(calls.some((c) => c.key === `POST /orgs/${ORG}/agents`)).toBe(true));
+    expect(calls.find((c) => c.key === `POST /orgs/${ORG}/agents`)?.body).toEqual({ name: "Siège", ranges: ["192.168.1.0/24", "10.0.0.0/24"] });
+    expect(await screen.findByText("CODE-123")).toBeTruthy();
+    expect(screen.getByText(/orus-agent enroll -api .* -code CODE-123/)).toBeTruthy();
   });
 
   it("sends an unknown screen back to Aujourd'hui", async () => {

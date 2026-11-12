@@ -191,6 +191,8 @@ export interface Target {
   created_at: string;
   /** null: scanned on demand only. */
   schedule: Schedule | null;
+  /** An agent's internal network, not a domain. */
+  internal?: boolean;
 }
 
 export type Frequency = "daily" | "weekly" | "monthly";
@@ -292,6 +294,8 @@ export interface Plan {
   api_scans: boolean;
   /** Scans can log in with a test account (step I). */
   auth_scans: boolean;
+  /** Internal networks scanned by agents (step J). */
+  agents: boolean;
   usd_monthly: number;
   usd_yearly: number;
   xaf_monthly: number;
@@ -387,6 +391,24 @@ export interface TestAccount {
   username?: string;
   username_field?: string;
   password_field?: string;
+  created_at: string;
+  created_by: string;
+}
+
+/** agentJSON */
+export interface Agent {
+  id: string;
+  /** Its internal network (a target). */
+  target_id: string;
+  name: string;
+  ranges: string[];
+  enroll_expires_at: string | null;
+  enrolled_at: string | null;
+  last_seen_at: string | null;
+  hostname?: string;
+  os?: string;
+  version?: string;
+  revoked_at: string | null;
   created_at: string;
   created_by: string;
 }

@@ -197,4 +197,4 @@ silent failure. Numbers are a proposal (not validated):
 | G | Leaks | a breach data provider (paid) |
 | H | API security: declared APIs (OpenAPI, GraphQL), discovery, active API scan with ZAP | done 2026-11-12 (module api; Pro and Sur devis); discovery of undeclared API docs later |
 | I | Authenticated web and API scans with a customer's test account | done 2026-11-12 (header or login form, sealed with ORUS_CREDENTIALS_KEY; Pro and Sur devis) |
-| J | Internal scanning with agents | supported systems, code signing of the agent, how agents are distributed and updated, and the offers |
+| J | Internal scanning with agents | done 2026-11-12 for Linux and Windows (ports module; TLS and vulns on agents later); unsigned binaries with SHA-256 until a code signing certificate; automatic updates later |

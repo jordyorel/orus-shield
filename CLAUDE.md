@@ -102,6 +102,7 @@ engine/
   cmd/worker/        worker entrypoint
   cmd/orusctl/       admin and development CLI (orgs, users, targets, scans, findings, audit)
   cmd/api/           HTTP API entrypoint
+  cmd/agent/         orus-agent: scans a customer's internal network (step J), calls out only
   internal/account/  authentication flows of the API (login, MFA, sessions, org access)
   internal/api/      JSON handlers: auth, org-scoped reads and writes (handlers get a *store.Org)
   internal/password/ argon2id password hashing
@@ -307,6 +308,22 @@ with `module.Info.UsesCredentials` (zap, api) as `module.RunConfig.Auth`. A form
 our code through gateproxy (ZAP's per-user requests drop the proxy credential) and its session
 passed to ZAP as a Cookie header; headers go through ZAP_AUTH_HEADER* from an `--env-file`
 (mode 0600, never in the plan). Logout pages are excluded; an expired session is not renewed.
+
+Internal agents (step J, Sur devis, plan.Agents): an admin creates an agent in Actifs >
+Réseaux internes with a name and private ranges (RFC 1918 or IPv6 ULA, at most a /20; migration
+0021). It gets its internal network (a target with `internal`, verified by the enrolment: the
+DNS-only routes refuse it) and a one-time code (24 h). `orus-agent enroll -api URL -code CODE`
+exchanges it for the agent's token (only its hash stored; config file mode 0600, Linux
+/etc/orus-agent, Windows %ProgramData%\OrusAgent, or ORUS_AGENT_CONFIG), then `orus-agent run`
+polls `/api/v1/agent/claim` every 30 s, runs the scan's modules on the ranges' addresses
+(`module.Target.Addresses`, at most 1024, no DNS) behind a gate that refuses anything outside
+the ranges, keeps its lease and posts the results. The agent endpoints run as the `orus_agent`
+role; the API only stores the submission (agent_results), the worker validates it like its own
+(`checkResult`), rejects addresses outside the ranges and records it with FinishScan. Workers
+never claim an internal network's scans. The agent runs `ports` only so far (other modules are
+reported as not supported). Release: `deploy/agent/build.sh` (Linux amd64/arm64, Windows amd64
+and SHA256SUMS, unsigned until a code signing certificate exists), `deploy/agent/orus-agent.service`
+(systemd, DynamicUser, config as a credential); Windows: a scheduled task at startup for now.
 
 Emerging threats: the worker indexes the critical and high CVE templates of
 `ORUS_NUCLEI_TEMPLATES` at start and every hour (`threats.Watcher`) into `threat_templates`.
