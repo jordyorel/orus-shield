@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/ownership"
+	"github.com/jordyorel/orus-shield/engine/internal/plan"
 	"github.com/jordyorel/orus-shield/engine/internal/posture"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
@@ -103,6 +105,23 @@ func (f *fakeVerifier) Verify(ctx context.Context, targetID, actor string) error
 // fakeAdmin manages organizations in memory.
 type fakeAdmin struct {
 	created []string // "name actor"
+	subs    map[string]plan.Subscription
+}
+
+func (f *fakeAdmin) SubscriptionOf(ctx context.Context, orgID string) (*plan.Subscription, error) {
+	if sub, ok := f.subs[orgID]; ok {
+		return &sub, nil
+	}
+	return nil, nil
+}
+
+func (f *fakeAdmin) SetSubscription(ctx context.Context, orgID string, sub plan.Subscription, provider, actor string) error {
+	if f.subs == nil {
+		f.subs = map[string]plan.Subscription{}
+	}
+	f.subs[orgID] = sub
+	f.created = append(f.created, "plan "+orgID+" "+string(sub.Plan)+" "+string(sub.Status)+" "+provider+" "+actor)
+	return nil
 }
 
 func (f *fakeAdmin) CreateOrganization(ctx context.Context, name, actor string) (store.Organization, error) {
@@ -594,5 +613,57 @@ func TestUserResetMFA(t *testing.T) {
 	}
 	if err := c.run(context.Background(), []string{"user", "reset-mfa", "nobody@example.com"}); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("unknown user = %v, want ErrNotFound", err)
+	}
+}
+
+func TestOrgPlan(t *testing.T) {
+	ctx := context.Background()
+	c, _, _, out := newCLIWithOrgs()
+	admin := c.admin.(*fakeAdmin)
+
+	if err := c.run(ctx, []string{"org", "plan"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Default: offer Gratuit (discovery), subscription none") {
+		t.Errorf("show = %q", out.String())
+	}
+
+	out.Reset()
+	if err := c.run(ctx, []string{"org", "plan", "-org", "Acme", "Pro"}); err != nil {
+		t.Fatal(err)
+	}
+	if sub := admin.subs["o-2"]; sub.Plan != plan.Pro || sub.Status != plan.Active || sub.PeriodEnd != nil {
+		t.Errorf("pro = %+v", sub)
+	}
+	if !strings.Contains(out.String(), "Acme: offer Pro set, without end") || !slices.Contains(admin.created, "plan o-2 pro active manual cli:jordy") {
+		t.Errorf("output %q, calls %v", out.String(), admin.created)
+	}
+
+	out.Reset()
+	until := time.Now().AddDate(0, 1, 0).Format(time.DateOnly)
+	if err := c.run(ctx, []string{"org", "plan", "-until", until, "essentiel"}); err != nil {
+		t.Fatal(err)
+	}
+	if sub := admin.subs["o-1"]; sub.Plan != plan.SME || sub.PeriodEnd == nil || sub.PeriodEnd.Format(time.DateOnly) <= until {
+		t.Errorf("paid period = %+v", sub)
+	}
+
+	if err := c.run(ctx, []string{"org", "plan", "-trial", "14", "sur-devis"}); err != nil {
+		t.Fatal(err)
+	}
+	if sub := admin.subs["o-1"]; sub.Plan != plan.Enterprise || sub.Status != plan.Trialing || sub.TrialEndsAt == nil {
+		t.Errorf("trial = %+v", sub)
+	}
+
+	for _, args := range [][]string{
+		{"org", "plan", "gold"},
+		{"org", "plan", "-trial", "7", "-until", until, "pro"},
+		{"org", "plan", "-until", "2020-01-01", "pro"},
+		{"org", "plan", "-until", "tomorrow", "pro"},
+		{"org", "plan", "-trial", "365", "pro"},
+	} {
+		if err := c.run(ctx, args); !errors.Is(err, errUsage) {
+			t.Errorf("run(%v) = %v, want errUsage", args, err)
+		}
 	}
 }

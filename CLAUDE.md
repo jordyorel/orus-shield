@@ -306,6 +306,11 @@ count as failed logins. The API needs `ORUS_MFA_KEY` (`openssl rand -base64 32`)
 encrypts the secrets in the database: losing it invalidates every enrolment. A user who
 lost their phone and recovery codes is reset with `orusctl user reset-mfa <email>`.
 
+Offers by hand: until a payment provider is connected, `orusctl org plan [-org ORG]` shows an
+organization's offer and `orusctl org plan [-until YYYY-MM-DD | -trial DAYS] <gratuit|essentiel|pro|sur-devis>`
+sets it (audited, provider "manual"). Emerging threat rescans and their emails follow the offer
+in force (plan.Threats): the free offer gets neither.
+
 orusctl works in one organization at a time: `-org NAME|ID`, else `ORUS_ORG`, else
 `Default` (created by migration 0003, which also holds every pre-existing target).
 `orusctl org add <name>` creates another one.

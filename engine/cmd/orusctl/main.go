@@ -14,6 +14,7 @@
 //
 //	orusctl org add [-as NAME] <name>
 //	orusctl org list
+//	orusctl org plan [-org ORG] [-until YYYY-MM-DD | -trial DAYS] [-as NAME] [<offer>]
 //	orusctl user add [-org ORG] [-role admin|viewer] [-as NAME] <email>
 //	orusctl user member [-org ORG] [-role admin|viewer] [-as NAME] <email>
 //	orusctl user reset [-as NAME] <email>
@@ -52,6 +53,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/gate"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/all"
 	"github.com/jordyorel/orus-shield/engine/internal/ownership"
+	"github.com/jordyorel/orus-shield/engine/internal/plan"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
@@ -59,6 +61,9 @@ import (
 const usage = `usage:
   orusctl org add [-as NAME] <name>
   orusctl org list
+  orusctl org plan [-org ORG] [-until YYYY-MM-DD | -trial DAYS] [<offer>]
+                                                               (shows the offer, or sets it: gratuit,
+                                                               essentiel, pro, sur-devis; no payment yet)
   orusctl user add [-org ORG] [-role admin|viewer] <email>     (prints a one-time setup token)
   orusctl user member [-org ORG] [-role admin|viewer] <email>  (adds to another org or changes role)
   orusctl user reset <email>                                   (new setup token: password reset)
@@ -93,6 +98,8 @@ type Admin interface {
 	SetMembership(ctx context.Context, userID, orgID, role, actor string) error
 	IssueSetupToken(ctx context.Context, userID string, ttl time.Duration, actor string) (string, error)
 	ResetMFA(ctx context.Context, userID, actor string) error
+	SubscriptionOf(ctx context.Context, orgID string) (*plan.Subscription, error)
+	SetSubscription(ctx context.Context, orgID string, sub plan.Subscription, provider, actor string) error
 }
 
 // setupTokenTTL is how long a new user has to choose a password.
@@ -216,13 +223,15 @@ func (c cli) run(ctx context.Context, args []string) error {
 	switch cmd {
 	case "org":
 		if len(rest) == 0 {
-			return fmt.Errorf("%w: org needs a subcommand (add, list)", errUsage)
+			return fmt.Errorf("%w: org needs a subcommand (add, list, plan)", errUsage)
 		}
 		switch rest[0] {
 		case "add":
 			return c.orgAdd(ctx, rest[1:])
 		case "list":
 			return c.orgList(ctx, rest[1:])
+		case "plan":
+			return c.orgPlan(ctx, rest[1:])
 		}
 		return fmt.Errorf("%w: unknown org subcommand %q", errUsage, rest[0])
 	case "user":
@@ -799,4 +808,97 @@ func (c cli) audit(ctx context.Context, args []string) error {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.At.Format(time.RFC3339), e.Actor, e.Action, details)
 	}
 	return w.Flush()
+}
+
+// offerIDs maps the names an operator types to plan IDs: the dashboard's
+// French names and the IDs themselves.
+var offerIDs = map[string]plan.ID{
+	"gratuit": plan.Discovery, "discovery": plan.Discovery,
+	"essentiel": plan.SME, "sme": plan.SME,
+	"pro":       plan.Pro,
+	"sur-devis": plan.Enterprise, "enterprise": plan.Enterprise,
+}
+
+// orgPlan shows an organization's offer, or sets it by hand: contracts,
+// bank transfers, Mobile Money paid outside the product, until a payment
+// provider updates subscriptions itself. Without -until or -trial the
+// offer has no end.
+func (c cli) orgPlan(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("org plan", flag.ContinueOnError)
+	orgRef := c.orgFlag(fs)
+	until := fs.String("until", "", "last day of the paid period, YYYY-MM-DD (UTC)")
+	trial := fs.Int("trial", 0, "a trial of this many days instead of a paid period")
+	actor := fs.String("as", c.defaultActor, "requester recorded in the audit log")
+	pos, err := parse(fs, args, 0)
+	if err != nil {
+		return err
+	}
+	org, _, _, err := c.openOrg(ctx, *orgRef)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	if len(pos) == 0 {
+		sub, err := c.admin.SubscriptionOf(ctx, org.ID)
+		if err != nil {
+			return err
+		}
+		eff := plan.Resolve(sub, now)
+		status := "none (free offer)"
+		if sub != nil {
+			status = string(sub.Status)
+		}
+		fmt.Fprintf(c.out, "%s: offer %s (%s), subscription %s", org.Name, eff.Plan.Name, eff.Plan.ID, status)
+		if eff.Until != nil {
+			fmt.Fprintf(c.out, ", until %s", eff.Until.UTC().Format(time.DateOnly))
+		}
+		if eff.InGrace {
+			fmt.Fprint(c.out, " (grace days)")
+		}
+		if eff.Lapsed {
+			fmt.Fprint(c.out, " (lapsed)")
+		}
+		fmt.Fprintln(c.out)
+		return nil
+	}
+	id, ok := offerIDs[strings.ToLower(pos[0])]
+	if !ok {
+		return fmt.Errorf("%w: unknown offer %q (gratuit, essentiel, pro, sur-devis)", errUsage, pos[0])
+	}
+	if *until != "" && *trial != 0 {
+		return fmt.Errorf("%w: -until and -trial exclude each other", errUsage)
+	}
+	sub := plan.Subscription{Plan: id, Status: plan.Active}
+	switch {
+	case *trial < 0 || *trial > 90:
+		return fmt.Errorf("%w: -trial must be 1 to 90 days", errUsage)
+	case *trial > 0:
+		end := now.AddDate(0, 0, *trial)
+		sub.Status, sub.TrialEndsAt = plan.Trialing, &end
+	case *until != "":
+		day, err := time.Parse(time.DateOnly, *until)
+		if err != nil {
+			return fmt.Errorf("%w: -until: want YYYY-MM-DD", errUsage)
+		}
+		end := day.AddDate(0, 0, 1) // the whole last day
+		if !end.After(now) {
+			return fmt.Errorf("%w: -until is in the past", errUsage)
+		}
+		sub.PeriodEnd = &end
+	}
+	if err := c.admin.SetSubscription(ctx, org.ID, sub, "manual", *actor); err != nil {
+		return err
+	}
+	p, _ := plan.Get(id)
+	fmt.Fprintf(c.out, "%s: offer %s set", org.Name, p.Name)
+	switch {
+	case sub.TrialEndsAt != nil:
+		fmt.Fprintf(c.out, ", trial until %s", sub.TrialEndsAt.UTC().Format(time.DateOnly))
+	case sub.PeriodEnd != nil:
+		fmt.Fprintf(c.out, ", paid until %s", *until)
+	default:
+		fmt.Fprint(c.out, ", without end")
+	}
+	fmt.Fprintln(c.out)
+	return nil
 }
