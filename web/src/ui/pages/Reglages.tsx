@@ -427,16 +427,31 @@ export function ReglagesPage() {
             ))}
           </div>
           <div className="actions">
-            <Link className="btn" to={`/paiement?offre=${plan.id === "pro" ? "pro" : "sme"}`}>
+            <Link className="btn" to={`/paiement?offre=${plan.id === "pro" ? "pro" : "sme"}&org=${encodeURIComponent(org.org_id)}`}>
               Changer d’offre
             </Link>
-            <button className="btn ghost" type="button" aria-disabled="true" onClick={() => toast("Factures : bientôt disponible")}>
+            <button
+              className="btn ghost"
+              type="button"
+              onClick={() =>
+                void api.billingPortal(org.org_id).then(
+                  (r) => window.location.assign(r.url),
+                  (e: unknown) =>
+                    toast(
+                      e instanceof ApiError && e.status === 404
+                        ? "Pas encore de facture : vous ne payez pas en ligne pour l’instant"
+                        : e instanceof ApiError && e.status === 403
+                          ? "Réservé aux administrateurs"
+                          : "Factures indisponibles pour le moment",
+                    ),
+                )
+              }
+            >
               Voir les factures
-              <Soon />
             </button>
           </div>
           <p className="sub" style={{ marginTop: 14 }}>
-            Paiement par carte, MTN Mobile Money ou Airtel Money : bientôt disponible.
+            Paiement par carte ou PayPal, avec Paddle ; Mobile Money bientôt disponible.
           </p>
           <div style={{ overflowX: "auto", marginTop: 18 }}>
             <table className={"limits plan" + planCol}>

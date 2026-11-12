@@ -193,7 +193,7 @@ silent failure. Numbers are a proposal (not validated):
 | C | Emerging threats: new templates and CISA KEV, rescan of affected customers, EPSS | nothing |
 | D | ZAP deep web scan ("Approfondi") | done 2026-11-12 (module zap) |
 | E | French PDF reports | approve a PDF library |
-| F | Payment, subscriptions, plan limits | company country, providers, prices |
+| F | Payment, subscriptions, plan limits | done 2026-11-12 for cards and PayPal with Paddle (merchant of record); Mobile Money later; prices to validate |
 | G | Leaks | a breach data provider (paid) |
 | H | API security: declared APIs (OpenAPI, GraphQL), discovery, active API scan with ZAP | done 2026-11-12 (module api; Pro and Sur devis); discovery of undeclared API docs later |
 | I | Authenticated web and API scans with a customer's test account | done 2026-11-12 (header or login form, sealed with ORUS_CREDENTIALS_KEY; Pro and Sur devis) |

@@ -46,6 +46,12 @@ func (f *fakeMailer) Send(_ context.Context, m mailer.Message) error {
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
+	return newEnvWith(t, nil)
+}
+
+// newEnvWith is newEnv with a change to the server's configuration.
+func newEnvWith(t *testing.T, change func(*Config)) *env {
+	t.Helper()
 	st := storetest.New(t)
 	e := &env{t: t, st: st, now: time.Now(), secrets: map[string][]byte{}, mail: &fakeMailer{sent: make(chan mailer.Message, 100)}}
 	e.dns = &fakeDNS{txt: map[string][]string{}}
@@ -53,10 +59,13 @@ func newEnv(t *testing.T) *env {
 	if _, err := rand.Read(key); err != nil {
 		t.Fatal(err)
 	}
-	srv, err := New(st, Config{Now: func() time.Time { return e.now }, DNS: e.dns, Modules: []string{"email", "tls"}, MFAKey: key, CredentialsKey: key,
+	cfg := Config{Now: func() time.Time { return e.now }, DNS: e.dns, Modules: []string{"email", "tls"}, MFAKey: key, CredentialsKey: key,
 		Mailer: e.mail, PublicURL: "https://app.example",
-		Catalog: []module.Info{{ID: "email", Name: "Email security", Kind: module.KindPassive}, {ID: "tls", Name: "TLS", Kind: module.KindPassive}}},
-		slog.New(slog.NewTextHandler(io.Discard, nil)))
+		Catalog: []module.Info{{ID: "email", Name: "Email security", Kind: module.KindPassive}, {ID: "tls", Name: "TLS", Kind: module.KindPassive}}}
+	if change != nil {
+		change(&cfg)
+	}
+	srv, err := New(st, cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}

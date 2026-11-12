@@ -24,6 +24,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/account"
 	"github.com/jordyorel/orus-shield/engine/internal/mailer"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
+	"github.com/jordyorel/orus-shield/engine/internal/paddle"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 	"github.com/jordyorel/orus-shield/engine/internal/seal"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
@@ -59,6 +60,9 @@ type Config struct {
 	PublicURL string
 	// SignupClosed hides self-service signup (accounts by invitation only).
 	SignupClosed bool
+	// Paddle takes card payments (ORUS_PADDLE_*); zero value: online
+	// payment is off and its routes answer 503.
+	Paddle paddle.Config
 	// CredentialsKey seals the test accounts of authenticated scans
 	// (ORUS_CREDENTIALS_KEY, seal.KeyLen bytes). nil: the credential
 	// routes answer 503 and no test account can be stored.
@@ -86,6 +90,8 @@ type Server struct {
 	creds *seal.Key
 	// agents is the store handle of the agent endpoints (role orus_agent).
 	agents *store.Agents
+	// billing writes subscriptions from payment webhooks (role orus_billing).
+	billing *store.Billing
 }
 
 // New returns the API server on st. It keeps only st's authentication
@@ -107,7 +113,7 @@ func New(st *store.Store, cfg Config, log *slog.Logger) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("api: %w", err)
 	}
-	srv := &Server{acct: acct, org: st.Org, cfg: cfg, log: log, agents: st.Agents()}
+	srv := &Server{acct: acct, org: st.Org, cfg: cfg, log: log, agents: st.Agents(), billing: st.Billing()}
 	if len(cfg.CredentialsKey) > 0 {
 		if srv.creds, err = seal.NewKey(cfg.CredentialsKey); err != nil {
 			return nil, fmt.Errorf("api: credentials key: %w", err)
@@ -156,6 +162,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	s.orgRoutes(mux)
 	s.teamRoutes(mux)
 	s.agentRoutes(mux)
+	mux.HandleFunc("POST /api/v1/billing/paddle", s.paddleWebhook)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
 	})

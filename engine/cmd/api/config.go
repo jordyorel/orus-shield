@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sort"
 	"strings"
 
 	"github.com/jordyorel/orus-shield/engine/internal/mailer"
+	"github.com/jordyorel/orus-shield/engine/internal/paddle"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 	"github.com/jordyorel/orus-shield/engine/internal/seal"
 )
@@ -18,6 +20,7 @@ type config struct {
 	trustedOrigins []string
 	mfaKey         []byte
 	credentialsKey []byte
+	paddle         paddle.Config
 	publicURL      string
 	smtp           *mailer.SMTP // nil: mail not configured
 	signupClosed   bool
@@ -40,6 +43,11 @@ type config struct {
 //	                          seals customers' test accounts (authenticated
 //	                          scans); the worker needs the same. Unset: no
 //	                          test account can be stored
+//	ORUS_PADDLE_API_KEY, ORUS_PADDLE_CLIENT_TOKEN, ORUS_PADDLE_WEBHOOK_SECRET,
+//	ORUS_PADDLE_PRICE_SME_MONTHLY, ORUS_PADDLE_PRICE_SME_YEARLY,
+//	ORUS_PADDLE_PRICE_PRO_MONTHLY, ORUS_PADDLE_PRICE_PRO_YEARLY
+//	                          card payments (Paddle Billing): all or none;
+//	                          ORUS_PADDLE_ENVIRONMENT sandbox (default) or production
 //	ORUS_PUBLIC_URL           the dashboard's address, for links in emails;
 //	                          default http://localhost:5173 (development)
 //	ORUS_SMTP_ADDR            SMTP server host:port; unset: no email is sent
@@ -71,6 +79,9 @@ func loadConfig(getenv func(string) string) (config, error) {
 		return config{}, fmt.Errorf("ORUS_MFA_KEY must be %d random bytes in base64 (openssl rand -base64 32)", seal.KeyLen)
 	}
 	cfg.mfaKey = key
+	if cfg.paddle, err = paddleFromEnv(getenv); err != nil {
+		return config{}, err
+	}
 	if raw := strings.TrimSpace(getenv("ORUS_CREDENTIALS_KEY")); raw != "" {
 		ck, err := base64.StdEncoding.DecodeString(raw)
 		if err != nil || len(ck) != seal.KeyLen {
@@ -98,6 +109,52 @@ func loadConfig(getenv func(string) string) (config, error) {
 		cfg.signupClosed = true
 	default:
 		return config{}, errors.New(`ORUS_SIGNUP must be "open" or "closed"`)
+	}
+	return cfg, nil
+}
+
+// paddleFromEnv reads the Paddle account: every variable, or none.
+func paddleFromEnv(getenv func(string) string) (paddle.Config, error) {
+	cfg := paddle.Config{
+		Environment:   strings.TrimSpace(getenv("ORUS_PADDLE_ENVIRONMENT")),
+		APIKey:        strings.TrimSpace(getenv("ORUS_PADDLE_API_KEY")),
+		ClientToken:   strings.TrimSpace(getenv("ORUS_PADDLE_CLIENT_TOKEN")),
+		WebhookSecret: strings.TrimSpace(getenv("ORUS_PADDLE_WEBHOOK_SECRET")),
+		Prices:        map[string]string{},
+	}
+	names := map[string]string{
+		"sme/monthly": "ORUS_PADDLE_PRICE_SME_MONTHLY", "sme/yearly": "ORUS_PADDLE_PRICE_SME_YEARLY",
+		"pro/monthly": "ORUS_PADDLE_PRICE_PRO_MONTHLY", "pro/yearly": "ORUS_PADDLE_PRICE_PRO_YEARLY",
+	}
+	set, missing := 0, []string{}
+	for k, env := range names {
+		if v := strings.TrimSpace(getenv(env)); v != "" {
+			cfg.Prices[k] = v
+			set++
+		} else {
+			missing = append(missing, env)
+		}
+	}
+	for env, v := range map[string]string{"ORUS_PADDLE_API_KEY": cfg.APIKey, "ORUS_PADDLE_CLIENT_TOKEN": cfg.ClientToken, "ORUS_PADDLE_WEBHOOK_SECRET": cfg.WebhookSecret} {
+		if v != "" {
+			set++
+		} else {
+			missing = append(missing, env)
+		}
+	}
+	if set == 0 {
+		return paddle.Config{}, nil
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		return paddle.Config{}, fmt.Errorf("paddle is partly configured: set %s too, or none of ORUS_PADDLE_*", strings.Join(missing, ", "))
+	}
+	switch cfg.Environment {
+	case "":
+		cfg.Environment = paddle.Sandbox
+	case paddle.Sandbox, paddle.Production:
+	default:
+		return paddle.Config{}, fmt.Errorf("ORUS_PADDLE_ENVIRONMENT must be sandbox or production")
 	}
 	return cfg, nil
 }

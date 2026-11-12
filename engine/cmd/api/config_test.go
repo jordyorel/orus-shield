@@ -52,3 +52,32 @@ func TestLoadConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadConfigPaddle(t *testing.T) {
+	base := map[string]string{"ORUS_DATABASE_URL": "postgres://x", "ORUS_MFA_KEY": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="}
+	with := func(kv ...string) func(string) string {
+		m := map[string]string{}
+		for k, v := range base {
+			m[k] = v
+		}
+		for i := 0; i+1 < len(kv); i += 2 {
+			m[kv[i]] = kv[i+1]
+		}
+		return func(k string) string { return m[k] }
+	}
+	full := []string{"ORUS_PADDLE_API_KEY", "k", "ORUS_PADDLE_CLIENT_TOKEN", "t", "ORUS_PADDLE_WEBHOOK_SECRET", "s",
+		"ORUS_PADDLE_PRICE_SME_MONTHLY", "p1", "ORUS_PADDLE_PRICE_SME_YEARLY", "p2", "ORUS_PADDLE_PRICE_PRO_MONTHLY", "p3", "ORUS_PADDLE_PRICE_PRO_YEARLY", "p4"}
+	c, err := loadConfig(with(full...))
+	if err != nil || !c.paddle.Enabled() || c.paddle.Environment != "sandbox" || c.paddle.Prices["pro/yearly"] != "p4" {
+		t.Errorf("full = %+v, %v", c.paddle, err)
+	}
+	if c, err := loadConfig(with()); err != nil || c.paddle.Enabled() {
+		t.Errorf("none = %+v, %v", c.paddle, err)
+	}
+	if _, err := loadConfig(with("ORUS_PADDLE_API_KEY", "k")); err == nil {
+		t.Error("partial configuration accepted")
+	}
+	if _, err := loadConfig(with(append(full, "ORUS_PADDLE_ENVIRONMENT", "staging")...)); err == nil {
+		t.Error("unknown environment accepted")
+	}
+}

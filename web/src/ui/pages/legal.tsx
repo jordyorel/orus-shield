@@ -91,9 +91,10 @@ export function ConditionsPage() {
       <Article title="5. Offres, essai et paiement">
         <p>
           Les offres et leurs limites sont décrites sur la page <Link to="/tarifs">Tarifs</Link>. Une nouvelle organisation bénéficie d’un essai gratuit de 14
-          jours. Les abonnements payants sont réglés par carte bancaire, par l’intermédiaire de [prestataire de paiement] : Orus Shield ne voit ni ne conserve
-          votre numéro de carte. L’abonnement est sans engagement : il s’arrête à la fin de la période payée. [Conditions de remboursement, TVA et devise à
-          préciser.]
+          jours. Les abonnements payants sont vendus et encaissés par Paddle (Paddle.com Market Limited), notre revendeur officiel : la commande, le paiement
+          par carte ou PayPal, les taxes et les factures relèvent de Paddle, selon ses propres conditions. Orus Shield ne voit ni ne conserve votre numéro de
+          carte. L’abonnement est sans engagement : il s’arrête à la fin de la période payée ; vous le gérez depuis le portail Paddle (Réglages, Abonnement).
+          [Conditions de remboursement à préciser.]
         </p>
       </Article>
       <Article title="6. Disponibilité et responsabilité">
@@ -142,7 +143,7 @@ export function ConfidentialitePage() {
             trouvés et leurs preuves techniques.
           </li>
           <li>Comptes de test que vous fournissez : chiffrés avec une clé dédiée, jamais réaffichés, utilisés seulement pendant les scans.</li>
-          <li>Paiement : géré par [prestataire de paiement] ; nous ne recevons pas votre numéro de carte.</li>
+          <li>Paiement : géré par Paddle, notre revendeur ; nous recevons l’état de votre abonnement et un identifiant client, jamais votre numéro de carte.</li>
         </ul>
       </Article>
       <Article title="3. Pourquoi">
@@ -158,7 +159,7 @@ export function ConfidentialitePage() {
         <ul>
           <li>[Hébergeur], qui héberge la plateforme, [pays].</li>
           <li>[Relais email], qui achemine les emails du service.</li>
-          <li>[Prestataire de paiement], pour les paiements par carte.</li>
+          <li>Paddle (Paddle.com Market Limited), revendeur des abonnements : commande, paiement, taxes et factures.</li>
           <li>
             crt.sh, service public des journaux de certificats : pour découvrir vos sous-domaines, le nom de vos domaines y est recherché. Aucune autre donnée
             n’y est envoyée.

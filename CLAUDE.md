@@ -325,6 +325,18 @@ reported as not supported). Release: `deploy/agent/build.sh` (Linux amd64/arm64,
 and SHA256SUMS, unsigned until a code signing certificate exists), `deploy/agent/orus-agent.service`
 (systemd, DynamicUser, config as a credential); Windows: a scheduled task at startup for now.
 
+Payments (step F, cards and PayPal; Mobile Money later): Paddle Billing, merchant of record
+(package paddle, stdlib only; `ORUS_PADDLE_*`, all or none, see `.env.example`). The payment page
+asks `POST /orgs/{org}/checkout` (admins), which creates the Paddle transaction with the
+organization in its custom_data, and opens it in Paddle.js (loaded on that page only; card
+numbers never reach us; production CSP: script-src cdn.paddle.com, frame-src and connect-src
+*.paddle.com). Paddle's webhooks (`POST /api/v1/billing/paddle`) are checked (HMAC-SHA256 of
+"ts:body", 5 minutes tolerance) and applied once per event ID through the `orus_billing` role
+(migration 0022): active and past_due become Active until the period's end (grace days apply),
+a scheduled cancel or canceled becomes Canceled, trialing stays a trial. "Voir les factures"
+opens Paddle's customer portal (`POST /orgs/{org}/billing/portal`). `orusctl org plan` still
+works for contracts.
+
 Emerging threats: the worker indexes the critical and high CVE templates of
 `ORUS_NUCLEI_TEMPLATES` at start and every hour (`threats.Watcher`) into `threat_templates`.
 The first sync is the baseline: only the templates the release lists in `.new-additions` are

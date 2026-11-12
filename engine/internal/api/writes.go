@@ -32,6 +32,8 @@ func (s *Server) writeRoutes(mux *http.ServeMux) {
 	base := "/api/v1/orgs/{org}"
 	write("POST "+base+"/targets", s.createTarget)
 	write("PUT "+base+"/settings", s.putSettings)
+	write("POST "+base+"/checkout", s.checkout)
+	write("POST "+base+"/billing/portal", s.billingPortal)
 	write("POST "+base+"/agents", s.createAgent)
 	write("POST "+base+"/agents/{agent}/code", s.newAgentCode)
 	write("DELETE "+base+"/agents/{agent}", s.revokeAgent)

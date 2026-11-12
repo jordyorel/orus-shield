@@ -2,11 +2,12 @@
 // payment (paiement), with their shared header and footer.
 
 import { useEffect, useState } from "react";
-import { api } from "../../api/client";
 import type { Plan } from "../../api/types";
 import { useAuth } from "../../auth";
 import { Link, navigate, useLocation } from "../../router";
+import { api, ApiError } from "../../api/client";
 import { Lock, Logo, MODS, ModIcon, Moon, Soon, Tick } from "../icons";
+import { openCheckout } from "../paddle";
 import { money } from "../model";
 import { useBodyClass, useUI } from "../ui";
 import { limitRows } from "./Reglages";
@@ -333,13 +334,16 @@ export function TarifsPage() {
           </div>
         </section>
         <section className="band">
-          <h2>
-            Moyens de paiement
-            <Soon />
-          </h2>
+          <h2>Moyens de paiement</h2>
           <div className="tags" style={{ marginTop: 12 }}>
-            {["Carte bancaire", "MTN Mobile Money", "Airtel Money", "Orange Money", "PayPal"].map((x) => (
+            {["Carte bancaire", "PayPal"].map((x) => (
               <span key={x}>{x}</span>
+            ))}
+            {["MTN Mobile Money", "Airtel Money", "Orange Money"].map((x) => (
+              <span key={x} className="is-soon">
+                {x}
+                <Soon />
+              </span>
             ))}
           </div>
         </section>
@@ -391,7 +395,43 @@ export function PaiementPage() {
   const per = price(p, cur, bill);
   const total = p ? money((cur === "usd" ? (bill === "an" ? p.usd_yearly : p.usd_monthly) : bill === "an" ? p.xaf_yearly : p.xaf_monthly) * (bill === "an" ? 12 : 1), cur) : "…";
   const back = state.status === "signed-in" ? "/app" : "/tarifs";
-  const soon = () => toast("Paiement en ligne : bientôt disponible. Votre essai de 14 jours continue.");
+  const soon = () => toast("Mobile Money : bientôt disponible. La carte et PayPal sont déjà possibles.");
+  const [busy, setBusy] = useState(false);
+  const [opened, setOpened] = useState(false);
+  const [payErr, setPayErr] = useState("");
+  const me = state.status === "signed-in" ? state.me : null;
+  const orgId = search.get("org") ?? me?.orgs.find((o) => o.role === "admin")?.org_id ?? "";
+  const paid = search.get("statut") === "ok";
+  /** pay creates the transaction on our side, then opens Paddle's checkout. */
+  const pay = async (inline: boolean) => {
+    if (!me) {
+      navigate(`/connexion`);
+      return;
+    }
+    setBusy(true);
+    setPayErr("");
+    try {
+      const co = await api.checkout(orgId, plan, bill === "an" ? "yearly" : "monthly");
+      await openCheckout({
+        transactionId: co.transaction_id,
+        clientToken: co.client_token,
+        environment: co.environment,
+        email: co.email,
+        ...(inline ? { inlineTarget: "paddle-frame" } : {}),
+      });
+      if (inline) setOpened(true);
+    } catch (e) {
+      setPayErr(
+        e instanceof ApiError && e.status === 503
+          ? "Le paiement en ligne n’est pas encore ouvert sur ce serveur."
+          : e instanceof ApiError && e.status === 403
+            ? "Seul un administrateur de l’organisation peut payer l’abonnement."
+            : "Le paiement n’a pas pu démarrer. Réessayez dans un instant.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
   const names = { sme: "Essentiel", pro: "Pro" };
   const methods: ["card" | "momo" | "paypal", string, string][] = [
     ["card", "Carte bancaire", "Visa, Mastercard"],
@@ -409,8 +449,8 @@ export function PaiementPage() {
           </Link>
           <ol className="stepper" aria-label="Étapes">
             <li className="on">Offre</li>
-            <li className="on cur">Paiement</li>
-            <li>Confirmation</li>
+            <li className={paid ? "on" : "on cur"}>Paiement</li>
+            <li className={paid ? "on cur" : ""}>Confirmation</li>
           </ol>
           <a
             className="link"
@@ -423,6 +463,22 @@ export function PaiementPage() {
             Annuler
           </a>
         </div>
+        {paid ? (
+          <section className="paydone">
+            <div className="okmark big" aria-hidden="true">
+              <Tick size={40} width={3} />
+            </div>
+            <h1>Paiement reçu, merci.</h1>
+            <p className="herosub" style={{ marginInline: "auto" }}>
+              Votre offre est activée dès que Paddle nous confirme le paiement, en général en quelques secondes. Vos factures sont dans Réglages, Abonnement.
+            </p>
+            <div className="actions" style={{ justifyContent: "center" }}>
+              <Link className="btn" to="/app">
+                Aller au tableau de bord
+              </Link>
+            </div>
+          </section>
+        ) : (
         <div className="paygrid">
           <section>
             <h1 className="payh">Votre abonnement</h1>
@@ -456,10 +512,7 @@ export function PaiementPage() {
                 </button>
               ))}
             </div>
-            <h2 className="payh2">
-              Moyen de paiement
-              <Soon />
-            </h2>
+            <h2 className="payh2">Moyen de paiement</h2>
             <div className="methods" role="radiogroup" aria-label="Moyen de paiement">
               {methods.map(([k, l, d]) => (
                 <button key={k} type="button" role="radio" aria-checked={method === k} onClick={() => setMethod(k)}>
@@ -470,33 +523,24 @@ export function PaiementPage() {
             </div>
             <div className="payform" key={method}>
               {method === "card" && (
-                <form className="aform" noValidate onSubmit={(e) => (e.preventDefault(), soon())}>
-                  <div className="field">
-                    <label htmlFor="cc-num">Numéro de carte</label>
-                    <div className="pwwrap">
-                      <input id="cc-num" inputMode="numeric" autoComplete="cc-number" placeholder="1234 1234 1234 1234" disabled />
-                    </div>
-                  </div>
-                  <div className="two">
-                    <div className="field">
-                      <label htmlFor="cc-exp">Expiration</label>
-                      <input id="cc-exp" inputMode="numeric" autoComplete="cc-exp" placeholder="MM / AA" disabled />
-                    </div>
-                    <div className="field">
-                      <label htmlFor="cc-cvc">Code de sécurité</label>
-                      <input id="cc-cvc" inputMode="numeric" autoComplete="cc-csc" placeholder="3 chiffres" disabled />
-                    </div>
-                  </div>
-                  <div className="field">
-                    <label htmlFor="cc-name">Nom sur la carte</label>
-                    <input id="cc-name" autoComplete="cc-name" disabled />
-                  </div>
-                  <p className="err" role="alert" />
-                  <button className="btn wide" type="submit" aria-disabled="true">
-                    Démarrer l’essai de 14 jours
-                    <Soon />
-                  </button>
-                </form>
+                <div className="aform">
+                  {/* Paddle's own card form appears here: card numbers never reach our servers. */}
+                  <div className="paddle-frame" />
+                  {!opened && (
+                    <>
+                      <p className="sub" style={{ margin: 0 }}>
+                        Vous saisirez votre carte dans le formulaire sécurisé de Paddle, notre prestataire de paiement.
+                      </p>
+                      <p className="err" role="alert">
+                        {payErr}
+                      </p>
+                      <button className="btn wide" type="button" disabled={busy} onClick={() => void pay(true)}>
+                        {busy ? <span className="spin" /> : null}
+                        Continuer vers le paiement sécurisé
+                      </button>
+                    </>
+                  )}
+                </div>
               )}
               {method === "momo" && (
                 <form className="aform" noValidate onSubmit={(e) => (e.preventDefault(), soon())}>
@@ -528,11 +572,13 @@ export function PaiementPage() {
               {method === "paypal" && (
                 <div className="aform">
                   <p className="sub" style={{ margin: 0 }}>
-                    Vous allez être redirigé vers PayPal pour confirmer, puis revenir ici.
+                    La fenêtre sécurisée de Paddle, notre prestataire, vous propose PayPal ; vous revenez ensuite ici.
                   </p>
-                  <button className="btn wide paypal" type="button" aria-disabled="true" onClick={soon}>
+                  <p className="err" role="alert">
+                    {payErr}
+                  </p>
+                  <button className="btn wide paypal" type="button" disabled={busy} onClick={() => void pay(false)}>
                     Continuer avec PayPal
-                    <Soon />
                   </button>
                 </div>
               )}
@@ -568,6 +614,7 @@ export function PaiementPage() {
             <p className="md">Annulable à tout moment pendant l’essai, sans frais.</p>
           </aside>
         </div>
+        )}
       </div>
     </main>
   );

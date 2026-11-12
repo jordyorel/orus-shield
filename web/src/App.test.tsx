@@ -147,6 +147,27 @@ describe("public site", () => {
     }
   });
 
+  it("starts a card payment through our API, for the chosen offer", async () => {
+    const calls = mockApi({
+      "GET /auth/me": ok(me),
+      "GET /plans": ok({ items: plans }),
+      [`POST /orgs/${ORG}/checkout`]: ok({ transaction_id: "txn_1", client_token: "test_tok", environment: "sandbox", email: me.email }),
+    });
+    renderAt(`/paiement?offre=pro&org=${ORG}`);
+    fireEvent.click(await screen.findByRole("button", { name: "À l’année, jusqu’à 20 % de moins" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuer vers le paiement sécurisé" }));
+    await waitFor(() => expect(calls.some((c) => c.key === `POST /orgs/${ORG}/checkout`)).toBe(true));
+    expect(calls.find((c) => c.key === `POST /orgs/${ORG}/checkout`)?.body).toEqual({ plan: "pro", period: "yearly" });
+    // No card field of ours: Paddle's form goes in its frame.
+    expect(screen.queryByLabelText("Numéro de carte")).toBeNull();
+  });
+
+  it("confirms the payment when Paddle sends the customer back", async () => {
+    mockApi({ "GET /auth/me": ok(me), "GET /plans": ok({ items: plans }) });
+    renderAt("/paiement?statut=ok");
+    expect(await screen.findByText("Paiement reçu, merci.")).toBeTruthy();
+  });
+
   it("logs in with a 6-digit code", async () => {
     const calls = loginRoutes(true);
     await loginWithCode();
