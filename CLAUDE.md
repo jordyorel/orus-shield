@@ -108,7 +108,7 @@ engine/
   internal/totp/     TOTP codes (RFC 6238), stdlib only
   internal/seal/     AES-256-GCM sealing of TOTP secrets (key from ORUS_MFA_KEY)
   internal/module/   the Module interface and the registry
-  internal/modules/  one package per check (email, tls, ports, cdn, web, discovery, vulns, ...)
+  internal/modules/  one package per check (email, tls, ports, cdn, web, discovery, vulns, zap, ...)
   internal/finding/  finding schema and validation
   internal/asset/    asset schema (hostname, ip, service, certificate) and validation
   internal/dnsname/  DNS name normalization, shared by module and asset
@@ -263,6 +263,24 @@ minutes at the default 5 requests per second (module timeout 2 hours, `module.In
 variables are set. Findings' asset is the matched URL plus `#template-id`; detected
 technologies go to the hostname's `technologies` detail.
 
+Deep profile ("Approfondi", Réglages > Profondeur du scan; Pro and Sur devis, plan.DeepScans):
+chosen with an explicit consent recorded in org_settings (migration 0017, who and when; PUT
+/settings needs `deep_consent` the first time). The worker reads the profile at each scan and
+passes `{"deep": true}` as every module's Config; modules without a deep mode ignore it.
+- `ports` (deep): every port 1 to 1024 plus about 130 registered ports often exposed (not Nmap's
+  top 1000, whose data falls under the NPSL), version identification from banners (SSH, FTP,
+  SMTP, POP3, IMAP, MySQL, VNC) and, for a silent service, one `HEAD /` request allowed by the
+  gate first; product and version go to the service asset's details and the finding's evidence.
+  Ports outside the catalog are reported under `port-other-service-exposed` (low).
+- `zap` (deep only; otherwise it does nothing and evaluates nothing): OWASP ZAP in the pinned
+  Docker image (`deploy/zap/install.sh`, prints `ORUS_ZAP_IMAGE` and `ORUS_ZAP_WORKDIR` for
+  `.env`, worker only) crawls up to 4 sites, then runs its active scan (low strength) with
+  `gateproxy` as its upstream proxy: every request goes through the gate. Only exploitable flaws
+  become findings (injection, XSS, file access, request forgery, other high risk); hygiene stays
+  with `web`. With Colima the work directory must be under the home directory; on Linux set
+  `ORUS_ZAP_NETWORK=host` and `ORUS_ZAP_PROXY_HOST=127.0.0.1`. `go test ./internal/modules/zap`
+  runs the real image against a local app when `ORUS_ZAP_IMAGE` (and `ORUS_ZAP_WORKDIR`) are set.
+
 Emerging threats: the worker indexes the critical and high CVE templates of
 `ORUS_NUCLEI_TEMPLATES` at start and every hour (`threats.Watcher`) into `threat_templates`.
 The first sync is the baseline: only the templates the release lists in `.new-additions` are
@@ -333,7 +351,7 @@ tools below before the roadmap step listed for it.
 | golang.org/x/crypto | argon2id password hashing (stdlib only has PBKDF2, which is not memory-hard) | Adopted (BSD-3-Clause, maintained by the Go team) | Step 7.6 |
 | Redis or Valkey | Shared rate limiting and cache across workers | Defer until several workers run; check Redis's current license first, prefer Valkey (BSD) if in doubt | After step 4 |
 | Nuclei | Template-based vulnerability detection (MIT; nuclei-templates MIT) | Adopted 2026-11-12 as a pinned external binary (v3.11.1, templates v10.5.1, `deploy/nuclei/install.sh`), not as a library (hundreds of dependencies). Module `vulns`, active. All its traffic goes through `gateproxy` (one gate call per request, with its path; TLS terminated so HTTPS paths are seen); HTTP templates only, no code/headless/file/JS templates, intrusive, DoS, brute force, default-login and fuzzing tags excluded, no interactsh, throwaway HOME, no inherited environment. Production must also run it without direct network access (its only route: the proxy) | Done |
-| OWASP ZAP | Deep web application testing ("Deep" scan profile) | Adopt later, run in Docker, driven through its API | After step 7 |
+| OWASP ZAP | Deep web application testing (deep profile, module `zap`) | Adopted 2026-11-12 (Apache-2.0): Docker image `zaproxy/zap-stable` pinned by digest (build 20261026, `deploy/zap/install.sh`), driven by its automation framework (plan written as JSON), `-silent`, no capabilities, bounded memory/CPU/processes; its upstream proxy is `gateproxy` (one gate call per request). Production must also deny the container any other network access | Done |
 | naabu / native Go | Port discovery | Preferred for the ports module (native TCP connect scan, or naabu, MIT) | Step 6 |
 | Nmap | Service fingerprinting | Do not integrate until its license (NPSL) has been reviewed for commercial SaaS use | Undecided |
 | OpenVAS | Network vulnerability scanning | Not planned: heavy to operate, feed usage terms set by Greenbone; Nuclei and our modules cover the SME scope | Not planned |

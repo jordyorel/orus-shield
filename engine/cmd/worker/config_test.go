@@ -140,3 +140,29 @@ func TestLoadConfigNuclei(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadConfigZAP(t *testing.T) {
+	env := func(kv ...string) func(string) string {
+		m := map[string]string{"ORUS_DATABASE_URL": "postgres://localhost/orus"}
+		for i := 0; i+1 < len(kv); i += 2 {
+			m[kv[i]] = kv[i+1]
+		}
+		return func(k string) string { return m[k] }
+	}
+	pinned := "zaproxy/zap-stable:20261026@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238"
+	c, err := loadConfig(env("ORUS_ZAP_IMAGE", pinned, "ORUS_ZAP_NETWORK", "host", "ORUS_ZAP_PROXY_HOST", "127.0.0.1", "ORUS_ZAP_WORKDIR", "/srv/zap"))
+	if err != nil || c.zap.Image != pinned || c.zap.Network != "host" || c.zap.ProxyHost != "127.0.0.1" || c.zap.WorkDir != "/srv/zap" {
+		t.Errorf("set: %+v, %v", c.zap, err)
+	}
+	if c, err := loadConfig(env()); err != nil || c.zap.Image != "" {
+		t.Errorf("unset: %+v, %v", c.zap, err)
+	}
+	for name, e := range map[string]func(string) string{
+		"tag only":         env("ORUS_ZAP_IMAGE", "zaproxy/zap-stable:latest"),
+		"relative workdir": env("ORUS_ZAP_IMAGE", pinned, "ORUS_ZAP_WORKDIR", "runs"),
+	} {
+		if _, err := loadConfig(e); err == nil {
+			t.Errorf("%s: nil error", name)
+		}
+	}
+}

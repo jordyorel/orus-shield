@@ -158,9 +158,9 @@ silent failure. Numbers are a proposal (not validated):
 | Step | Builds | Needs from Jordy |
 |---|---|---|
 | A | Nuclei behind our gating proxy: known CVEs, exposures, misconfigurations, technologies | nothing more (validated 2026-11-12) |
-| B | Ports: top 1000, service and version identification (native Go) | nothing |
+| B | Ports: over 1 000 ports (1 to 1024 and common registered ports), service and version identification (native Go) | done 2026-11-12 (deep profile) |
 | C | Emerging threats: new templates and CISA KEV, rescan of affected customers, EPSS | nothing |
-| D | ZAP deep web scan ("Approfondi") | nothing |
+| D | ZAP deep web scan ("Approfondi") | done 2026-11-12 (module zap) |
 | E | French PDF reports | approve a PDF library |
 | F | Payment, subscriptions, plan limits | company country, providers, prices |
 | G | Leaks | a breach data provider (paid) |

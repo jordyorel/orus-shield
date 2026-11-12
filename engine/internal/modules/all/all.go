@@ -14,6 +14,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/modules/tlscheck"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/vulns"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/web"
+	"github.com/jordyorel/orus-shield/engine/internal/modules/zap"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 )
 
@@ -22,6 +23,7 @@ import (
 // is registered but fails its runs until installed.
 type Options struct {
 	Nuclei vulns.Config // vulns module (ORUS_NUCLEI_BIN, ORUS_NUCLEI_TEMPLATES)
+	ZAP    zap.Config   // zap module, deep profile (ORUS_ZAP_IMAGE...)
 }
 
 // Registry returns a registry with every module, using dns (see
@@ -36,6 +38,7 @@ func Registry(dns resolver.Resolver, opts Options) (*module.Registry, error) {
 		web.New(dns, dialer.NewSystem()),
 		discovery.New(dns, discovery.Crtsh{}),
 		vulns.New(dns, dialer.NewSystem(), opts.Nuclei),
+		zap.New(dns, dialer.NewSystem(), opts.ZAP),
 	} {
 		if err := reg.Register(m); err != nil {
 			return nil, err

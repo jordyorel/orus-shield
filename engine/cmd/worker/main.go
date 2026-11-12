@@ -51,7 +51,7 @@ func run(log *slog.Logger) error {
 	}
 
 	// One resolver for modules and ownership checks (ORUS_DNS_SERVER).
-	registry, err := all.Registry(cfg.dns, all.Options{Nuclei: cfg.nuclei})
+	registry, err := all.Registry(cfg.dns, all.Options{Nuclei: cfg.nuclei, ZAP: cfg.zap})
 	if err != nil {
 		return err
 	}
@@ -70,6 +70,9 @@ func run(log *slog.Logger) error {
 		// Emerging threats: new CVE templates of the installed release,
 		// matched against what was detected on every verified domain.
 		go threats.NewWatcher(st, cfg.nuclei.Templates, log.With("component", "threats")).Run(ctx, threats.DefaultInterval)
+	}
+	if cfg.zap.Image == "" {
+		log.Warn("ORUS_ZAP_IMAGE is not set: deep web scans (zap module, deep profile) will fail")
 	}
 	return worker.New(st, registry, verifier, cfg.worker, log).Run(ctx)
 }

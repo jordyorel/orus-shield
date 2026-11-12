@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/mailer"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/vulns"
+	"github.com/jordyorel/orus-shield/engine/internal/modules/zap"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 	"github.com/jordyorel/orus-shield/engine/internal/worker"
 )
@@ -24,6 +26,7 @@ type config struct {
 	publicURL string
 	dns       *resolver.System
 	nuclei    vulns.Config
+	zap       zap.Config
 }
 
 // loadConfig reads the configuration through getenv (os.Getenv in
@@ -43,6 +46,14 @@ type config struct {
 //	ORUS_NUCLEI_BIN       path to the pinned nuclei binary (vulns module)
 //	ORUS_NUCLEI_TEMPLATES path to the pinned nuclei-templates directory;
 //	                      both or neither. Unset: the vulns module fails its runs
+//	ORUS_ZAP_IMAGE        pinned ZAP image, name@sha256:digest (zap module, deep
+//	                      profile; see deploy/zap/install.sh). Unset: deep web
+//	                      scans fail
+//	ORUS_ZAP_PROXY_HOST   how the container reaches this host's loopback, where
+//	                      gateproxy listens (default host.docker.internal)
+//	ORUS_ZAP_NETWORK      docker run --network (e.g. host on Linux); optional
+//	ORUS_ZAP_WORKDIR      absolute directory for the runs' files, mountable by
+//	                      Docker (Colima: under the home directory); optional
 func loadConfig(getenv func(string) string) (config, error) {
 	var c config
 	c.databaseURL = getenv("ORUS_DATABASE_URL")
@@ -95,6 +106,9 @@ func loadConfig(getenv func(string) string) (config, error) {
 	if c.nuclei, err = nucleiFromEnv(getenv); err != nil {
 		return config{}, err
 	}
+	if c.zap, err = zapFromEnv(getenv); err != nil {
+		return config{}, err
+	}
 	return c, nil
 }
 
@@ -114,4 +128,21 @@ func nucleiFromEnv(getenv func(string) string) (vulns.Config, error) {
 		}
 	}
 	return vulns.Config{Binary: bin, Templates: templates}, nil
+}
+
+// zapFromEnv reads how ZAP runs. The image must be pinned by digest: a tag
+// can be moved to other content.
+func zapFromEnv(getenv func(string) string) (zap.Config, error) {
+	image := getenv("ORUS_ZAP_IMAGE")
+	if image == "" {
+		return zap.Config{}, nil
+	}
+	if !strings.Contains(image, "@sha256:") {
+		return zap.Config{}, fmt.Errorf("ORUS_ZAP_IMAGE=%q: pin the image by digest (name@sha256:...), see deploy/zap/install.sh", image)
+	}
+	cfg := zap.Config{Image: image, ProxyHost: getenv("ORUS_ZAP_PROXY_HOST"), Network: getenv("ORUS_ZAP_NETWORK"), WorkDir: getenv("ORUS_ZAP_WORKDIR")}
+	if cfg.WorkDir != "" && !filepath.IsAbs(cfg.WorkDir) {
+		return zap.Config{}, fmt.Errorf("ORUS_ZAP_WORKDIR=%q: want an absolute path", cfg.WorkDir)
+	}
+	return cfg, nil
 }

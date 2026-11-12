@@ -21,6 +21,7 @@ var fixMinutes = map[string]int{
 	"web":   15, // a header or a cookie flag in the server configuration
 	"ports": 20, // a firewall rule, a service to stop or update
 	"vulns": 30, // a software update
+	"zap":   60, // a change in the application's code
 	"cdn":   15,
 }
 

@@ -54,8 +54,9 @@ export const CATNAME: Record<Cat, string> = {
 
 /**
  * catOfModule maps an engine module to a column. web (headers, cookies,
- * HTTPS redirect) goes with TLS, "Chiffrement" of the site; cdn and
- * discovery have no findings of their own. Fuites has no module yet.
+ * HTTPS redirect) goes with TLS, "Chiffrement" of the site; vulns and zap
+ * (deep web scan) are the known and application flaws of "Menaces"; cdn
+ * and discovery have no findings of their own. Fuites has no module yet.
  */
 export function catOfModule(moduleId: string): Cat | null {
   switch (moduleId) {
@@ -67,6 +68,7 @@ export function catOfModule(moduleId: string): Cat | null {
     case "ports":
       return "ports";
     case "vulns":
+    case "zap":
       return "menaces";
   }
   return null;
@@ -86,6 +88,8 @@ export function moduleName(f: Finding): string {
       return "Ports";
     case "vulns":
       return "Vulnérabilités";
+    case "zap":
+      return "Application web";
   }
   return f.module_id;
 }
