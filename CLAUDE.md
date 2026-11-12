@@ -266,7 +266,11 @@ technologies go to the hostname's `technologies` detail.
 Deep profile ("Approfondi", Réglages > Profondeur du scan; Pro and Sur devis, plan.DeepScans):
 chosen with an explicit consent recorded in org_settings (migration 0017, who and when; PUT
 /settings needs `deep_consent` the first time). The worker reads the profile at each scan and
-passes `{"deep": true}` as every module's Config; modules without a deep mode ignore it.
+passes `{"deep": true}` as every module's Config; modules without a deep mode ignore it. Only
+scans that include a deep-only module (`module.Info.DeepOnly`: zap) run deep, i.e. the full
+scans the profile schedules and full manual scans; verifications of one module ("Marquer comme
+corrigé", "Revérifier") stay standard. Queuing reuses a scan of the target still waiting with
+at least the requested modules (the request is audited either way).
 Quota: `plan.DeepScansPerMonth` (Pro 4, Sur devis unlimited) per calendar month in UTC; the
 worker marks the scans it runs deep (`scans.deep`, migration 0018) and runs a scan over the
 quota as a standard one, with a `scan.deep_quota_reached` audit entry. Réglages > Abonnement

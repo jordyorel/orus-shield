@@ -123,7 +123,7 @@ func New(dns resolver.Resolver, dial dialer.Dialer, cfg Config) *Module {
 
 // Info implements module.Module.
 func (m *Module) Info() module.Info {
-	return module.Info{ID: ID, Name: "Deep web application scan", Kind: module.KindActive, Checks: Checks, Timeout: Timeout}
+	return module.Info{ID: ID, Name: "Deep web application scan", Kind: module.KindActive, Checks: Checks, Timeout: Timeout, DeepOnly: true}
 }
 
 // Run implements module.Module. Outside the deep profile it returns an

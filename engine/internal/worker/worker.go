@@ -219,7 +219,7 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 	// record, and included in the offer in force. Every module receives
 	// it; those without a deep mode ignore it. Unreadable: standard.
 	var config json.RawMessage
-	if offer.DeepScans {
+	if offer.DeepScans && w.includesDeepOnly(sc.Modules) {
 		profile, err := w.store.ScanProfileOf(scanCtx, target.OrgID)
 		if err != nil {
 			log.Warn("read scan profile", "err", err)
@@ -398,6 +398,17 @@ func (s *ipSet) covers(value string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.ips[ip.Unmap()]
+}
+
+// includesDeepOnly reports whether the scan runs a module of the deep
+// profile only (module.Info.DeepOnly): only such scans run deep.
+func (w *Worker) includesDeepOnly(ids []string) bool {
+	for _, id := range ids {
+		if m, ok := w.modules.Get(id); ok && m.Info().DeepOnly {
+			return true
+		}
+	}
+	return false
 }
 
 // deepAllowed checks the month's deep scan quota of the offer, and marks

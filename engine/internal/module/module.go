@@ -47,6 +47,12 @@ type Info struct {
 	// the others of a scan, and the hostnames it reports are added to
 	// Target.Hosts for the modules that follow.
 	ProvidesHosts bool
+	// DeepOnly marks a module of the deep profile only (the deep web
+	// scan). A scan runs deep only when it includes such a module: the
+	// full scans the deep profile schedules, or a full manual scan; a
+	// verification of one module stays standard and does not count against
+	// the month's deep scans.
+	DeepOnly bool
 	// Timeout is how long one run may take; zero means the worker's
 	// default (ORUS_MODULE_TIMEOUT). Set it for modules that drive a long
 	// external scan, such as Nuclei.

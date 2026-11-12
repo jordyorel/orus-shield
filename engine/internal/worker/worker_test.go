@@ -857,7 +857,7 @@ func TestDeepProfileConfig(t *testing.T) {
 				got = string(req.Config)
 				return nil, nil
 			}}
-			w, st := setup(t, true, "{}", m)
+			w, st := setup(t, true, "{}", m, deepOnlyModule())
 			st.profile, st.sub = tt.profile, tt.sub
 			if _, err := w.RunOnce(context.Background()); err != nil {
 				t.Fatal(err)
@@ -890,7 +890,7 @@ func TestDeepScanQuota(t *testing.T) {
 				got = string(req.Config)
 				return nil, nil
 			}}
-			w, st := setup(t, true, "{}", m)
+			w, st := setup(t, true, "{}", m, deepOnlyModule())
 			st.profile, st.deepUsed = store.ProfileDeep, tt.used
 			if tt.sub != nil {
 				st.sub = tt.sub
@@ -906,5 +906,35 @@ func TestDeepScanQuota(t *testing.T) {
 				t.Errorf("quota audit = %v, want %v", audited, tt.wantAudit)
 			}
 		})
+	}
+}
+
+// deepOnlyModule is a module of the deep profile only (like zap).
+func deepOnlyModule() *fakeModule {
+	return &fakeModule{info: module.Info{ID: "deeponly", Name: "Deep only", Kind: module.KindPassive, DeepOnly: true}}
+}
+
+// A verification of one module runs standard under the deep profile, and
+// does not count against the month's deep scans.
+func TestVerificationScanStaysStandard(t *testing.T) {
+	var got string
+	m := &fakeModule{info: module.Info{ID: "probe", Name: "Probe", Kind: module.KindPassive}, run: func(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+		got = string(req.Config)
+		return nil, nil
+	}}
+	reg := module.NewRegistry()
+	for _, x := range []*fakeModule{m, deepOnlyModule()} {
+		if err := reg.Register(x); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The registry knows the deep-only module; the scan does not run it.
+	w, st := setupWithModules(t, true, "{}", reg, []string{"probe"})
+	st.profile = store.ProfileDeep
+	if _, err := w.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got != "" || len(st.deepMarks) != 0 {
+		t.Errorf("verification scan: config %q, deep marks %v; want standard", got, st.deepMarks)
 	}
 }
