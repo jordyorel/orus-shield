@@ -135,7 +135,9 @@ func TestNotificationDelivery(t *testing.T) {
 	l.member("b@example.com", RoleAdmin, true)
 	l.mustScan(t1, []string{"email"}, nil, withSeverity(makeFinding("email", "dmarc-missing", "example.com"), finding.SeverityHigh))
 
-	now := time.Now()
+	// A second ahead: the database stamps next_attempt_at with its own
+	// clock, which may run a few milliseconds ahead of ours (Docker VM).
+	now := time.Now().Add(time.Second)
 	claimed, err := l.s.ClaimNotifications(ctx, now, 5*time.Minute, 10)
 	if err != nil || len(claimed) != 2 || claimed[0].Attempts != 1 {
 		t.Fatalf("claim = %+v, %v", claimed, err)
