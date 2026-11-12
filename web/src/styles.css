@@ -736,3 +736,9 @@ textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .chart .line { stroke-dasharray: none; stroke-dashoffset: 0; }
 }
+
+/* Settings > Rapports (docs/design/Settings.dc.html) */
+.check-row { display: flex; gap: 12px; align-items: flex-start; font-size: 15px; }
+.check-row input { margin-top: 4px; }
+.report-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.report-actions .field { min-width: 140px; }

@@ -213,3 +213,17 @@ func isUUID(s string) bool {
 	}
 	return true
 }
+
+// Name returns the organization's name.
+func (o *Org) Name(ctx context.Context) (string, error) {
+	tx, err := o.begin(ctx)
+	if err != nil {
+		return "", fmt.Errorf("organization name: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	var name string
+	if err := tx.QueryRow(ctx, "SELECT name FROM organizations WHERE id = $1", o.orgID).Scan(&name); err != nil {
+		return "", fmt.Errorf("organization name: %w", err)
+	}
+	return name, tx.Commit(ctx)
+}

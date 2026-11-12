@@ -16,7 +16,10 @@ vulnerabilities come from the active `vulns` module (2026-11-12): Nuclei, a pinn
 binary, whose only way out is `gateproxy`, a local proxy that sends each of its requests
 through the scan's gate (see "External tools"). Emerging threats (package `threats`,
 migration 0014) rescan the verified domains whose detected technologies match the new CVE
-templates of an installed release. Step 7 follows the order in
+templates of an installed release. PDF reports (executive and technical, French and English)
+are built on demand by `GET /orgs/{org}/report?kind=&lang=` (packages `report` and `pdf`, a
+minimal PDF writer on the standard library) and downloaded from Paramètres > Rapports and the
+overview. Step 7 follows the order in
 `docs/ui-adaptation.md`: organizations (multi-tenant scoping, `store.Org` + PostgreSQL
 row-level security), the findings lifecycle (`fixed_at`, `finding_events` history) and the
 asset inventory (`module.Result` with findings and assets, `assets` table) and the check
@@ -107,6 +110,8 @@ engine/
   internal/worker/   claims scans, runs modules, records results
   internal/mailer/   SMTP email and French templates (password reset, invitations, alerts)
   internal/notify/   delivers queued alert emails (outbox), in the worker process
+  internal/pdf/      minimal PDF writer (A4, standard Helvetica fonts, WinAnsi text), stdlib only
+  internal/report/   security report from stored data: executive or technical, French or English
   internal/threats/  emerging threats: indexes new CVE templates, matches them to detected
                      technologies, queues vulns rescans (worker process)
   internal/modules/all/  the list of shipped modules

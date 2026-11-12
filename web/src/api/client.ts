@@ -94,3 +94,8 @@ export const api = {
   scan: (orgId: string, scanId: string, signal?: AbortSignal) =>
     request<Scan>("GET", `${org(orgId)}/scans/${encodeURIComponent(scanId)}`, undefined, signal),
 };
+
+/** The URL of an organization's PDF report: the API builds it on demand, the browser downloads it. */
+export function reportURL(orgId: string, kind: "executive" | "technical", lang: "fr" | "en"): string {
+  return `/api/v1/orgs/${encodeURIComponent(orgId)}/report?kind=${kind}&lang=${lang}`;
+}

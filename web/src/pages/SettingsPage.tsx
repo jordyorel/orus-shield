@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { api, ApiError } from "../api/client";
+import { api, ApiError, reportURL } from "../api/client";
 import type { Me, Member, Membership, Role } from "../api/types";
 import { useAuth } from "../auth";
 import { AppShell } from "../components/AppShell";
@@ -24,7 +24,6 @@ const TABS = [
 const UPCOMING: Record<string, { title: string; text: string }> = {
   notifications: { title: "Règles d’alerte", text: "Choisissez quel canal reçoit quelles alertes (email, WhatsApp, Slack, SMS), avec des heures calmes sauf pour les alertes critiques." },
   integrations: { title: "Intégrations", text: "WhatsApp Business, email, Slack, Microsoft Teams, Jira et webhook pour recevoir les alertes et créer des tickets." },
-  rapports: { title: "Rapports automatiques", text: "Rapport mensuel pour la direction, rapport technique après chaque scan et rapport de conformité trimestriel." },
   api: { title: "Clés d’API", text: "Pour intégrer les résultats dans vos propres outils." },
   abonnement: { title: "Abonnement", text: "Offre, actifs inclus et moyen de paiement : carte, PayPal ou Mobile Money (MTN, Airtel, Orange Money, M-Pesa, Wave)." },
 };
@@ -48,6 +47,7 @@ export function SettingsPage({ me, org }: { me: Me; org: Membership }) {
       <div className="content">
         {tab === "profil" && <Profile me={me} org={org} />}
         {tab === "equipe" && <Team me={me} org={org} />}
+        {tab === "rapports" && <Reports org={org} />}
         {UPCOMING[tab] && (
           <section className="card empty">
             <h2>{UPCOMING[tab].title}</h2>
@@ -57,6 +57,59 @@ export function SettingsPage({ me, org }: { me: Me; org: Membership }) {
         )}
       </div>
     </AppShell>
+  );
+}
+
+/** The mockup's automatic reports, not sent yet. */
+const AUTOMATIC = [
+  { name: "Rapport mensuel pour la direction", desc: "Score, évolution et priorités, sans jargon technique." },
+  { name: "Rapport technique après chaque scan", desc: "Détails, preuves et étapes de correction." },
+  { name: "Rapport de conformité trimestriel", desc: "Correspondance avec ISO 27001 et PCI-DSS, pour vos partenaires et auditeurs." },
+];
+
+/**
+ * Reports tab (docs/design/Settings.dc.html). Generating works now, in
+ * French or English; automatic sending and the logo come later.
+ */
+function Reports({ org }: { org: Membership }) {
+  const [kind, setKind] = useState<"executive" | "technical">("executive");
+  const [lang, setLang] = useState<"fr" | "en">("fr");
+  return (
+    <section className="card stack">
+      <h2>Rapports automatiques</h2>
+      {AUTOMATIC.map((r) => (
+        <label key={r.name} className="check-row">
+          <input type="checkbox" disabled />
+          <span>
+            <span className="strong">{r.name}</span> <span className="tag accepted">Bientôt</span>
+            <br />
+            <span className="small muted">{r.desc}</span>
+          </span>
+        </label>
+      ))}
+      <div className="report-actions">
+        <div className="field">
+          <label htmlFor="report-kind">Version</label>
+          <select id="report-kind" value={kind} onChange={(e) => setKind(e.target.value as "executive" | "technical")}>
+            <option value="executive">Direction</option>
+            <option value="technical">Technique</option>
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="report-lang">Langue</label>
+          <select id="report-lang" value={lang} onChange={(e) => setLang(e.target.value as "fr" | "en")}>
+            <option value="fr">Français</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        <a className="btn btn-primary" href={reportURL(org.org_id, kind, lang)} download>
+          Générer le rapport maintenant
+        </a>
+        <button type="button" className="btn btn-secondary" disabled title="Bientôt disponible">
+          Ajouter votre logo
+        </button>
+      </div>
+    </section>
   );
 }
 

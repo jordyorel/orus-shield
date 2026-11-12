@@ -113,4 +113,17 @@ describe("SettingsPage", () => {
     expect(await screen.findByText("Bientôt disponible")).toBeTruthy();
     expect(screen.getAllByRole("tab")).toHaveLength(7);
   });
+
+  it("downloads the report in the chosen version and language", async () => {
+    start("viewer", "rapports");
+    const link = (await screen.findByRole("link", { name: "Générer le rapport maintenant" })) as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe(`/api/v1/orgs/${ORG}/report?kind=executive&lang=fr`);
+    expect(link.hasAttribute("download")).toBe(true);
+    fireEvent.change(screen.getByLabelText("Version"), { target: { value: "technical" } });
+    fireEvent.change(screen.getByLabelText("Langue"), { target: { value: "en" } });
+    expect(link.getAttribute("href")).toBe(`/api/v1/orgs/${ORG}/report?kind=technical&lang=en`);
+    // Automatic sending is not built yet: shown, inactive.
+    expect(screen.getAllByRole("checkbox").every((c) => (c as HTMLInputElement).disabled)).toBe(true);
+    expect((screen.getByRole("button", { name: "Ajouter votre logo" }) as HTMLButtonElement).disabled).toBe(true);
+  });
 });

@@ -51,7 +51,7 @@ stay in the modules' English (decided 2026-11-10).
 | **CVE details**: CVE ID, CVSS score, EPSS (probability of exploitation), "known exploited" (CISA KEV) badge, affected version, fixed version | vulns module (Nuclei): CVE, CVSS, EPSS and KEV in evidence and references | done (engine); UI badges later |
 | **Filter "known vulnerabilities" / "configuration"** | check category | A |
 | **Source badge**: which scan found it (passive, active, deep web scan) | module ID | A |
-| Export (CSV now, PDF with the report) | | E |
+| Export (CSV now, PDF with the report) | PDF: done (technical report); CSV later | E |
 | Assign a finding to a member, due date, comment | | later |
 
 ## 5. Assets (Actifs) and attack surface (Surface)
@@ -83,10 +83,10 @@ stay in the modules' English (decided 2026-11-10).
 
 | Feature | What the user sees / does | Status |
 |---|---|---|
-| Report list per domain and period | | E |
-| **PDF report in French**: cover, executive summary in plain language (score, top 5 actions), findings by severity with remediation steps, asset inventory, appendix with evidence | engine data only, deterministic | E |
-| Two versions: "Direction" (2 pages, no jargon) and "Technique" (full) | | E |
-| Monthly report sent by email automatically to chosen recipients | notifications outbox | E |
+| Report list per domain and period | | later (reports are generated on demand, not stored) |
+| **PDF report in French and English**: cover, executive summary (score and trend, open problems by severity, top 5 actions, domains table), findings with evidence, remediation and references, accepted risks, asset inventory | `GET /orgs/{org}/report?kind=executive|technical&lang=fr|en`, engine data only | done |
+| Two versions: "Direction" (no jargon) and "Technique" (full) | Paramètres > Rapports (version and language), overview link | done |
+| Monthly report sent by email automatically to chosen recipients | notifications outbox | later (checkboxes shown, inactive) |
 | Branding for resellers (logo, colors) | | later (Entreprise) |
 | Compliance mapping annex (CIS v8, ISO 27001: "automated checks mapped to") | waits for Jordy's review | later |
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, ApiError } from "../api/client";
+import { api, ApiError, reportURL } from "../api/client";
 import type { Me, Membership, Overview, OverviewTarget, Severity } from "../api/types";
 import { AppShell } from "../components/AppShell";
 import { orgPath } from "../components/nav";
@@ -268,6 +268,9 @@ function OverviewContent({ data, org, loading }: { data: Overview; org: Membersh
           <p className="small muted card-note">
             Les contrôles automatisés associés à ces référentiels sont en cours de rédaction. Un scan externe ne couvre qu’une partie de chaque référentiel.
           </p>
+          <a className="dark-link" href={reportURL(org.org_id, "executive", "fr")} download>
+            Télécharger le rapport pour la direction →
+          </a>
         </section>
       </div>
 
