@@ -11,7 +11,10 @@ orusctl, ownership verification, per-IP ownership and the ports module, tested f
 the lab server on 2026-11-11). The passive `web` module (HTTPS redirect, security headers,
 cookies, disclosed versions) is done too, and so is attack surface discovery (passive
 `discovery` module: Certificate Transparency through crt.sh and common DNS names; the worker
-runs it first and every module scans `module.Target.Hosts`, at most 25 names). Step 7 follows the order in
+runs it first and every module scans `module.Target.Hosts`, at most 25 names). Known
+vulnerabilities come from the active `vulns` module (2026-11-12): Nuclei, a pinned external
+binary, whose only way out is `gateproxy`, a local proxy that sends each of its requests
+through the scan's gate (see "External tools"). Step 7 follows the order in
 `docs/ui-adaptation.md`: organizations (multi-tenant scoping, `store.Org` + PostgreSQL
 row-level security), the findings lifecycle (`fixed_at`, `finding_events` history) and the
 asset inventory (`module.Result` with findings and assets, `assets` table) and the check
@@ -86,7 +89,7 @@ engine/
   internal/totp/     TOTP codes (RFC 6238), stdlib only
   internal/seal/     AES-256-GCM sealing of TOTP secrets (key from ORUS_MFA_KEY)
   internal/module/   the Module interface and the registry
-  internal/modules/  one package per check (email, tls, ports, cdn, web, discovery, ...)
+  internal/modules/  one package per check (email, tls, ports, cdn, web, discovery, vulns, ...)
   internal/finding/  finding schema and validation
   internal/asset/    asset schema (hostname, ip, service, certificate) and validation
   internal/dnsname/  DNS name normalization, shared by module and asset
@@ -95,6 +98,7 @@ engine/
   internal/resolver/ DNS lookups for modules, gated (exclusions + rate limit) per scan
   internal/dialer/   TCP connections for modules, to gate-approved IPs only
   internal/gate/     per-scan module.Gate: customer exclusions + rate limiter
+  internal/gateproxy/ local HTTP proxy putting an external scanner (Nuclei) behind the gate
   internal/ownership/ DNS TXT ownership verification and re-checks (rule 1)
   internal/store/    PostgreSQL: organizations, targets, scan queue, findings lifecycle,
                      audit log; org-scoped handle (store.Org) + row-level security
@@ -102,7 +106,8 @@ engine/
   internal/mailer/   SMTP email and French templates (password reset, invitations, alerts)
   internal/notify/   delivers queued alert emails (outbox), in the worker process
   internal/modules/all/  the list of shipped modules
-deploy/              local infrastructure files (PostgreSQL init; lab/setup.sh: the test lab server)
+deploy/              local infrastructure files (PostgreSQL init; lab/setup.sh: the test lab server;
+                     nuclei/install.sh: pinned Nuclei and templates, checksums verified)
 web/                 dashboard (React + TypeScript, Vite)
 docs/
 ```
@@ -123,7 +128,10 @@ Every module:
   (package `asset`: hostnames under the target, IPs, services, certificates), and the
   checks it actually evaluated (`Result.Evaluated`; a check never claimed is not
   applicable, never passed), or an error; it never prints or logs findings itself;
-- goes through the shared rate limiter for every network call.
+- goes through the shared rate limiter for every network call;
+- reports in `Result.Unreached` the names the gate refused entirely, so their findings keep
+  their state; a module driving a long external scan sets `Info.Timeout` (else the worker's
+  `ORUS_MODULE_TIMEOUT`).
 
 ### Finding schema (fields to include)
 
@@ -221,6 +229,17 @@ admin in the `notifications` outbox (migration 0012), in FinishScan's transactio
 process delivers it (package `notify`: lease, retries at 1 min, 5 min, 30 min, 2 h, dropped
 after a day). The worker needs the same `ORUS_SMTP_*` and `ORUS_PUBLIC_URL` as the API.
 
+Known vulnerabilities: `deploy/nuclei/install.sh` installs the pinned Nuclei and templates
+in `.tools/nuclei` (git-ignored) and prints `ORUS_NUCLEI_BIN` and `ORUS_NUCLEI_TEMPLATES`
+for `.env` (worker only). The `vulns` module probes 443 and 80 of each name through the gate,
+then runs two passes on what answers (at most 8 sites): Nuclei's automatic scan (technology
+detection, then only the templates for what was detected) and a generic pass (exposed files,
+misconfigurations, takeovers, medium and above). About 5000 requests per site: some 20
+minutes at the default 5 requests per second (module timeout 2 hours, `module.Info.Timeout`).
+`go test ./internal/modules/vulns` runs the real binary against a local server when both
+variables are set. Findings' asset is the matched URL plus `#template-id`; detected
+technologies go to the hostname's `technologies` detail.
+
 DNS: `ORUS_DNS_SERVER` (an IP, e.g. 127.0.0.1 for Unbound or 1.1.1.1) sends every lookup of
 the worker, the API and orusctl to one server; unset, the machine's resolver is used. Set it
 in production: a network's resolver kept a stale NXDOMAIN for over an hour during the lab
@@ -279,7 +298,7 @@ tools below before the roadmap step listed for it.
 | React + TypeScript (Vite) | Dashboard in `web/`. Exact versions, each at least two weeks old when added; `.npmrc` sets `save-exact` and `ignore-scripts`; CI runs `npm ci` and `npm audit`. Deps: react, react-dom (MIT); dev: typescript (Apache-2.0), vite, @vitejs/plugin-react, vitest, jsdom, @testing-library/react and /dom, @types/react(-dom) (MIT). No UI kit (styles come from the mockups), no router library | Adopted 2026-11-10 | Step 7 |
 | golang.org/x/crypto | argon2id password hashing (stdlib only has PBKDF2, which is not memory-hard) | Adopted (BSD-3-Clause, maintained by the Go team) | Step 7.6 |
 | Redis or Valkey | Shared rate limiting and cache across workers | Defer until several workers run; check Redis's current license first, prefer Valkey (BSD) if in doubt | After step 4 |
-| Nuclei | Template-based vulnerability detection (Go, MIT) | Adopt as a library, wrapped in a module | After step 6 |
+| Nuclei | Template-based vulnerability detection (MIT; nuclei-templates MIT) | Adopted 2026-11-12 as a pinned external binary (v3.11.1, templates v10.5.1, `deploy/nuclei/install.sh`), not as a library (hundreds of dependencies). Module `vulns`, active. All its traffic goes through `gateproxy` (one gate call per request, with its path; TLS terminated so HTTPS paths are seen); HTTP templates only, no code/headless/file/JS templates, intrusive, DoS, brute force, default-login and fuzzing tags excluded, no interactsh, throwaway HOME, no inherited environment. Production must also run it without direct network access (its only route: the proxy) | Done |
 | OWASP ZAP | Deep web application testing ("Deep" scan profile) | Adopt later, run in Docker, driven through its API | After step 7 |
 | naabu / native Go | Port discovery | Preferred for the ports module (native TCP connect scan, or naabu, MIT) | Step 6 |
 | Nmap | Service fingerprinting | Do not integrate until its license (NPSL) has been reviewed for commercial SaaS use | Undecided |

@@ -12,13 +12,21 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/modules/email"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/ports"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/tlscheck"
+	"github.com/jordyorel/orus-shield/engine/internal/modules/vulns"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/web"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 )
 
+// Options configures the modules that drive external programs. The zero
+// value is fine where modules are only listed (API, orusctl): such a module
+// is registered but fails its runs until installed.
+type Options struct {
+	Nuclei vulns.Config // vulns module (ORUS_NUCLEI_BIN, ORUS_NUCLEI_TEMPLATES)
+}
+
 // Registry returns a registry with every module, using dns (see
 // resolver.FromEnv) and the real dialer.
-func Registry(dns resolver.Resolver) (*module.Registry, error) {
+func Registry(dns resolver.Resolver, opts Options) (*module.Registry, error) {
 	reg := module.NewRegistry()
 	for _, m := range []module.Module{
 		email.New(dns),
@@ -27,6 +35,7 @@ func Registry(dns resolver.Resolver) (*module.Registry, error) {
 		cdn.New(dns, dialer.NewSystem()),
 		web.New(dns, dialer.NewSystem()),
 		discovery.New(dns, discovery.Crtsh{}),
+		vulns.New(dns, dialer.NewSystem(), opts.Nuclei),
 	} {
 		if err := reg.Register(m); err != nil {
 			return nil, err

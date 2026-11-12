@@ -80,6 +80,23 @@ describe("ScansPage", () => {
     expect(screen.getByText(/Approfondi lance les mêmes modules que Standard/)).toBeTruthy();
   });
 
+  it("drives the web header checks and the known-vulnerability scan from one row", async () => {
+    const withWeb = [...modules, { id: "web", name: "Web", kind: "passive" as const, checks: 7 }, { id: "vulns", name: "Vulns", kind: "active" as const, checks: 6 }];
+    const calls = start("admin", {
+      [`GET ${base}/modules`]: ok({ items: withWeb }),
+      [`POST ${base}/targets/t1/scans`]: () => ({ status: 202, json: scan("s3", "queued", []) }),
+      [`POST ${base}/targets/t2/scans`]: () => ({ status: 202, json: scan("s4", "queued", []) }),
+    });
+    await screen.findByText("Sécurité des emails");
+    expect(screen.getByText("5 modules actifs")).toBeTruthy(); // rows, not engine modules
+    fireEvent.click(screen.getByRole("button", { name: "Désactiver Applications web" }));
+    expect(screen.getByText("4 modules actifs")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Activer Applications web" }));
+    fireEvent.click(screen.getByRole("button", { name: "Lancer maintenant" }));
+    await screen.findByText(/2 scans lancés/);
+    expect(calls.find((c) => c.key === `POST ${base}/targets/t1/scans`)?.body).toEqual({ modules: ["cdn", "email", "ports", "tls", "web", "vulns"] });
+  });
+
   it("groups a launch's scans and shows its real progress", async () => {
     const at = new Date(2026, 10, 10, 9, 0).toISOString();
     start("admin", {

@@ -30,20 +30,27 @@ const PROFILES: ProfileDef[] = [
 
 /**
  * The mockup's modules, in its order, mapped to the engine's module IDs.
- * engine is null for a module the engine does not have yet.
+ * engine is null for a module the engine does not have yet. One row may
+ * drive several engine modules: "Applications web" is the passive header
+ * checks (web) and the known-vulnerability scan (vulns, Nuclei).
  */
-const MODULES: { engine: string | null; name: string; desc: string; tag?: "Intrusif" | "Nouveau" }[] = [
-  { engine: "discovery", name: "Découverte de la surface d’attaque", desc: "Sous-domaines, certificats publics, plages IP associées." },
-  { engine: "ports", name: "Ports et services", desc: "Services exposés, versions et configurations dangereuses." },
-  { engine: "web", name: "Applications web", desc: "Injections, authentification, en-têtes, CMS obsolètes." },
-  { engine: "email", name: "Sécurité des emails", desc: "SPF, DKIM, DMARC, serveurs de messagerie." },
-  { engine: "tls", name: "Certificats et TLS", desc: "Expiration, protocoles faibles, chaînes invalides." },
-  { engine: "cdn", name: "CDN et protection web", desc: "Détection des CDN et des pare-feux applicatifs (WAF)." },
+const MODULES: { engine: string[] | null; name: string; desc: string; tag?: "Intrusif" | "Nouveau" }[] = [
+  { engine: ["discovery"], name: "Découverte de la surface d’attaque", desc: "Sous-domaines, certificats publics, plages IP associées." },
+  { engine: ["ports"], name: "Ports et services", desc: "Services exposés, versions et configurations dangereuses." },
+  { engine: ["web", "vulns"], name: "Applications web", desc: "Injections, authentification, en-têtes, CMS obsolètes." },
+  { engine: ["email"], name: "Sécurité des emails", desc: "SPF, DKIM, DMARC, serveurs de messagerie." },
+  { engine: ["tls"], name: "Certificats et TLS", desc: "Expiration, protocoles faibles, chaînes invalides." },
+  { engine: ["cdn"], name: "CDN et protection web", desc: "Détection des CDN et des pare-feux applicatifs (WAF)." },
   { engine: null, name: "Microsoft 365", desc: "Double authentification, administrateurs, partages externes." },
   { engine: null, name: "Fuites de données", desc: "Adresses et identifiants dans des fuites publiques." },
   { engine: null, name: "Validation par agents IA", desc: "Tente d’exploiter les failles de façon contrôlée pour éliminer les faux positifs.", tag: "Intrusif" },
   { engine: null, name: "Audit de l’usage de l’IA", desc: "Clés d’API exposées, chatbots vulnérables à l’injection de prompt.", tag: "Nouveau" },
 ];
+
+/** The engine modules of a row that this engine actually has. */
+function rowModules(engine: string[] | null, catalog: ModuleInfo[] | null): string[] {
+  return (engine ?? []).filter((id) => (catalog ?? []).some((c) => c.id === id));
+}
 
 /** The mockup's frequencies. "Continue" needs change detection: not yet. */
 const FREQUENCIES: { id: Frequency | "continuous"; label: string; soon?: boolean }[] = [
@@ -222,13 +229,16 @@ export function ScansPage({ me, org }: { me: Me; org: Membership }) {
     changed();
   };
 
-  const toggle = (id: string) => {
+  const toggle = (ids: string[], on: boolean) => {
     const next = new Set(selected);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
+    for (const id of ids) {
+      if (on) next.add(id);
+      else next.delete(id);
+    }
     setSelected(next);
     changed();
   };
+  const activeRows = MODULES.filter((m) => rowModules(m.engine, catalog).some((id) => selected.has(id))).length;
 
   const launch = async () => {
     if (!targets || targets.length === 0 || selected.size === 0) return;
@@ -351,12 +361,13 @@ export function ScansPage({ me, org }: { me: Me; org: Membership }) {
             <section className="card grow-2">
               <h2>Modules</h2>
               <p className="card-sub">
-                {selected.size} {plural(selected.size, "module actif", "modules actifs")}
+                {activeRows} {plural(activeRows, "module actif", "modules actifs")}
               </p>
               <div className="modules">
                 {MODULES.map((m) => {
-                  const known = m.engine !== null && catalog.some((c) => c.id === m.engine);
-                  const on = known && selected.has(m.engine!);
+                  const ids = rowModules(m.engine, catalog);
+                  const known = ids.length > 0;
+                  const on = ids.some((id) => selected.has(id));
                   return (
                     <div className={known ? "module" : "module upcoming"} key={m.name}>
                       <div>
@@ -372,7 +383,7 @@ export function ScansPage({ me, org }: { me: Me; org: Membership }) {
                         aria-pressed={on}
                         aria-label={known ? (on ? "Désactiver " : "Activer ") + m.name : `${m.name} : bientôt disponible`}
                         disabled={!known}
-                        onClick={() => known && toggle(m.engine!)}
+                        onClick={() => known && toggle(ids, !on)}
                       >
                         <span />
                       </button>

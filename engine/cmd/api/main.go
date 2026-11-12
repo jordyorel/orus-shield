@@ -48,7 +48,7 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
-	reg, err := all.Registry(cfg.dns)
+	reg, err := all.Registry(cfg.dns, all.Options{})
 	if err != nil {
 		return err
 	}

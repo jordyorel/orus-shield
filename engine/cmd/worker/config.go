@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/mailer"
+	"github.com/jordyorel/orus-shield/engine/internal/modules/vulns"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 	"github.com/jordyorel/orus-shield/engine/internal/worker"
 )
@@ -21,6 +23,7 @@ type config struct {
 	smtp      *mailer.SMTP
 	publicURL string
 	dns       *resolver.System
+	nuclei    vulns.Config
 }
 
 // loadConfig reads the configuration through getenv (os.Getenv in
@@ -37,6 +40,9 @@ type config struct {
 //	ORUS_DNS_SERVER       DNS server for every lookup (modules, ownership), e.g.
 //	                      127.0.0.1 (Unbound) or 1.1.1.1; unset: the system's.
 //	                      Production should set it: see resolver.NewWithServer
+//	ORUS_NUCLEI_BIN       path to the pinned nuclei binary (vulns module)
+//	ORUS_NUCLEI_TEMPLATES path to the pinned nuclei-templates directory;
+//	                      both or neither. Unset: the vulns module fails its runs
 func loadConfig(getenv func(string) string) (config, error) {
 	var c config
 	c.databaseURL = getenv("ORUS_DATABASE_URL")
@@ -86,5 +92,26 @@ func loadConfig(getenv func(string) string) (config, error) {
 	if c.dns, err = resolver.FromEnv(getenv); err != nil {
 		return config{}, fmt.Errorf("ORUS_DNS_SERVER: %w", err)
 	}
+	if c.nuclei, err = nucleiFromEnv(getenv); err != nil {
+		return config{}, err
+	}
 	return c, nil
+}
+
+// nucleiFromEnv reads where Nuclei is installed. Both paths must exist and
+// be absolute: a relative path would depend on the worker's directory.
+func nucleiFromEnv(getenv func(string) string) (vulns.Config, error) {
+	bin, templates := getenv("ORUS_NUCLEI_BIN"), getenv("ORUS_NUCLEI_TEMPLATES")
+	if bin == "" && templates == "" {
+		return vulns.Config{}, nil
+	}
+	for name, path := range map[string]string{"ORUS_NUCLEI_BIN": bin, "ORUS_NUCLEI_TEMPLATES": templates} {
+		if path == "" || !filepath.IsAbs(path) {
+			return vulns.Config{}, fmt.Errorf("%s=%q: want an absolute path (set both ORUS_NUCLEI_BIN and ORUS_NUCLEI_TEMPLATES, or neither)", name, path)
+		}
+		if _, err := os.Stat(path); err != nil {
+			return vulns.Config{}, fmt.Errorf("%s: %w", name, err)
+		}
+	}
+	return vulns.Config{Binary: bin, Templates: templates}, nil
 }

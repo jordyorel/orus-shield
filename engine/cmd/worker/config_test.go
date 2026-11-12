@@ -109,3 +109,34 @@ func TestLoadConfigDNS(t *testing.T) {
 		t.Error("ORUS_DNS_SERVER with a name: nil error")
 	}
 }
+
+func TestLoadConfigNuclei(t *testing.T) {
+	dir := t.TempDir()
+	base := map[string]string{"ORUS_DATABASE_URL": "postgres://localhost/orus"}
+	with := func(kv ...string) map[string]string {
+		m := map[string]string{}
+		for k, v := range base {
+			m[k] = v
+		}
+		for i := 0; i < len(kv); i += 2 {
+			m[kv[i]] = kv[i+1]
+		}
+		return m
+	}
+	c, err := loadConfig(env(with("ORUS_NUCLEI_BIN", dir, "ORUS_NUCLEI_TEMPLATES", dir)))
+	if err != nil || c.nuclei.Binary != dir || c.nuclei.Templates != dir {
+		t.Errorf("both set: %+v, %v", c.nuclei, err)
+	}
+	if c, err := loadConfig(env(base)); err != nil || c.nuclei.Binary != "" {
+		t.Errorf("neither set: %+v, %v", c.nuclei, err)
+	}
+	for name, m := range map[string]map[string]string{
+		"only the binary": with("ORUS_NUCLEI_BIN", dir),
+		"relative path":   with("ORUS_NUCLEI_BIN", "bin/nuclei", "ORUS_NUCLEI_TEMPLATES", dir),
+		"missing path":    with("ORUS_NUCLEI_BIN", dir+"/nope", "ORUS_NUCLEI_TEMPLATES", dir),
+	} {
+		if _, err := loadConfig(env(m)); err == nil {
+			t.Errorf("%s: nil error", name)
+		}
+	}
+}

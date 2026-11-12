@@ -50,7 +50,7 @@ func run(log *slog.Logger) error {
 	}
 
 	// One resolver for modules and ownership checks (ORUS_DNS_SERVER).
-	registry, err := all.Registry(cfg.dns)
+	registry, err := all.Registry(cfg.dns, all.Options{Nuclei: cfg.nuclei})
 	if err != nil {
 		return err
 	}
@@ -62,6 +62,9 @@ func run(log *slog.Logger) error {
 		go notify.New(st, *cfg.smtp, cfg.publicURL, log.With("component", "notify")).Run(ctx, notify.DefaultInterval)
 	} else {
 		log.Warn("ORUS_SMTP_ADDR is not set: email alerts will not be sent")
+	}
+	if cfg.nuclei.Binary == "" {
+		log.Warn("ORUS_NUCLEI_BIN is not set: the vulns module (known vulnerabilities) will fail")
 	}
 	return worker.New(st, registry, verifier, cfg.worker, log).Run(ctx)
 }

@@ -144,7 +144,7 @@ func main() {
 		if err != nil {
 			return fmt.Errorf("ORUS_DNS_SERVER: %w", err)
 		}
-		reg, err := all.Registry(dns)
+		reg, err := all.Registry(dns, all.Options{})
 		if err != nil {
 			return err
 		}
