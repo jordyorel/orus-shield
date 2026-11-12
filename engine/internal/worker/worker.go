@@ -8,6 +8,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -40,6 +41,7 @@ type Store interface {
 	EnqueueDueScans(ctx context.Context, now time.Time, limit int) (int, error)
 	CurrentHostnames(ctx context.Context, targetID string) ([]string, error)
 	SubscriptionOf(ctx context.Context, orgID string) (*plan.Subscription, error)
+	ScanProfileOf(ctx context.Context, orgID string) (string, error)
 }
 
 // Ownership enforces security rule 1 for active modules (see package
@@ -211,6 +213,19 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 		sub = nil
 	}
 	offer := plan.Resolve(sub, w.now()).Plan
+	// The deep profile, read now like the offer: chosen with a consent on
+	// record, and included in the offer in force. Every module receives
+	// it; those without a deep mode ignore it. Unreadable: standard.
+	var config json.RawMessage
+	if offer.DeepScans {
+		profile, err := w.store.ScanProfileOf(scanCtx, target.OrgID)
+		if err != nil {
+			log.Warn("read scan profile", "err", err)
+		}
+		if profile == store.ProfileDeep {
+			config = json.RawMessage(`{"deep":true}`)
+		}
+	}
 	mt := module.Target{Domain: target.Domain, Verified: w.stillVerified(scanCtx, sc, target, g, log)}
 	// The names to scan: the inventory's current hostnames (subdomains found
 	// by earlier scans), plus what a discovery module finds in this one.
@@ -262,7 +277,7 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 		if m, ok := w.modules.Get(id); ok && m.Info().Kind == module.KindActive && !offer.ActiveModules {
 			err = &refusedError{fmt.Errorf("module %q: the %s offer runs passive checks only", id, offer.Name)}
 		} else {
-			res, checks, err = w.runModule(scanCtx, id, mt, gateFor(id))
+			res, checks, err = w.runModule(scanCtx, id, mt, gateFor(id), config)
 		}
 		if err == nil && w.providesHosts(id) {
 			mt.Hosts = capHosts(mergeHosts(mt.Hosts, res.Assets), offer.HostsPerScan)
@@ -482,7 +497,7 @@ func (e *refusedError) Error() string { return "refused: " + e.err.Error() }
 
 // runModule runs one module with its own timeout, checks its output, and
 // evaluates its check catalog (module.Evaluate).
-func (w *Worker) runModule(ctx context.Context, id string, t module.Target, g module.Gate) (res module.Result, checks []module.CheckOutcome, err error) {
+func (w *Worker) runModule(ctx context.Context, id string, t module.Target, g module.Gate, config json.RawMessage) (res module.Result, checks []module.CheckOutcome, err error) {
 	m, ok := w.modules.Get(id)
 	if !ok {
 		return module.Result{}, nil, &refusedError{fmt.Errorf("unknown module %q", id)}
@@ -506,7 +521,7 @@ func (w *Worker) runModule(ctx context.Context, id string, t module.Target, g mo
 	}
 	mctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	res, err = m.Run(mctx, module.Request{Target: t, Gate: g})
+	res, err = m.Run(mctx, module.Request{Target: t, Gate: g, Config: config})
 	if err != nil {
 		return module.Result{}, nil, err
 	}

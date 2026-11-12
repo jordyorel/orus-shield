@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -20,10 +21,14 @@ var switchableModules = []string{"email", "tls", "ports", "vulns"}
 // vulnerability pass takes some 20 minutes per site.
 var quickSkips = []string{"vulns"}
 
+// deepOnly are the modules only the deep profile schedules (the deep web
+// scan; it does nothing without the deep configuration anyway).
+var deepOnly = []string{"zap"}
+
 type orgSettingsJSON struct {
 	AlertLevel      string   `json:"alert_level"` // critical, high, all
 	EmailAlerts     bool     `json:"email_alerts"`
-	Profile         string   `json:"profile"` // quick, standard
+	Profile         string   `json:"profile"` // quick, standard, deep
 	DisabledModules []string `json:"disabled_modules"`
 	// Frequency: daily, weekly, monthly; "" while none was chosen.
 	Frequency  string `json:"frequency"`
@@ -31,12 +36,18 @@ type orgSettingsJSON struct {
 	Hour       int    `json:"hour"`
 	TimeZone   string `json:"timezone"`
 	RatePerSec int    `json:"rate_per_sec"` // 0: the worker's default
+	// DeepConsent (request only): the customer confirms being allowed to
+	// have these servers tested deeply. Required the first time the deep
+	// profile is chosen.
+	DeepConsent bool `json:"deep_consent,omitempty"`
+	// DeepConsentAt (response only): when that consent was given.
+	DeepConsentAt *time.Time `json:"deep_consent_at"`
 }
 
 func toOrgSettingsJSON(s store.OrgSettings) orgSettingsJSON {
 	return orgSettingsJSON{AlertLevel: s.AlertLevel, EmailAlerts: s.EmailAlerts, Profile: s.Profile,
 		DisabledModules: s.DisabledModules, Frequency: s.Frequency, Weekday: s.Weekday, Hour: s.Hour,
-		TimeZone: s.TimeZone, RatePerSec: s.RatePerSec}
+		TimeZone: s.TimeZone, RatePerSec: s.RatePerSec, DeepConsentAt: s.DeepConsentAt}
 }
 
 // getSettings answers GET /orgs/{org}/settings.
@@ -59,6 +70,9 @@ func (s *Server) scheduledModules(st store.OrgSettings, p plan.Plan) []string {
 			continue
 		}
 		if st.Profile == store.ProfileQuick && slices.Contains(quickSkips, id) {
+			continue
+		}
+		if st.Profile != store.ProfileDeep && slices.Contains(deepOnly, id) {
 			continue
 		}
 		if !p.ActiveModules && len(s.activeModules([]string{id})) > 0 {
@@ -112,6 +126,10 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request, req orgRequ
 	if !ok {
 		return
 	}
+	if st.Profile == store.ProfileDeep && !p.DeepScans {
+		planLimit(w, fmt.Sprintf("the %s offer does not include the deep profile", p.Name))
+		return
+	}
 	if st.Frequency != "" && !p.Allows(frequencyOf(schedule.Frequency(st.Frequency))) {
 		planLimit(w, fmt.Sprintf("the %s offer does not allow %s scans", p.Name, st.Frequency))
 		return
@@ -122,7 +140,18 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request, req orgRequ
 		writeError(w, http.StatusBadRequest, "invalid schedule: "+err.Error())
 		return
 	}
-	if err := req.org.SaveSettings(ctx, st, actor(req)); err != nil {
+	consent := st.Profile == store.ProfileDeep && body.DeepConsent
+	err = req.org.SaveSettings(ctx, st, consent, actor(req))
+	if errors.Is(err, store.ErrNoDeepConsent) {
+		writeErrorCode(w, http.StatusBadRequest, "deep_consent_required",
+			"the deep profile needs deep_consent: confirm being allowed to have these servers tested")
+		return
+	}
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	if st, err = req.org.Settings(ctx); err != nil {
 		s.internalError(w, r, err)
 		return
 	}
@@ -148,8 +177,8 @@ func validSettings(st store.OrgSettings) string {
 	if !slices.Contains([]string{store.AlertCritical, store.AlertHigh, store.AlertAll}, st.AlertLevel) {
 		return "alert_level must be critical, high or all"
 	}
-	if st.Profile != store.ProfileQuick && st.Profile != store.ProfileStandard {
-		return "profile must be quick or standard"
+	if st.Profile != store.ProfileQuick && st.Profile != store.ProfileStandard && st.Profile != store.ProfileDeep {
+		return "profile must be quick, standard or deep"
 	}
 	for _, m := range st.DisabledModules {
 		if !slices.Contains(switchableModules, m) {

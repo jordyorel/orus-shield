@@ -64,13 +64,18 @@ const blackHole = "\x00blackhole" // never answers (filtered port)
 type fakeDialer struct {
 	mu     sync.Mutex
 	routes map[string]string
-	dialed []string
+	// answers: what a silent service replies once the client writes
+	// (an HTTP server answering the deep scan's HEAD request).
+	answers  map[string]string
+	requests []string
+	dialed   []string
 }
 
 func (f *fakeDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	f.mu.Lock()
 	f.dialed = append(f.dialed, address)
 	banner, ok := f.routes[address]
+	answer := f.answers[address]
 	f.mu.Unlock()
 	switch {
 	case !ok:
@@ -84,10 +89,25 @@ func (f *fakeDialer) DialContext(ctx context.Context, network, address string) (
 		if banner != "" {
 			_, _ = server.Write([]byte(banner))
 		}
+		if answer != "" {
+			buf := make([]byte, 512)
+			if n, _ := server.Read(buf); n > 0 {
+				f.mu.Lock()
+				f.requests = append(f.requests, string(buf[:n]))
+				f.mu.Unlock()
+				_, _ = server.Write([]byte(answer))
+			}
+		}
 		_, _ = io.Copy(io.Discard, server) // until the client closes
 		_ = server.Close()
 	}()
 	return client, nil
+}
+
+func (f *fakeDialer) reqs() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.requests)
 }
 
 func (f *fakeDialer) addrs() []string {
@@ -101,6 +121,7 @@ type fakeGate struct {
 	mu          sync.Mutex
 	excludeIPs  map[netip.Addr]bool
 	excludePort map[int]bool
+	excludePath map[string]bool
 	fail        error
 	delay       time.Duration
 	seen        []module.Destination
@@ -113,7 +134,7 @@ func (g *fakeGate) Allow(ctx context.Context, d module.Destination) error {
 	if g.fail != nil {
 		return g.fail
 	}
-	if g.excludeIPs[d.IP] || g.excludePort[d.Port] {
+	if g.excludeIPs[d.IP] || g.excludePort[d.Port] || (d.Path != "" && g.excludePath[d.Path]) {
 		return fmt.Errorf("excluded: %w", module.ErrExcluded)
 	}
 	if g.delay > 0 {
@@ -582,6 +603,8 @@ func TestEvaluatedChecks(t *testing.T) {
 			want = module.CheckFailed
 		case "port-ssh-exposed":
 			want = module.CheckNotApplicable // excluded: never probed
+		case "port-other-service-exposed":
+			want = module.CheckNotApplicable // deep scans only
 		}
 		if o.Status != want {
 			t.Errorf("%s = %s, want %s", o.ID, o.Status, want)

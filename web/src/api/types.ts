@@ -284,6 +284,8 @@ export interface Plan {
   alerts: boolean;
   reports: boolean;
   threats: boolean;
+  /** The deep profile ("Approfondi"). */
+  deep_scans: boolean;
   usd_monthly: number;
   usd_yearly: number;
   xaf_monthly: number;
@@ -308,13 +310,17 @@ export type AlertLevel = "critical" | "high" | "all";
 export interface OrgSettings {
   alert_level: AlertLevel;
   email_alerts: boolean;
-  profile: "quick" | "standard";
+  profile: "quick" | "standard" | "deep";
   disabled_modules: string[];
   frequency: Frequency | "";
   weekday: number;
   hour: number;
   timezone: string;
   rate_per_sec: number;
+  /** Request only: the customer confirms being allowed to have the servers tested deeply. */
+  deep_consent?: boolean;
+  /** When that consent was given, null without one. */
+  deep_consent_at: string | null;
 }
 
 /** activityJSON */

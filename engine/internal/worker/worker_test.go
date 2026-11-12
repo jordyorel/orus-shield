@@ -32,6 +32,7 @@ type fakeStore struct {
 	finished  []store.ScanResult
 	failed    []string // reasons
 	sub       *plan.Subscription
+	profile   string
 	audit     []store.AuditEntry
 	leaseLost bool // ExtendLease reports the lease as lost
 	extended  int
@@ -95,6 +96,15 @@ func (f *fakeStore) SubscriptionOf(ctx context.Context, orgID string) (*plan.Sub
 		return f.sub, nil
 	}
 	return &plan.Subscription{Plan: plan.Pro, Status: plan.Active}, nil
+}
+
+func (f *fakeStore) ScanProfileOf(ctx context.Context, orgID string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.profile == "" {
+		return store.ProfileStandard, nil
+	}
+	return f.profile, nil
 }
 
 func (f *fakeStore) FinishScan(ctx context.Context, r store.ScanResult) error {
@@ -808,5 +818,38 @@ func TestDiscoveryRunsFirstAndFeedsHosts(t *testing.T) {
 	}
 	if want := []string{"old.example.com", "shop.example.com", "vpn.example.com"}; !slices.Equal(tlsHosts, want) {
 		t.Errorf("tls got hosts %v, want %v", tlsHosts, want)
+	}
+}
+
+// The deep profile reaches every module as Config {"deep":true}, only when
+// the organization chose it and its offer includes it.
+func TestDeepProfileConfig(t *testing.T) {
+	soon := time.Now().Add(time.Hour)
+	tests := []struct {
+		name    string
+		profile string
+		sub     *plan.Subscription
+		want    string
+	}{
+		{"standard", store.ProfileStandard, nil, ""},
+		{"deep on Pro", store.ProfileDeep, nil, `{"deep":true}`},
+		{"deep on Essentiel", store.ProfileDeep, &plan.Subscription{Plan: plan.SME, Status: plan.Trialing, TrialEndsAt: &soon}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got string
+			m := &fakeModule{info: module.Info{ID: "probe", Name: "Probe", Kind: module.KindPassive}, run: func(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+				got = string(req.Config)
+				return nil, nil
+			}}
+			w, st := setup(t, true, "{}", m)
+			st.profile, st.sub = tt.profile, tt.sub
+			if _, err := w.RunOnce(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
+				t.Errorf("config = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

@@ -4,6 +4,7 @@ import type { Member, OrgSettings, Plan, Role, Target } from "../../api/types";
 import { formatExclusions, parseExclusions } from "../../exclusions";
 import { Link } from "../../router";
 import { MODS, ModIcon, Soon } from "../icons";
+import { CloseButton, SevTag } from "../sheets";
 import { DAYS, byPriority, sinceText } from "../model";
 import { useOrg } from "../OrgData";
 import { useUI } from "../ui";
@@ -48,7 +49,7 @@ export function limitRows(plans: Plan[]): [string, ...string[]][] {
     ["Menaces émergentes", ...col((p) => (p.threats ? "Oui" : "Non"))],
     ["Alertes email", ...col((p) => (p.alerts ? "Oui" : "Non"))],
     ["Rapports PDF", ...col((p) => (p.reports ? "Direction et Technique" : "Non"))],
-    ["Profil approfondi", "Bientôt", "Bientôt", "Bientôt"],
+    ["Profil approfondi", ...col((p) => (p.deep_scans ? "Oui" : "Non"))],
   ];
 }
 
@@ -60,7 +61,7 @@ function Switch({ on, label, disabled, onClick }: { on: boolean; label: string; 
 
 export function ReglagesPage() {
   const { data, org, isAdmin, setSettings, issues } = useOrg();
-  const { toast, theme, setTheme } = useUI();
+  const { toast, theme, setTheme, showSheet, closeAll } = useUI();
   const [preview, setPreview] = useState<{ name: string; msg: string; typing: boolean } | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [draft, setDraft] = useState<OrgSettings | null>(data?.settings ?? null);
@@ -114,7 +115,7 @@ export function ReglagesPage() {
     return `${ids.size} contrôle${ids.size > 1 ? "s" : ""}, vérifiés ${sinceText(last, new Date())}`;
   };
 
-  const prof: [OrgSettings["profile"] | "deep", string, number, string, string][] = [
+  const prof: [OrgSettings["profile"], string, number, string, string][] = [
     ["quick", "Rapide", 1, "5 minutes", "Contrôles passifs et ports principaux"],
     ["standard", "Standard", 2, "40 minutes", "Tous les contrôles, 50 ports courants"],
     ["deep", "Approfondi", 3, "2 à 3 heures", "1 000 ports, versions et tests étendus"],
@@ -211,20 +212,34 @@ export function ReglagesPage() {
             <button
               key={k}
               type="button"
-              className={"prof" + (k === "deep" ? " is-soon" : "")}
+              className="prof"
               aria-pressed={s.profile === k}
-              aria-disabled={k === "deep" || undefined}
-              onClick={() => (k === "deep" ? toast("Profil approfondi : bientôt disponible") : save({ ...s, profile: k }))}
+              aria-disabled={(k === "deep" && !plan.deep_scans) || undefined}
+              onClick={() => {
+                if (k !== "deep") save({ ...s, profile: k });
+                else if (!isAdmin) toast("Réservé aux administrateurs");
+                else if (!plan.deep_scans) toast(`Le profil approfondi est inclus dans l’offre Pro. Changez d’offre plus bas.`);
+                else if (s.profile !== "deep")
+                  showSheet(
+                    <ConsentSheet
+                      onConfirm={async () => {
+                        const next: OrgSettings = { ...s, profile: "deep", deep_consent: true };
+                        const saved = await api.saveSettings(org.org_id, next);
+                        setDraft(saved);
+                        setSettings(saved);
+                        closeAll();
+                        toast("Profil approfondi activé");
+                      }}
+                    />,
+                  );
+              }}
             >
               <span className="bars" aria-hidden="true">
                 {[1, 2, 3].map((x) => (
                   <i key={x} className={x <= lvl ? "on" : ""} style={{ height: 6 + x * 6 + "px" }} />
                 ))}
               </span>
-              <span className="pt2">
-                {l}
-                {k === "deep" && <Soon />}
-              </span>
+              <span className="pt2">{l}</span>
               <span className="pd">{d}</span>
               <span className="pdur">{dur}</span>
             </button>
@@ -695,5 +710,64 @@ function ScanHistory() {
         <p className="hint">Aucun scan pour l’instant.</p>
       )}
     </div>
+  );
+}
+
+/** ConsentSheet is the mockup's openConsent: the deep profile needs an explicit consent. */
+function ConsentSheet({ onConfirm }: { onConfirm: () => Promise<void> }) {
+  const { closeAll } = useUI();
+  const [checked, setChecked] = useState(false);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const confirm = async () => {
+    if (!checked) {
+      setErr("Cochez la case pour confirmer votre autorisation.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await onConfirm();
+    } catch {
+      setErr("Profil non enregistré, réessayez.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <div className="shead">
+        <SevTag s="high" label="À lire avant d’activer" />
+        <CloseButton />
+      </div>
+      <h2 id="sheet-title">Le profil approfondi teste vos serveurs plus fort</h2>
+      <p className="why">Il vérifie 1 000 ports, identifie la version de chaque service et lance des tests applicatifs étendus.</p>
+      <h3>Ce que cela implique</h3>
+      <ul className="steps plain">
+        <li>
+          <span>Le scan peut durer 2 à 3 heures.</span>
+        </li>
+        <li>
+          <span>Un serveur ancien ou fragile peut ralentir pendant le test.</span>
+        </li>
+        <li>
+          <span>Votre hébergeur peut voir ce trafic comme une attaque : prévenez-le si son contrat l’exige.</span>
+        </li>
+      </ul>
+      <label className="consent">
+        <input type="checkbox" id="consent-box" checked={checked} onChange={(e) => setChecked(e.target.checked)} />
+        <span>Je confirme être autorisé à faire tester ces serveurs, et j’accepte ces risques.</span>
+      </label>
+      <p id="consent-err" role="alert" className="err">
+        {err}
+      </p>
+      <div className="actions sticky">
+        <button className="btn" type="button" disabled={busy} onClick={() => void confirm()}>
+          Activer le profil approfondi
+        </button>
+        <button className="btn ghost" type="button" onClick={closeAll}>
+          Annuler
+        </button>
+      </div>
+    </>
   );
 }

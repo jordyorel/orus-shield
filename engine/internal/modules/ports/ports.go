@@ -8,12 +8,21 @@
 // so this module cannot reach a hosting provider's or a CDN's servers.
 //
 // It is as little intrusive as possible: a TCP connection per port, then it
-// reads what the service sends on its own (its banner) and closes. It never
-// sends a request or a probe payload.
+// reads what the service sends on its own (its banner) and closes. In the
+// standard profile it never sends anything.
+//
+// The deep profile ("Approfondi", Config {"deep": true}, chosen by the
+// customer with an explicit consent) scans more than 1 000 ports (see
+// extended.go) and identifies the software and version behind each open
+// one: from its banner, or, when the service stays silent, from the
+// answer to one "HEAD / HTTP/1.0" request, the most harmless request
+// there is. That request goes through the gate like a connection does.
 package ports
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -47,7 +56,18 @@ const (
 	defaultBannerTimeout = 2 * time.Second
 	// maxBanner bounds what we read from the target (rule 7).
 	maxBanner = 256
+	// maxHTTPHead bounds what we read of an HTTP answer: headers only.
+	maxHTTPHead = 2048
+	// Timeout covers a deep scan: about 1 100 ports on up to 8 addresses,
+	// at the customer's rate.
+	Timeout = 90 * time.Minute
 )
+
+// Config is the module's configuration (module.Request.Config).
+type Config struct {
+	// Deep scans the extended port range and identifies versions.
+	Deep bool `json:"deep"`
+}
 
 // ErrNoVerifiedIP means none of the target's addresses could be scanned,
 // usually because none has verified ownership. The module then fails rather
@@ -77,7 +97,7 @@ func New(dns resolver.Resolver, dial dialer.Dialer) *Module {
 
 // Info implements module.Module.
 func (m *Module) Info() module.Info {
-	return module.Info{ID: ID, Name: "Exposed network services", Kind: module.KindActive, Checks: Checks}
+	return module.Info{ID: ID, Name: "Exposed network services", Kind: module.KindActive, Checks: Checks, Timeout: Timeout}
 }
 
 // Checks is the module's catalog: one check per family of services.
@@ -95,6 +115,8 @@ var Checks = []module.Check{
 	familyCheck(voip, "No telephony (SIP) server exposed"),
 	familyCheck(cleartextMail, "No clear-text mail access exposed"),
 	familyCheck(ssh, "SSH not exposed"),
+	// Evaluated by deep scans only.
+	familyCheck(otherService, "No unexpected service exposed"),
 }
 
 func familyCheck(f family, title string) module.Check {
@@ -102,8 +124,8 @@ func familyCheck(f family, title string) module.Check {
 }
 
 // Run implements module.Module. It scans the addresses of the domain and of
-// its subdomains known to the scan (module.Target.ScanHosts). req.Config is
-// ignored for now.
+// its subdomains known to the scan (module.Target.ScanHosts). req.Config
+// (Config) chooses the deep profile.
 //
 // Assets: each address actually scanned and its host name, and every open
 // port of the catalog. Addresses the gate refused are not reported: we did
@@ -112,6 +134,16 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 	domain, err := module.NormalizeDomain(req.Target.Domain)
 	if err != nil {
 		return module.Result{}, fmt.Errorf("ports: %w", err)
+	}
+	var cfg Config
+	if len(req.Config) > 0 {
+		if err := json.Unmarshal(req.Config, &cfg); err != nil {
+			return module.Result{}, fmt.Errorf("ports: invalid config: %w", err)
+		}
+	}
+	services := m.services
+	if cfg.Deep {
+		services = deepServices()
 	}
 	dns := resolver.Gated{Gate: req.Gate, Inner: m.dns}
 	dial := dialer.Gated{Gate: req.Gate, Inner: connectTimeoutDialer{m.dial, m.connectTimeout}}
@@ -129,7 +161,7 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 	evaluated := make(map[string]bool)
 	scanned := 0
 	for _, t := range targets {
-		open, probed, refused, err := m.scanIP(ctx, dial, t)
+		open, probed, refused, err := m.scanIP(ctx, dial, req.Gate, services, cfg.Deep, t)
 		if err != nil {
 			return module.Result{}, fmt.Errorf("ports: %w", err)
 		}
@@ -172,6 +204,15 @@ func (o openPort) asset(a address) asset.Asset {
 	if o.banner != "" {
 		details["banner"] = asset.TruncateDetail(o.banner)
 	}
+	if o.id.service != "" {
+		details["service"] = asset.TruncateDetail(o.id.service)
+	}
+	if o.id.product != "" {
+		details["product"] = asset.TruncateDetail(o.id.product)
+	}
+	if o.id.version != "" {
+		details["version"] = asset.TruncateDetail(o.id.version)
+	}
 	return asset.Service(a.ip, uint16(o.svc.port), details) //nolint:gosec // G115: catalog ports are constants in 1..65535
 }
 
@@ -209,6 +250,7 @@ func (m *Module) addresses(ctx context.Context, dns resolver.Resolver, hosts []s
 type openPort struct {
 	svc    service
 	banner string
+	id     identity
 }
 
 // errSkipped marks a destination the gate excluded.
@@ -218,17 +260,17 @@ var errSkipped = errors.New("skipped")
 // of the families with at least one port actually tried. refused is true
 // when the gate excluded every port, which happens when the IP itself is
 // not verified or excluded.
-func (m *Module) scanIP(ctx context.Context, dial dialer.Gated, a address) (open []openPort, probed map[string]bool, refused bool, err error) {
+func (m *Module) scanIP(ctx context.Context, dial dialer.Gated, gate module.Gate, services []service, deep bool, a address) (open []openPort, probed map[string]bool, refused bool, err error) {
 	type result struct {
-		svc    service
-		open   bool
-		banner string
-		err    error
+		svc  service
+		open bool
+		seen seen
+		err  error
 	}
-	results := make(chan result, len(m.services))
+	results := make(chan result, len(services))
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
-	for _, svc := range m.services {
+	for _, svc := range services {
 		wg.Go(func() {
 			select {
 			case sem <- struct{}{}:
@@ -237,8 +279,8 @@ func (m *Module) scanIP(ctx context.Context, dial dialer.Gated, a address) (open
 				results <- result{svc: svc, err: ctx.Err()}
 				return
 			}
-			isOpen, banner, err := m.probe(ctx, dial, module.Destination{Host: a.host, IP: a.ip, Port: svc.port})
-			results <- result{svc: svc, open: isOpen, banner: banner, err: err}
+			isOpen, got, err := m.probe(ctx, dial, gate, deep, module.Destination{Host: a.host, IP: a.ip, Port: svc.port})
+			results <- result{svc: svc, open: isOpen, seen: got, err: err}
 		})
 	}
 	wg.Wait()
@@ -258,7 +300,7 @@ func (m *Module) scanIP(ctx context.Context, dial dialer.Gated, a address) (open
 		default:
 			probed[r.svc.family.checkID] = true
 			if r.open {
-				open = append(open, openPort{svc: r.svc, banner: r.banner})
+				open = append(open, openPort{svc: r.svc, banner: r.seen.banner, id: r.seen.id})
 			}
 		}
 	}
@@ -266,33 +308,81 @@ func (m *Module) scanIP(ctx context.Context, dial dialer.Gated, a address) (open
 		return nil, nil, false, firstErr
 	}
 	sort.Slice(open, func(i, j int) bool { return open[i].svc.port < open[j].svc.port })
-	return open, probed, skipped == len(m.services), nil
+	return open, probed, skipped == len(services), nil
+}
+
+// seen is what an open port told us.
+type seen struct {
+	banner string
+	id     identity
 }
 
 // probe connects to one port and reads the banner, if any. A closed or
 // filtered port is not an error: it returns open=false. Errors are reserved
-// for "stop the scan" conditions (gate failure, cancellation).
-func (m *Module) probe(ctx context.Context, dial dialer.Gated, dest module.Destination) (bool, string, error) {
+// for "stop the scan" conditions (gate failure, cancellation). With deep,
+// a silent service gets one HTTP HEAD request, allowed by the gate first.
+func (m *Module) probe(ctx context.Context, dial dialer.Gated, gate module.Gate, deep bool, dest module.Destination) (bool, seen, error) {
 	conn, err := dial.Dial(ctx, dest)
 	if err != nil {
 		switch {
 		case errors.Is(err, module.ErrExcluded):
-			return false, "", errSkipped
+			return false, seen{}, errSkipped
 		case errors.Is(err, dialer.ErrGateRefused), errors.Is(err, dialer.ErrNoGate):
-			return false, "", err
+			return false, seen{}, err
 		case ctx.Err() != nil:
-			return false, "", ctx.Err()
+			return false, seen{}, ctx.Err()
 		}
-		return false, "", nil // refused, filtered or unreachable: closed
+		return false, seen{}, nil // refused, filtered or unreachable: closed
 	}
 	defer func() { _ = conn.Close() }()
 
-	// Many services (SSH, FTP, SMTP, MySQL...) greet first. We only listen;
+	// Many services (SSH, FTP, SMTP, MySQL...) greet first. We listen;
 	// silence is fine and simply means no banner.
 	_ = conn.SetReadDeadline(time.Now().Add(m.bannerTimeout))
 	buf := make([]byte, maxBanner)
 	n, _ := conn.Read(buf)
-	return true, sanitizeBanner(buf[:n]), nil
+	raw := buf[:n]
+	got := seen{banner: sanitizeBanner(raw)}
+	if n > 0 || !deep {
+		if deep {
+			got.id = identifyBanner(raw, got.banner)
+		}
+		return true, got, nil
+	}
+
+	// Deep: ask a silent service whether it speaks HTTP. The request is a
+	// network request of its own: exclusions (paths too) and the rate
+	// limiter apply to it (rules 2 and 3).
+	http := dest
+	http.Path = "/"
+	if err := gate.Allow(ctx, http); err != nil {
+		if errors.Is(err, module.ErrExcluded) || ctx.Err() == nil {
+			return true, got, nil // open; we just do not ask
+		}
+		return true, got, ctx.Err()
+	}
+	host := dest.Host
+	if host == "" {
+		host = dest.IP.String()
+	}
+	_ = conn.SetWriteDeadline(time.Now().Add(m.bannerTimeout))
+	if _, err := fmt.Fprintf(conn, "HEAD / HTTP/1.0\r\nHost: %s\r\nUser-Agent: OrusShield\r\nConnection: close\r\n\r\n", host); err != nil {
+		return true, got, nil
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(m.bannerTimeout))
+	head := make([]byte, maxHTTPHead)
+	total := 0
+	for total < len(head) {
+		k, err := conn.Read(head[total:])
+		total += k
+		if err != nil || bytes.Contains(head[:total], []byte("\r\n\r\n")) {
+			break
+		}
+	}
+	if id := identifyHTTP(head[:total]); id.known() {
+		got.id = id
+	}
+	return true, got, nil
 }
 
 // sanitizeBanner keeps printable ASCII only. Banners come from the target
@@ -349,7 +439,13 @@ func (o openPort) finding(domain string, a address) finding.Finding {
 			a.host, a.ip, o.svc.port, o.svc.name, banner)),
 		Remediation: o.svc.family.fix,
 	}
-	if o.svc.greets && o.banner == "" {
+	if o.id.known() {
+		f.Evidence = finding.TruncateEvidence(f.Evidence + "\nidentified: " + o.id.label())
+		if o.svc.family.checkID == otherService.checkID {
+			f.Title = fmt.Sprintf("%s reachable from the internet (port %d)", o.id.label(), o.svc.port)
+		}
+	}
+	if o.svc.greets && o.banner == "" && !o.id.known() {
 		// The port is open, but the service did not greet as it always
 		// does: we cannot confirm what answers. Reported, at low severity,
 		// so that a proxy of the scanning network never raises a false

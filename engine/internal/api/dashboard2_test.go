@@ -1,12 +1,15 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
+	"github.com/jordyorel/orus-shield/engine/internal/plan"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
@@ -155,3 +158,37 @@ func TestPublicPlans(t *testing.T) {
 }
 
 func ptrTo[T any](v T) *T { return &v }
+
+func TestDeepProfile(t *testing.T) {
+	e := newEnv(t)
+	a := e.tenant("A", "example.com")
+	path := "/api/v1/orgs/" + a.orgID + "/settings"
+	deep := orgSettingsJSON{AlertLevel: "high", EmailAlerts: true, Profile: "deep", TimeZone: "UTC", DisabledModules: []string{}}
+
+	// Without a consent on record: refused, with a code the dashboard reads.
+	r := e.do("PUT", path, a.session, deep)
+	if r.status != http.StatusBadRequest || !strings.Contains(string(r.body), "deep_consent_required") {
+		t.Fatalf("deep without consent = %d %s", r.status, r.body)
+	}
+	// With it: recorded, and kept for later changes.
+	deep.DeepConsent = true
+	var got orgSettingsJSON
+	r = e.do("PUT", path, a.session, deep)
+	r.json(t, &got)
+	if r.status != http.StatusOK || got.Profile != "deep" || got.DeepConsentAt == nil {
+		t.Fatalf("deep with consent = %d %s", r.status, r.body)
+	}
+	deep.DeepConsent = false
+	if r := e.do("PUT", path, a.session, deep); r.status != http.StatusOK {
+		t.Errorf("deep again, consent on record = %d %s", r.status, r.body)
+	}
+	if p, err := e.st.ScanProfileOf(context.Background(), a.orgID); err != nil || p != "deep" {
+		t.Errorf("worker sees profile %q, %v", p, err)
+	}
+	// An offer without the deep profile refuses it.
+	soon := time.Now().Add(time.Hour)
+	e.setPlan(a.orgID, plan.Subscription{Plan: plan.SME, Status: plan.Trialing, TrialEndsAt: &soon})
+	if r := e.do("PUT", path, a.session, deep); r.status != http.StatusForbidden || !strings.Contains(string(r.body), "plan_limit") {
+		t.Errorf("deep on Essentiel = %d %s", r.status, r.body)
+	}
+}

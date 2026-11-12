@@ -20,9 +20,9 @@ const me: Me = {
 };
 
 const plans: Plan[] = [
-  { id: "discovery", name: "Gratuit", domains: 1, hosts_per_scan: 5, members: 1, active_modules: false, max_frequency: "monthly", alerts: false, reports: false, threats: false, usd_monthly: 0, usd_yearly: 0, xaf_monthly: 0, xaf_yearly: 0, on_quote: false },
-  { id: "sme", name: "Essentiel", domains: 3, hosts_per_scan: 25, members: 3, active_modules: true, max_frequency: "weekly", alerts: true, reports: true, threats: true, usd_monthly: 35, usd_yearly: 29, xaf_monthly: 20000, xaf_yearly: 16500, on_quote: false },
-  { id: "pro", name: "Pro", domains: 15, hosts_per_scan: 25, members: 10, active_modules: true, max_frequency: "daily", alerts: true, reports: true, threats: true, usd_monthly: 99, usd_yearly: 79, xaf_monthly: 57000, xaf_yearly: 45500, on_quote: false },
+  { id: "discovery", name: "Gratuit", domains: 1, hosts_per_scan: 5, members: 1, active_modules: false, max_frequency: "monthly", alerts: false, reports: false, threats: false, deep_scans: false, usd_monthly: 0, usd_yearly: 0, xaf_monthly: 0, xaf_yearly: 0, on_quote: false },
+  { id: "sme", name: "Essentiel", domains: 3, hosts_per_scan: 25, members: 3, active_modules: true, max_frequency: "weekly", alerts: true, reports: true, threats: true, deep_scans: false, usd_monthly: 35, usd_yearly: 29, xaf_monthly: 20000, xaf_yearly: 16500, on_quote: false },
+  { id: "pro", name: "Pro", domains: 15, hosts_per_scan: 25, members: 10, active_modules: true, max_frequency: "daily", alerts: true, reports: true, threats: true, deep_scans: true, usd_monthly: 99, usd_yearly: 79, xaf_monthly: 57000, xaf_yearly: 45500, on_quote: false },
 ];
 
 const overview: Overview = {
@@ -66,11 +66,11 @@ const dmarc: Finding = {
   emerging: false,
 };
 
-const settings: OrgSettings = { alert_level: "high", email_alerts: true, profile: "standard", disabled_modules: [], frequency: "weekly", weekday: 6, hour: 2, timezone: "UTC", rate_per_sec: 0 };
+const settings: OrgSettings = { alert_level: "high", email_alerts: true, profile: "standard", disabled_modules: [], frequency: "weekly", weekday: 6, hour: 2, timezone: "UTC", rate_per_sec: 0, deep_consent_at: null };
 
 const subscription: Subscription = { plan: plans[1]!, status: "trialing", until: "2026-11-26T00:00:00Z", in_grace: false, lapsed: false, usage: { domains: 1, members: 1 }, plans };
 
-function orgRoutes(extra: Record<string, ReturnType<typeof ok>> = {}) {
+function orgRoutes(extra: Record<string, ReturnType<typeof ok>> = {}, sub: Subscription = subscription) {
   const base = `/orgs/${ORG}`;
   return mockApi({
     "GET /auth/me": ok(me),
@@ -81,7 +81,7 @@ function orgRoutes(extra: Record<string, ReturnType<typeof ok>> = {}) {
     }),
     [`GET ${base}/checks`]: ok({ items: [] }),
     [`GET ${base}/targets`]: ok({ items: [{ id: "t1", domain: "example.cg", verified: true, verified_at: "", verify_checked_at: "", rate_per_sec: 0, exclusions: {}, created_at: "", schedule: null }] }),
-    [`GET ${base}/subscription`]: ok(subscription),
+    [`GET ${base}/subscription`]: ok(sub),
     [`GET ${base}/settings`]: ok(settings),
     [`GET ${base}/activity?days=7&limit=10`]: ok({
       items: [{ kind: "finding", at: new Date().toISOString(), target_id: "t1", domain: "example.cg", finding_id: "f1", title: "No DMARC record", asset: "_dmarc.example.cg", severity: "high", to: "open" }],
@@ -203,6 +203,29 @@ describe("dashboard", () => {
     expect((calls.find((c) => c.key === `PUT /orgs/${ORG}/settings`)?.body as OrgSettings).alert_level).toBe("critical");
     expect(screen.getByText(/Offre Essentiel/)).toBeTruthy();
     expect(screen.getByText(/Essai gratuit jusqu’au/)).toBeTruthy();
+  });
+
+  it("asks for consent before the deep profile", async () => {
+    const pro: Subscription = { ...subscription, plan: plans[2]!, status: "active", until: null };
+    const calls = orgRoutes(
+      {
+        [`PUT /orgs/${ORG}/settings`]: (b) => ({ status: 200, json: { ...(b as OrgSettings), deep_consent_at: "2026-11-12T18:00:00Z" } }),
+        [`GET /orgs/${ORG}/members`]: ok({ items: [] }),
+      },
+      pro,
+    );
+    renderAt(`/orgs/${ORG}/reglages`);
+    fireEvent.click(await screen.findByRole("button", { name: /Approfondi/ }));
+    const activate = await screen.findByRole("button", { name: "Activer le profil approfondi" });
+    fireEvent.click(activate);
+    expect(screen.getByText("Cochez la case pour confirmer votre autorisation.")).toBeTruthy();
+    expect(calls.some((c) => c.key.startsWith("PUT"))).toBe(false);
+    fireEvent.click(screen.getByLabelText(/Je confirme être autorisé/));
+    fireEvent.click(activate);
+    await waitFor(() => expect(calls.some((c) => c.key === `PUT /orgs/${ORG}/settings`)).toBe(true));
+    const body = calls.find((c) => c.key === `PUT /orgs/${ORG}/settings`)?.body as OrgSettings;
+    expect(body.profile).toBe("deep");
+    expect(body.deep_consent).toBe(true);
   });
 
   it("sends an unknown screen back to Aujourd'hui", async () => {
