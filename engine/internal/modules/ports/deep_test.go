@@ -3,6 +3,7 @@ package ports
 import (
 	"context"
 	"encoding/json"
+	"net/netip"
 	"slices"
 	"strings"
 	"testing"
@@ -164,5 +165,30 @@ func TestStandardScanSendsNothing(t *testing.T) {
 	}
 	if slices.Contains(res.Evaluated, otherService.checkID) {
 		t.Error("standard scans do not evaluate the other-service check")
+	}
+}
+
+// An agent's internal network: its addresses are scanned directly, without
+// DNS and without hostname assets.
+func TestInternalAddresses(t *testing.T) {
+	m, _, dial, g := newTest()
+	internal := netip.MustParseAddr("10.0.0.5")
+	dial.routes[route(internal, 3389)] = ""
+	res, err := m.Run(context.Background(), module.Request{
+		Target: module.Target{Domain: "agent-1.internal", Verified: true, Addresses: []netip.Addr{internal}}, Gate: g,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Findings) != 1 || res.Findings[0].Asset != "10.0.0.5:3389" {
+		t.Errorf("findings = %+v", res.Findings)
+	}
+	for _, a := range res.Assets {
+		if a.Kind == asset.KindHostname {
+			t.Errorf("hostname asset for an address: %+v", a)
+		}
+		if err := a.Validate("agent-1.internal"); err != nil {
+			t.Errorf("asset %+v: %v", a, err)
+		}
 	}
 }

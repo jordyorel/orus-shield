@@ -2,6 +2,7 @@
 /engine/api
 /engine/worker
 /engine/orusctl
+/engine/agent
 /bin/
 /dist/
 *.exe

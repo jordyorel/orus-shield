@@ -148,8 +148,16 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 	dns := resolver.Gated{Gate: req.Gate, Inner: m.dns}
 	dial := dialer.Gated{Gate: req.Gate, Inner: connectTimeoutDialer{m.dial, m.connectTimeout}}
 
-	targets, err := m.addresses(ctx, dns, req.Target.ScanHosts(domain))
-	if err != nil {
+	var targets []address
+	if len(req.Target.Addresses) > 0 {
+		// An agent's internal network: its private addresses, no DNS.
+		for _, ip := range req.Target.Addresses {
+			if len(targets) == module.MaxAddresses {
+				break
+			}
+			targets = append(targets, address{host: ip.Unmap().String(), ip: ip.Unmap()})
+		}
+	} else if targets, err = m.addresses(ctx, dns, req.Target.ScanHosts(domain)); err != nil {
 		return module.Result{}, fmt.Errorf("ports: %w", err)
 	}
 	if len(targets) == 0 {
@@ -172,7 +180,9 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 		for id := range probed {
 			evaluated[id] = true
 		}
-		assets.Add(asset.Hostname(t.host))
+		if t.host != t.ip.String() { // an internal network's address has no name
+			assets.Add(asset.Hostname(t.host))
+		}
 		assets.Add(asset.IP(t.ip))
 		for _, o := range open {
 			findings = append(findings, o.finding(domain, t))

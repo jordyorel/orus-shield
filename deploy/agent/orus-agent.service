@@ -1,0 +1,27 @@
+# systemd unit for orus-agent (Linux). Install:
+#   sudo install -m 0755 orus-agent /usr/local/bin/orus-agent
+#   sudo orus-agent enroll -api https://APP -code CODE    (writes /etc/orus-agent/config.json, 0600)
+#   sudo install -m 0644 orus-agent.service /etc/systemd/system/
+#   sudo systemctl enable --now orus-agent
+[Unit]
+Description=Orus Shield agent (internal network scans)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/orus-agent run
+Restart=always
+RestartSec=30
+# Least privilege: a TCP connect scan needs no special right.
+DynamicUser=yes
+LoadCredential=config.json:/etc/orus-agent/config.json
+Environment=ORUS_AGENT_CONFIG=%d/config.json
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

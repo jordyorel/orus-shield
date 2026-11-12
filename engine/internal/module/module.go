@@ -174,7 +174,14 @@ type Target struct {
 	// module earlier in the scan. Set by the worker; empty means only the
 	// domain and www. (see ScanHosts).
 	Hosts []string
+	// Addresses are set only for an agent's internal network (step J): the
+	// private addresses to scan directly, without DNS. Modules that can
+	// scan addresses (ports) use them instead of the names.
+	Addresses []netip.Addr
 }
+
+// MaxAddresses bounds the addresses of an internal network one scan covers.
+const MaxAddresses = 1024
 
 // MaxHosts bounds the names one scan covers, so a domain with thousands of
 // subdomains cannot make a scan run for hours.
