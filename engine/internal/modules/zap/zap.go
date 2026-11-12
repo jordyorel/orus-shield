@@ -96,11 +96,6 @@ type Config struct {
 // ErrNotInstalled is returned when ZAP is not configured on this worker.
 var ErrNotInstalled = errors.New("ZAP is not installed on this worker (ORUS_ZAP_IMAGE)")
 
-// RunConfig is the module's per-scan configuration (module.Request.Config).
-type RunConfig struct {
-	Deep bool `json:"deep"`
-}
-
 // Module is the deep web scan.
 type Module struct {
 	cfg    Config
@@ -123,13 +118,13 @@ func New(dns resolver.Resolver, dial dialer.Dialer, cfg Config) *Module {
 
 // Info implements module.Module.
 func (m *Module) Info() module.Info {
-	return module.Info{ID: ID, Name: "Deep web application scan", Kind: module.KindActive, Checks: Checks, Timeout: Timeout, DeepOnly: true}
+	return module.Info{ID: ID, Name: "Deep web application scan", Kind: module.KindActive, Checks: Checks, Timeout: Timeout, DeepOnly: true, UsesCredentials: true}
 }
 
 // Run implements module.Module. Outside the deep profile it returns an
 // empty result: nothing observed, nothing evaluated, findings untouched.
 func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, error) {
-	var rc RunConfig
+	var rc module.RunConfig
 	if len(req.Config) > 0 {
 		if err := json.Unmarshal(req.Config, &rc); err != nil {
 			return module.Result{}, fmt.Errorf("zap: invalid config: %w", err)
@@ -172,7 +167,11 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 		return module.Result{}, fmt.Errorf("zap: work dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	if err := writeInputs(dir, domain, urls, up); err != nil {
+	auth, err := sessionAuth(ctx, proxy.URL(), domain, rc.Auth)
+	if err != nil {
+		return module.Result{}, fmt.Errorf("zap: %w", err)
+	}
+	if err := writeInputs(dir, domain, urls, up, auth); err != nil {
 		return module.Result{}, fmt.Errorf("zap: %w", err)
 	}
 

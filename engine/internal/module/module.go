@@ -47,6 +47,9 @@ type Info struct {
 	// the others of a scan, and the hostnames it reports are added to
 	// Target.Hosts for the modules that follow.
 	ProvidesHosts bool
+	// UsesCredentials marks a module that can log in with the target's
+	// test account (RunConfig.Auth); only such modules receive it.
+	UsesCredentials bool
 	// UsesAPIs marks a module that scans the target's declared APIs
 	// (RunConfig.APIs); the worker loads them only for such modules.
 	UsesAPIs bool
@@ -233,6 +236,22 @@ type RunConfig struct {
 	// APIs declared on the target, for modules with Info.UsesAPIs, when
 	// the offer includes API scans.
 	APIs []ScanAPI `json:"apis,omitempty"`
+	// Auth is the target's test account (step I), opened by the worker,
+	// for modules with Info.UsesCredentials when the offer includes
+	// authenticated scans. Never log it.
+	Auth *ScanAuth `json:"auth,omitempty"`
+}
+
+// ScanAuth is a test account: a header, or a login form.
+type ScanAuth struct {
+	Kind          string `json:"kind"` // header, form
+	HeaderName    string `json:"header_name,omitempty"`
+	LoginURL      string `json:"login_url,omitempty"`
+	Username      string `json:"username,omitempty"`
+	UsernameField string `json:"username_field,omitempty"`
+	PasswordField string `json:"password_field,omitempty"`
+	// Secret is the header value or the password.
+	Secret string `json:"secret"`
 }
 
 // ScanAPI is a declared API (step H).

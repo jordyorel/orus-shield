@@ -26,6 +26,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/ownership"
 	"github.com/jordyorel/orus-shield/engine/internal/plan"
+	"github.com/jordyorel/orus-shield/engine/internal/seal"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
@@ -45,6 +46,7 @@ type Store interface {
 	DeepScansSince(ctx context.Context, orgID string, since time.Time) (int, error)
 	MarkScanDeep(ctx context.Context, scanID string, attempt int) error
 	TargetAPIs(ctx context.Context, targetID string) ([]store.API, error)
+	TargetCredential(ctx context.Context, targetID string) (*store.Credential, []byte, error)
 }
 
 // Ownership enforces security rule 1 for active modules (see package
@@ -67,6 +69,9 @@ type Config struct {
 	// that are due. Every worker does it; the store makes sure each due
 	// scan is queued once.
 	ScheduleInterval time.Duration
+	// Credentials opens the test accounts of authenticated scans
+	// (ORUS_CREDENTIALS_KEY, the API's key); nil: scans run without them.
+	Credentials *seal.Key
 }
 
 const (
@@ -227,25 +232,39 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 		}
 		rc.Deep = profile == store.ProfileDeep && w.deepAllowed(scanCtx, sc, target, offer, log)
 	}
-	config, err := json.Marshal(rc)
-	if err != nil {
-		return w.fail(ctx, sc, fmt.Sprintf("module config: %v", err))
-	}
-	// Declared APIs (step H) go only to the modules that scan them, when
-	// the offer includes API scans: a document can weigh 900 KB.
-	apiConfig := config
-	if offer.APIScans && w.includesAPIScanner(sc.Modules) {
-		apis, err := w.store.TargetAPIs(scanCtx, target.ID)
+	// Declared APIs (step H) and the test account (step I) go only to the
+	// modules that use them, when the offer includes them: a document can
+	// weigh 900 KB, and a secret goes nowhere it is not needed.
+	var apis []module.ScanAPI
+	if offer.APIScans && w.includesModuleWith(sc.Modules, func(i module.Info) bool { return i.UsesAPIs }) {
+		list, err := w.store.TargetAPIs(scanCtx, target.ID)
 		if err != nil {
 			return w.fail(ctx, sc, fmt.Sprintf("load apis: %v", err))
 		}
-		with := rc
-		for _, a := range apis {
-			with.APIs = append(with.APIs, module.ScanAPI{ID: a.ID, Name: a.Name, Kind: a.Kind, BaseURL: a.BaseURL, SpecURL: a.SpecURL, Spec: a.Spec})
+		for _, a := range list {
+			apis = append(apis, module.ScanAPI{ID: a.ID, Name: a.Name, Kind: a.Kind, BaseURL: a.BaseURL, SpecURL: a.SpecURL, Spec: a.Spec})
 		}
-		if apiConfig, err = json.Marshal(with); err != nil {
-			return w.fail(ctx, sc, fmt.Sprintf("module config: %v", err))
+	}
+	var auth *module.ScanAuth
+	if offer.AuthScans && w.includesModuleWith(sc.Modules, func(i module.Info) bool { return i.UsesCredentials }) {
+		auth = w.testAccount(scanCtx, target, log)
+	}
+	configs := map[[2]bool]json.RawMessage{}
+	configFor := func(i module.Info) (json.RawMessage, error) {
+		k := [2]bool{i.UsesAPIs, i.UsesCredentials}
+		if c, ok := configs[k]; ok {
+			return c, nil
 		}
+		c := rc
+		if i.UsesAPIs {
+			c.APIs = apis
+		}
+		if i.UsesCredentials {
+			c.Auth = auth
+		}
+		b, err := json.Marshal(c)
+		configs[k] = b
+		return b, err
 	}
 	mt := module.Target{Domain: target.Domain, Verified: w.stillVerified(scanCtx, sc, target, g, log)}
 	// The names to scan: the inventory's current hostnames (subdomains found
@@ -298,9 +317,11 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 		if m, ok := w.modules.Get(id); ok && m.Info().Kind == module.KindActive && !offer.ActiveModules {
 			err = &refusedError{fmt.Errorf("module %q: the %s offer runs passive checks only", id, offer.Name)}
 		} else {
-			cfg := config
-			if m, ok := w.modules.Get(id); ok && m.Info().UsesAPIs {
-				cfg = apiConfig
+			var cfg json.RawMessage
+			if m, ok := w.modules.Get(id); ok {
+				if cfg, err = configFor(m.Info()); err != nil {
+					return w.fail(ctx, sc, fmt.Sprintf("module config: %v", err))
+				}
 			}
 			res, checks, err = w.runModule(scanCtx, id, mt, gateFor(id), cfg)
 		}
@@ -423,15 +444,39 @@ func (s *ipSet) covers(value string) bool {
 	return s.ips[ip.Unmap()]
 }
 
-// includesAPIScanner reports whether the scan runs a module that scans
-// declared APIs (module.Info.UsesAPIs).
-func (w *Worker) includesAPIScanner(ids []string) bool {
+// includesModuleWith reports whether the scan runs a module whose Info
+// satisfies want.
+func (w *Worker) includesModuleWith(ids []string, want func(module.Info) bool) bool {
 	for _, id := range ids {
-		if m, ok := w.modules.Get(id); ok && m.Info().UsesAPIs {
+		if m, ok := w.modules.Get(id); ok && want(m.Info()) {
 			return true
 		}
 	}
 	return false
+}
+
+// testAccount opens the target's test account. Without one, without the
+// key, or when it does not open, the scan runs without it (and says why).
+func (w *Worker) testAccount(ctx context.Context, target store.Target, log *slog.Logger) *module.ScanAuth {
+	c, sealed, err := w.store.TargetCredential(ctx, target.ID)
+	if err != nil {
+		log.Warn("read test account", "err", err)
+		return nil
+	}
+	if c == nil {
+		return nil
+	}
+	if w.cfg.Credentials == nil {
+		log.Warn("a test account exists but ORUS_CREDENTIALS_KEY is not set: scanning without it")
+		return nil
+	}
+	secret, err := w.cfg.Credentials.Open(sealed, store.CredentialOwner(target.ID))
+	if err != nil {
+		log.Warn("open test account", "err", err) // never the secret itself
+		return nil
+	}
+	return &module.ScanAuth{Kind: c.Kind, HeaderName: c.HeaderName, LoginURL: c.LoginURL, Username: c.Username,
+		UsernameField: c.UsernameField, PasswordField: c.PasswordField, Secret: string(secret)}
 }
 
 // includesDeepOnly reports whether the scan runs a module of the deep

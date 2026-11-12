@@ -70,7 +70,7 @@ func run(log *slog.Logger) error {
 			"*** In development: docker-compose up -d mailpit, then reload .env (set -a; . ../.env; set +a).")
 	}
 	srv, err := api.New(st, api.Config{
-		TrustedOrigins: cfg.trustedOrigins, Modules: modules, Catalog: catalog, MFAKey: cfg.mfaKey,
+		TrustedOrigins: cfg.trustedOrigins, Modules: modules, Catalog: catalog, MFAKey: cfg.mfaKey, CredentialsKey: cfg.credentialsKey,
 		Mailer: mail, PublicURL: cfg.publicURL, SignupClosed: cfg.signupClosed, DNS: cfg.dns,
 	}, log)
 	if err != nil {

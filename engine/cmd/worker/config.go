@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/modules/vulns"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/zap"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
+	"github.com/jordyorel/orus-shield/engine/internal/seal"
 	"github.com/jordyorel/orus-shield/engine/internal/worker"
 )
 
@@ -46,6 +48,9 @@ type config struct {
 //	ORUS_NUCLEI_BIN       path to the pinned nuclei binary (vulns module)
 //	ORUS_NUCLEI_TEMPLATES path to the pinned nuclei-templates directory;
 //	                      both or neither. Unset: the vulns module fails its runs
+//	ORUS_CREDENTIALS_KEY  the API's key (32 bytes, base64) that opens customers'
+//	                      test accounts for authenticated scans; unset: scans
+//	                      run without them
 //	ORUS_ZAP_IMAGE        pinned ZAP image, name@sha256:digest (zap module, deep
 //	                      profile; see deploy/zap/install.sh). Unset: deep web
 //	                      scans fail
@@ -108,6 +113,15 @@ func loadConfig(getenv func(string) string) (config, error) {
 	}
 	if c.zap, err = zapFromEnv(getenv); err != nil {
 		return config{}, err
+	}
+	if raw := strings.TrimSpace(getenv("ORUS_CREDENTIALS_KEY")); raw != "" {
+		key, err := base64.StdEncoding.DecodeString(raw)
+		if err != nil || len(key) != seal.KeyLen {
+			return config{}, fmt.Errorf("ORUS_CREDENTIALS_KEY must be %d random bytes in base64", seal.KeyLen)
+		}
+		if c.worker.Credentials, err = seal.NewKey(key); err != nil {
+			return config{}, err
+		}
 	}
 	return c, nil
 }

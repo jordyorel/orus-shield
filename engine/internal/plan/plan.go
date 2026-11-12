@@ -58,6 +58,9 @@ type Plan struct {
 	DeepScansPerMonth int
 	// APIScans: declared APIs (OpenAPI, GraphQL) are scanned.
 	APIScans bool
+	// AuthScans: a test account lets the deep web scan and the API scan
+	// reach what is behind the login.
+	AuthScans bool
 	// Prices, per month: USD and XAF (Mobile Money), billed monthly or
 	// yearly. Zero with OnQuote: set by contract. XAFYearly applies the
 	// USD yearly discount, rounded to 500 FCFA (derived 2026-11-12, to
@@ -74,10 +77,10 @@ var Plans = []Plan{
 		MaxFrequency: Weekly, Alerts: true, Reports: true, Threats: true,
 		USDMonthly: 35, USDYearly: 29, XAFMonthly: 20000, XAFYearly: 16500},
 	{ID: Pro, Name: "Pro", Domains: 15, HostsPerScan: 25, Members: 10, ActiveModules: true,
-		MaxFrequency: Daily, Alerts: true, Reports: true, Threats: true, DeepScans: true, DeepScansPerMonth: 4, APIScans: true,
+		MaxFrequency: Daily, Alerts: true, Reports: true, Threats: true, DeepScans: true, DeepScansPerMonth: 4, APIScans: true, AuthScans: true,
 		USDMonthly: 99, USDYearly: 79, XAFMonthly: 57000, XAFYearly: 45500},
 	{ID: Enterprise, Name: "Sur devis", HostsPerScan: 25, ActiveModules: true,
-		MaxFrequency: Daily, Alerts: true, Reports: true, Threats: true, DeepScans: true, APIScans: true, OnQuote: true},
+		MaxFrequency: Daily, Alerts: true, Reports: true, Threats: true, DeepScans: true, APIScans: true, AuthScans: true, OnQuote: true},
 }
 
 // Get returns the plan with id.

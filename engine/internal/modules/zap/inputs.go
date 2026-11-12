@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/jordyorel/orus-shield/engine/internal/module"
 )
 
 // Files of a run, in its work directory (mounted at containerDir).
@@ -43,8 +45,12 @@ func upstream(proxyURL, host string) (proxyAddr, error) {
 // writeInputs writes the automation plan and ZAP's configuration. The plan
 // is written as JSON, which is valid YAML: every value is quoted by the
 // encoder, so no name from the scan can change the plan's structure.
-func writeInputs(dir, domain string, urls []string, up proxyAddr) error {
-	plan, err := json.MarshalIndent(automationPlan(domain, urls), "", "  ")
+func writeInputs(dir, domain string, urls []string, up proxyAddr, auth *module.ScanAuth) error {
+	p := automationPlan(domain, urls)
+	if err := applyAuth(p, dir, domain, auth); err != nil {
+		return err
+	}
+	plan, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
 		return fmt.Errorf("plan: %w", err)
 	}

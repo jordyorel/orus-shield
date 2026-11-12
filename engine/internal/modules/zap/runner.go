@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -33,6 +35,11 @@ func dockerArgs(cfg Config, dir, name string) []string {
 		"--cap-drop", "ALL", "--security-opt", "no-new-privileges",
 		"--memory", "3g", "--cpus", "2", "--pids-limit", "512",
 		"-v", dir + ":" + containerDir + ":rw",
+	}
+	// The test account's values: read by the docker client on our side,
+	// referred to as ${...} by the plan (see applyAuth).
+	if _, err := os.Stat(filepath.Join(dir, authEnvFile)); err == nil {
+		args = append(args, "--env-file", filepath.Join(dir, authEnvFile))
 	}
 	if cfg.Network != "" {
 		args = append(args, "--network", cfg.Network)

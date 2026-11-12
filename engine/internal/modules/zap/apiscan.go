@@ -99,7 +99,7 @@ func NewAPI(dns resolver.Resolver, dial dialer.Dialer, cfg Config) *APIModule {
 
 // Info implements module.Module.
 func (m *APIModule) Info() module.Info {
-	return module.Info{ID: APIID, Name: "API security", Kind: module.KindActive, Checks: APIChecks, Timeout: Timeout, UsesAPIs: true}
+	return module.Info{ID: APIID, Name: "API security", Kind: module.KindActive, Checks: APIChecks, Timeout: Timeout, UsesAPIs: true, UsesCredentials: true}
 }
 
 // Run implements module.Module.
@@ -148,7 +148,11 @@ func (m *APIModule) Run(ctx context.Context, req module.Request) (module.Result,
 		return module.Result{}, fmt.Errorf("api: work dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	if err := writeAPIInputs(dir, domain, apis, up); err != nil {
+	auth, err := sessionAuth(ctx, proxy.URL(), domain, rc.Auth)
+	if err != nil {
+		return module.Result{}, fmt.Errorf("api: %w", err)
+	}
+	if err := writeAPIInputs(dir, domain, apis, up, auth); err != nil {
 		return module.Result{}, fmt.Errorf("api: %w", err)
 	}
 	if err := m.runner.Run(ctx, m.cfg, dir); err != nil {
@@ -189,7 +193,7 @@ func inScope(raw, domain string) bool {
 }
 
 // writeAPIInputs writes uploaded descriptions, the plan and the config.
-func writeAPIInputs(dir, domain string, apis []module.ScanAPI, up proxyAddr) error {
+func writeAPIInputs(dir, domain string, apis []module.ScanAPI, up proxyAddr, auth *module.ScanAuth) error {
 	var urls []string
 	var jobs []any
 	for i, a := range apis {
@@ -240,6 +244,9 @@ func writeAPIInputs(dir, domain string, apis []module.ScanAPI, up proxyAddr) err
 				"template": "traditional-json", "reportDir": containerDir, "reportFile": strings.TrimSuffix(reportFile, ".json"),
 			}},
 		),
+	}
+	if err := applyAuth(plan, dir, domain, auth); err != nil {
+		return err
 	}
 	b, err := json.MarshalIndent(plan, "", "  ")
 	if err != nil {

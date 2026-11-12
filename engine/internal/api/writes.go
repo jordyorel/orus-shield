@@ -34,6 +34,10 @@ func (s *Server) writeRoutes(mux *http.ServeMux) {
 	write("PUT "+base+"/settings", s.putSettings)
 	write("POST "+base+"/targets/{target}/apis", s.targetOnly(s.createAPI))
 	write("DELETE "+base+"/targets/{target}/apis/{api}", s.targetOnly(s.deleteAPI))
+	// Test accounts: admins only, reads included (the username is theirs).
+	write("GET "+base+"/targets/{target}/credential", s.targetOnly(s.getCredential))
+	write("PUT "+base+"/targets/{target}/credential", s.targetOnly(s.setCredential))
+	write("DELETE "+base+"/targets/{target}/credential", s.targetOnly(s.deleteCredential))
 	write("PATCH "+base+"/targets/{target}", s.targetOnly(s.updateTarget))
 	write("POST "+base+"/targets/{target}/verification", s.targetOnly(s.verificationInstructions))
 	write("POST "+base+"/targets/{target}/verify", s.targetOnly(s.verifyTarget))

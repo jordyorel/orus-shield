@@ -238,3 +238,41 @@ func keys(m map[string]finding.Finding) []string {
 	slices.Sort(out)
 	return out
 }
+
+func TestApplyAuth(t *testing.T) {
+	read := func(dir, name string) string {
+		b, err := os.ReadFile(filepath.Join(dir, name)) //nolint:gosec // G304: the test's own directory
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	// Header: every request carries it; the value is only in auth.env.
+	dir := t.TempDir()
+	if err := writeInputs(dir, "example.com", []string{"https://example.com"}, proxyAddr{Host: "h", Port: "1", User: "orus", Pass: "p"},
+		&module.ScanAuth{Kind: "header", HeaderName: "Authorization", Secret: "Bearer s3cret"}); err != nil {
+		t.Fatal(err)
+	}
+	env := read(dir, authEnvFile)
+	if !strings.Contains(env, "ZAP_AUTH_HEADER=Authorization\n") || !strings.Contains(env, "ZAP_AUTH_HEADER_VALUE=Bearer s3cret\n") || !strings.Contains(env, "ZAP_AUTH_HEADER_SITE=example.com\n") {
+		t.Errorf("auth.env = %q", env)
+	}
+	if fi, err := os.Stat(filepath.Join(dir, authEnvFile)); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("auth.env mode = %v, %v", fi.Mode(), err)
+	}
+	if strings.Contains(read(dir, planFile), "s3cret") {
+		t.Error("the secret is in the plan")
+	}
+	if !strings.Contains(strings.Join(dockerArgs(Config{Image: "i", ProxyHost: "h"}, dir, "n"), " "), "--env-file "+filepath.Join(dir, authEnvFile)) {
+		t.Error("docker run does not read auth.env")
+	}
+
+	// No account: no auth.env, no --env-file.
+	dir = t.TempDir()
+	if err := writeInputs(dir, "example.com", []string{"https://example.com"}, proxyAddr{Host: "h", Port: "1"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(strings.Join(dockerArgs(Config{Image: "i", ProxyHost: "h"}, dir, "n"), " "), "--env-file") {
+		t.Error("--env-file without a test account")
+	}
+}

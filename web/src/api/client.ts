@@ -1,4 +1,4 @@
-import type { Activity, DeclaredAPI, AuthActivity, Check, DeviceSession, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, OrgSettings, Overview, Plan, RecoveryCodes, Role, Scan, ScheduleInput, Subscription, Target } from "./types";
+import type { Activity, DeclaredAPI, TestAccount, AuthActivity, Check, DeviceSession, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, OrgSettings, Overview, Plan, RecoveryCodes, Role, Scan, ScheduleInput, Subscription, Target } from "./types";
 import type { Exclusions } from "../exclusions";
 
 /**
@@ -106,6 +106,15 @@ export const api = {
     request<List<DeclaredAPI>>("GET", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/apis`, undefined, signal),
   createAPI: (orgId: string, targetId: string, a: { name: string; kind: string; base_url: string; spec_url?: string; spec?: string }) =>
     request<DeclaredAPI>("POST", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/apis`, a),
+  testAccount: (orgId: string, targetId: string, signal?: AbortSignal) =>
+    request<TestAccount>("GET", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/credential`, undefined, signal),
+  setTestAccount: (
+    orgId: string,
+    targetId: string,
+    a: { kind: "header" | "form"; header_name?: string; header_value?: string; login_url?: string; username?: string; password?: string; username_field?: string; password_field?: string; consent: boolean },
+  ) => request<TestAccount>("PUT", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/credential`, a),
+  deleteTestAccount: (orgId: string, targetId: string) =>
+    request<void>("DELETE", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/credential`),
   deleteAPI: (orgId: string, targetId: string, id: string) =>
     request<void>("DELETE", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/apis/${encodeURIComponent(id)}`),
 };

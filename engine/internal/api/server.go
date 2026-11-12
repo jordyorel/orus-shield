@@ -25,6 +25,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/mailer"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
+	"github.com/jordyorel/orus-shield/engine/internal/seal"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
@@ -58,6 +59,10 @@ type Config struct {
 	PublicURL string
 	// SignupClosed hides self-service signup (accounts by invitation only).
 	SignupClosed bool
+	// CredentialsKey seals the test accounts of authenticated scans
+	// (ORUS_CREDENTIALS_KEY, seal.KeyLen bytes). nil: the credential
+	// routes answer 503 and no test account can be stored.
+	CredentialsKey []byte
 }
 
 const (
@@ -74,6 +79,8 @@ type Server struct {
 	org func(orgID string) (*store.Org, error)
 	cfg Config
 	log *slog.Logger
+	// creds seals test accounts; nil without CredentialsKey.
+	creds *seal.Key
 }
 
 // New returns the API server on st. It keeps only st's authentication
@@ -95,7 +102,13 @@ func New(st *store.Store, cfg Config, log *slog.Logger) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("api: %w", err)
 	}
-	return &Server{acct: acct, org: st.Org, cfg: cfg, log: log}, nil
+	srv := &Server{acct: acct, org: st.Org, cfg: cfg, log: log}
+	if len(cfg.CredentialsKey) > 0 {
+		if srv.creds, err = seal.NewKey(cfg.CredentialsKey); err != nil {
+			return nil, fmt.Errorf("api: credentials key: %w", err)
+		}
+	}
+	return srv, nil
 }
 
 // Handler returns the API's HTTP handler with every protection applied.

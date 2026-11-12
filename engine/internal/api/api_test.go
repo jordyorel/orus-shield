@@ -53,7 +53,7 @@ func newEnv(t *testing.T) *env {
 	if _, err := rand.Read(key); err != nil {
 		t.Fatal(err)
 	}
-	srv, err := New(st, Config{Now: func() time.Time { return e.now }, DNS: e.dns, Modules: []string{"email", "tls"}, MFAKey: key,
+	srv, err := New(st, Config{Now: func() time.Time { return e.now }, DNS: e.dns, Modules: []string{"email", "tls"}, MFAKey: key, CredentialsKey: key,
 		Mailer: e.mail, PublicURL: "https://app.example",
 		Catalog: []module.Info{{ID: "email", Name: "Email security", Kind: module.KindPassive}, {ID: "tls", Name: "TLS", Kind: module.KindPassive}}},
 		slog.New(slog.NewTextHandler(io.Discard, nil)))

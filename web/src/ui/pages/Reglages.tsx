@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { api, ApiError } from "../../api/client";
-import type { DeclaredAPI, Member, OrgSettings, Plan, Role, Target } from "../../api/types";
+import type { DeclaredAPI, Member, OrgSettings, Plan, Role, Target, TestAccount } from "../../api/types";
 import { formatExclusions, parseExclusions } from "../../exclusions";
 import { Link } from "../../router";
 import { MODS, ModIcon, Soon } from "../icons";
@@ -46,6 +46,7 @@ export function limitRows(plans: Plan[]): [string, ...string[]][] {
     ["Ports vérifiés", ...col((p) => (p.active_modules ? "50 ports courants" : "Aucun"))],
     ["Vulnérabilités connues", ...col((p) => (p.active_modules ? "Oui" : "Non"))],
     ["Analyse des API", ...col((p) => (p.api_scans ? "Oui" : "Non"))],
+    ["Scan authentifié (compte de test)", ...col((p) => (p.auth_scans ? "Oui" : "Non"))],
     ["Fuites de données", "Bientôt", "Bientôt", "Bientôt"],
     ["Menaces émergentes", ...col((p) => (p.threats ? "Oui" : "Non"))],
     ["Alertes email", ...col((p) => (p.alerts ? "Oui" : "Non"))],
@@ -534,6 +535,7 @@ function Domains({ targets }: { targets: Target[] }) {
               </div>
             )}
             <TargetAPIs target={t} />
+            <TestAccountPanel target={t} />
           </div>
         ))}
       </div>
@@ -692,6 +694,168 @@ function TargetAPIs({ target }: { target: Target }) {
           </p>
           <button className="btn" type="button" onClick={() => void add()}>
             Ajouter
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** TestAccountPanel sets the test account of one domain (step I): admins only. */
+function TestAccountPanel({ target }: { target: Target }) {
+  const { org, isAdmin, data } = useOrg();
+  const { toast } = useUI();
+  const [account, setAccount] = useState<TestAccount | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [kind, setKind] = useState<"header" | "form">("header");
+  const [headerName, setHeaderName] = useState("Authorization");
+  const [headerValue, setHeaderValue] = useState("");
+  const [loginURL, setLoginURL] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [userField, setUserField] = useState("");
+  const [passField, setPassField] = useState("");
+  const [consent, setConsent] = useState(false);
+  const [err, setErr] = useState("");
+  const included = data?.subscription.plan.auth_scans ?? false;
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    api.testAccount(org.org_id, target.id).then(setAccount, () => setAccount(null));
+  }, [org.org_id, target.id, isAdmin]);
+  if (!isAdmin) return null;
+
+  const field = { height: 44, borderRadius: 14, border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", font: "inherit", padding: "0 14px" };
+  const save = async () => {
+    if (!consent) {
+      setErr("Cochez la case pour confirmer qu’il s’agit d’un compte de test.");
+      return;
+    }
+    setErr("");
+    try {
+      const saved = await api.setTestAccount(
+        org.org_id,
+        target.id,
+        kind === "header"
+          ? { kind, header_name: headerName.trim(), header_value: headerValue, consent }
+          : {
+              kind,
+              login_url: loginURL.trim(),
+              username,
+              password,
+              ...(userField.trim() ? { username_field: userField.trim() } : {}),
+              ...(passField.trim() ? { password_field: passField.trim() } : {}),
+              consent,
+            },
+      );
+      setAccount(saved);
+      setEditing(false);
+      setHeaderValue("");
+      setPassword("");
+      setConsent(false);
+      toast("Compte de test enregistré : il servira au prochain scan approfondi et aux scans d’API");
+    } catch (e) {
+      setErr(
+        e instanceof ApiError && e.code === "plan_limit"
+          ? "Le scan authentifié est inclus dans l’offre Pro."
+          : e instanceof ApiError && e.status === 503
+            ? "Les comptes de test ne sont pas encore activés sur ce serveur."
+            : e instanceof ApiError && e.status === 400
+              ? `Vérifiez les champs : l’adresse de connexion doit être sur ${target.domain}, et les valeurs tenir sur une ligne.`
+              : "Compte de test non enregistré, réessayez.",
+      );
+    }
+  };
+  const remove = async () => {
+    if (!window.confirm("Supprimer le compte de test ? Les scans ne se connecteront plus.")) return;
+    try {
+      await api.deleteTestAccount(org.org_id, target.id);
+      setAccount(null);
+      toast("Compte de test supprimé");
+    } catch {
+      toast("Suppression impossible pour le moment");
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+        <p className="md">
+          Compte de test :{" "}
+          {account ? (account.kind === "header" ? `en-tête ${account.header_name ?? ""}` : `formulaire, ${account.username ?? ""} sur ${account.login_url ?? ""}`) : "aucun"}
+          {!included && <span className="soon">Offre Pro</span>}
+        </p>
+        {included && (
+          <span style={{ display: "flex", gap: 12 }}>
+            {account && (
+              <button className="link" type="button" onClick={() => void remove()}>
+                Supprimer
+              </button>
+            )}
+            <button className="link" type="button" onClick={() => setEditing(!editing)}>
+              {editing ? "Annuler" : account ? "Remplacer" : "Ajouter un compte de test"}
+            </button>
+          </span>
+        )}
+      </div>
+      {editing && (
+        <div className="pwbox">
+          <p className="md">Les scans approfondis et d’API se connectent avec ce compte pour tester ce qui est derrière la connexion. Utilisez un compte de test, jamais celui d’un administrateur. Le secret est chiffré et ne sera plus jamais affiché.</p>
+          <div className="seg2" role="group" aria-label="Type de compte" style={{ display: "inline-flex" }}>
+            {(
+              [
+                ["header", "Jeton ou clé d’API"],
+                ["form", "Formulaire de connexion"],
+              ] as const
+            ).map(([k, l]) => (
+              <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)}>
+                {l}
+              </button>
+            ))}
+          </div>
+          {kind === "header" ? (
+            <>
+              <label className="md" htmlFor={"ta-hn-" + target.id}>
+                Nom de l’en-tête
+              </label>
+              <input id={"ta-hn-" + target.id} style={field} value={headerName} onChange={(e) => setHeaderName(e.target.value)} />
+              <label className="md" htmlFor={"ta-hv-" + target.id}>
+                Valeur (par exemple : Bearer …)
+              </label>
+              <input id={"ta-hv-" + target.id} style={field} type="password" autoComplete="off" value={headerValue} onChange={(e) => setHeaderValue(e.target.value)} />
+            </>
+          ) : (
+            <>
+              <label className="md" htmlFor={"ta-lu-" + target.id}>
+                Adresse de la page de connexion
+              </label>
+              <input id={"ta-lu-" + target.id} style={field} value={loginURL} placeholder={`https://${target.domain}/login`} onChange={(e) => setLoginURL(e.target.value)} />
+              <label className="md" htmlFor={"ta-un-" + target.id}>
+                Identifiant du compte de test
+              </label>
+              <input id={"ta-un-" + target.id} style={field} autoComplete="off" value={username} onChange={(e) => setUsername(e.target.value)} />
+              <label className="md" htmlFor={"ta-pw-" + target.id}>
+                Mot de passe du compte de test
+              </label>
+              <input id={"ta-pw-" + target.id} style={field} type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <label className="md" htmlFor={"ta-uf-" + target.id}>
+                Noms des champs, si ce ne sont pas « username » et « password » (facultatif)
+              </label>
+              <span style={{ display: "flex", gap: 8 }}>
+                <input id={"ta-uf-" + target.id} style={{ ...field, flex: 1, minWidth: 0 }} placeholder="username" value={userField} onChange={(e) => setUserField(e.target.value)} />
+                <input aria-label="Nom du champ mot de passe" style={{ ...field, flex: 1, minWidth: 0 }} placeholder="password" value={passField} onChange={(e) => setPassField(e.target.value)} />
+              </span>
+            </>
+          )}
+          <label className="consent small">
+            <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+            <span>Je confirme que c’est un compte de test, que les scans peuvent utiliser.</span>
+          </label>
+          <p className="err" role="alert">
+            {err}
+          </p>
+          <button className="btn" type="button" onClick={() => void save()}>
+            Enregistrer le compte de test
           </button>
         </div>
       )}

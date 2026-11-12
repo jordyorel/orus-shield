@@ -23,6 +23,7 @@ type planJSON struct {
 	DeepScans     bool    `json:"deep_scans"`
 	DeepPerMonth  int     `json:"deep_scans_per_month"` // 0: unlimited
 	APIScans      bool    `json:"api_scans"`
+	AuthScans     bool    `json:"auth_scans"`
 	USDMonthly    int     `json:"usd_monthly"`
 	USDYearly     int     `json:"usd_yearly"` // per month, billed yearly
 	XAFMonthly    int     `json:"xaf_monthly"`
@@ -33,7 +34,7 @@ type planJSON struct {
 func toPlanJSON(p plan.Plan) planJSON {
 	freq := map[plan.Frequency]string{plan.Monthly: "monthly", plan.Weekly: "weekly", plan.Daily: "daily"}[p.MaxFrequency]
 	return planJSON{ID: p.ID, Name: p.Name, Domains: p.Domains, HostsPerScan: p.HostsPerScan, Members: p.Members,
-		ActiveModules: p.ActiveModules, MaxFrequency: freq, Alerts: p.Alerts, Reports: p.Reports, Threats: p.Threats, DeepScans: p.DeepScans, DeepPerMonth: p.DeepScansPerMonth, APIScans: p.APIScans,
+		ActiveModules: p.ActiveModules, MaxFrequency: freq, Alerts: p.Alerts, Reports: p.Reports, Threats: p.Threats, DeepScans: p.DeepScans, DeepPerMonth: p.DeepScansPerMonth, APIScans: p.APIScans, AuthScans: p.AuthScans,
 		USDMonthly: p.USDMonthly, USDYearly: p.USDYearly, XAFMonthly: p.XAFMonthly, XAFYearly: p.XAFYearly, OnQuote: p.OnQuote}
 }
 

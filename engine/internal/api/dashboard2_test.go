@@ -251,3 +251,70 @@ func TestDeclaredAPIs(t *testing.T) {
 		t.Errorf("Essentiel = %d, want 403", r.status)
 	}
 }
+
+func TestTestAccounts(t *testing.T) {
+	e := newEnv(t)
+	a := e.tenant("A", "example.com")
+	path := "/api/v1/orgs/" + a.orgID + "/targets/" + a.target.ID + "/credential"
+
+	if r := e.do("GET", path, a.session, nil); r.status != http.StatusNotFound {
+		t.Errorf("none yet = %d, want 404", r.status)
+	}
+	header := setCredentialRequest{Kind: "header", HeaderName: "Authorization", HeaderValue: "Bearer s3cret-token", Consent: true}
+	if r := e.do("PUT", path, a.viewer, header); r.status != http.StatusForbidden {
+		t.Errorf("viewer = %d, want 403", r.status)
+	}
+	if r := e.do("GET", path, a.viewer, nil); r.status != http.StatusForbidden {
+		t.Errorf("viewer read = %d, want 403", r.status)
+	}
+	noConsent := header
+	noConsent.Consent = false
+	if r := e.do("PUT", path, a.session, noConsent); r.status != http.StatusBadRequest || !strings.Contains(string(r.body), "consent_required") {
+		t.Errorf("without consent = %d %s", r.status, r.body)
+	}
+	r := e.do("PUT", path, a.session, header)
+	if r.status != http.StatusOK || strings.Contains(string(r.body), "s3cret") {
+		t.Fatalf("set = %d %s (the secret must never come back)", r.status, r.body)
+	}
+	r = e.do("GET", path, a.session, nil)
+	var got credentialJSON
+	r.json(t, &got)
+	if got.Kind != "header" || got.HeaderName != "Authorization" || strings.Contains(string(r.body), "s3cret") {
+		t.Errorf("get = %s", r.body)
+	}
+	// Sealed for this target: the worker opens it with the same key.
+	c, sealed, err := e.st.TargetCredential(context.Background(), a.target.ID)
+	if err != nil || c == nil || strings.Contains(string(sealed), "s3cret") {
+		t.Fatalf("stored = %+v %q, %v", c, sealed, err)
+	}
+	if plain, err := e.srv.creds.Open(sealed, store.CredentialOwner(a.target.ID)); err != nil || string(plain) != "Bearer s3cret-token" {
+		t.Errorf("open = %q, %v", plain, err)
+	}
+	if _, err := e.srv.creds.Open(sealed, store.CredentialOwner("another-target")); err == nil {
+		t.Error("a sealed secret opened for another target")
+	}
+	form := setCredentialRequest{Kind: "form", LoginURL: "https://app.example.com/login", Username: "tester", Password: "pw", Consent: true}
+	if r := e.do("PUT", path, a.session, form); r.status != http.StatusOK {
+		t.Errorf("form = %d %s", r.status, r.body)
+	}
+	for name, bad := range map[string]setCredentialRequest{
+		"header injection": {Kind: "header", HeaderName: "Authorization", HeaderValue: "x\r\nHost: evil.org", Consent: true},
+		"forbidden header": {Kind: "header", HeaderName: "Host", HeaderValue: "evil.org", Consent: true},
+		"bad header name":  {Kind: "header", HeaderName: "Auth orization", HeaderValue: "x", Consent: true},
+		"login elsewhere":  {Kind: "form", LoginURL: "https://login.other.org/", Username: "u", Password: "p", Consent: true},
+		"no password":      {Kind: "form", LoginURL: "https://example.com/login", Username: "u", Consent: true},
+		"unknown kind":     {Kind: "oauth", Consent: true},
+	} {
+		if r := e.do("PUT", path, a.session, bad); r.status != http.StatusBadRequest {
+			t.Errorf("%s = %d %s, want 400", name, r.status, r.body)
+		}
+	}
+	if r := e.do("DELETE", path, a.session, nil); r.status != http.StatusNoContent {
+		t.Errorf("delete = %d", r.status)
+	}
+	soon := time.Now().Add(time.Hour)
+	e.setPlan(a.orgID, plan.Subscription{Plan: plan.SME, Status: plan.Trialing, TrialEndsAt: &soon})
+	if r := e.do("PUT", path, a.session, header); r.status != http.StatusForbidden {
+		t.Errorf("Essentiel = %d, want 403", r.status)
+	}
+}

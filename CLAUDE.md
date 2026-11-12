@@ -297,6 +297,17 @@ ZAP's automation framework and runs the active scan; checks: injection, access c
 exposure, misconfiguration (CORS), other high risk. The worker passes the APIs only to modules
 with `module.Info.UsesAPIs`, as `module.RunConfig.APIs`. Without declared APIs it does nothing.
 
+Authenticated scans (step I, Pro and Sur devis, plan.AuthScans): an admin gives each domain a
+test account in Réglages (`/targets/{target}/credential`, admins only, explicit consent,
+migration 0020): a header (bearer token, API key, Cookie) or a login form (URL on the domain,
+username, password, field names). The secret is sealed under `ORUS_CREDENTIALS_KEY` (API and
+worker, package seal, bound to the target); the API's role can write it but not read it back
+(column privileges), and it is never returned. The worker opens it at scan time for modules
+with `module.Info.UsesCredentials` (zap, api) as `module.RunConfig.Auth`. A form is logged in by
+our code through gateproxy (ZAP's per-user requests drop the proxy credential) and its session
+passed to ZAP as a Cookie header; headers go through ZAP_AUTH_HEADER* from an `--env-file`
+(mode 0600, never in the plan). Logout pages are excluded; an expired session is not renewed.
+
 Emerging threats: the worker indexes the critical and high CVE templates of
 `ORUS_NUCLEI_TEMPLATES` at start and every hour (`threats.Watcher`) into `threat_templates`.
 The first sync is the baseline: only the templates the release lists in `.new-additions` are

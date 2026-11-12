@@ -290,6 +290,8 @@ export interface Plan {
   deep_scans_per_month: number;
   /** Declared APIs are scanned (step H). */
   api_scans: boolean;
+  /** Scans can log in with a test account (step I). */
+  auth_scans: boolean;
   usd_monthly: number;
   usd_yearly: number;
   xaf_monthly: number;
@@ -373,6 +375,18 @@ export interface DeclaredAPI {
   spec_url?: string;
   /** Size of the uploaded description, bytes. */
   spec_size?: number;
+  created_at: string;
+  created_by: string;
+}
+
+/** credentialJSON: a target's test account, never its secret. */
+export interface TestAccount {
+  kind: "header" | "form";
+  header_name?: string;
+  login_url?: string;
+  username?: string;
+  username_field?: string;
+  password_field?: string;
   created_at: string;
   created_by: string;
 }

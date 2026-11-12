@@ -17,6 +17,7 @@ type config struct {
 	addr           string
 	trustedOrigins []string
 	mfaKey         []byte
+	credentialsKey []byte
 	publicURL      string
 	smtp           *mailer.SMTP // nil: mail not configured
 	signupClosed   bool
@@ -35,6 +36,10 @@ type config struct {
 //	                          (generate with: openssl rand -base64 32).
 //	                          Losing it disables every user's MFA codes;
 //	                          keep it out of the database backups.
+//	ORUS_CREDENTIALS_KEY      optional: 32 random bytes in base64, the key that
+//	                          seals customers' test accounts (authenticated
+//	                          scans); the worker needs the same. Unset: no
+//	                          test account can be stored
 //	ORUS_PUBLIC_URL           the dashboard's address, for links in emails;
 //	                          default http://localhost:5173 (development)
 //	ORUS_SMTP_ADDR            SMTP server host:port; unset: no email is sent
@@ -66,6 +71,13 @@ func loadConfig(getenv func(string) string) (config, error) {
 		return config{}, fmt.Errorf("ORUS_MFA_KEY must be %d random bytes in base64 (openssl rand -base64 32)", seal.KeyLen)
 	}
 	cfg.mfaKey = key
+	if raw := strings.TrimSpace(getenv("ORUS_CREDENTIALS_KEY")); raw != "" {
+		ck, err := base64.StdEncoding.DecodeString(raw)
+		if err != nil || len(ck) != seal.KeyLen {
+			return config{}, fmt.Errorf("ORUS_CREDENTIALS_KEY must be %d random bytes in base64 (openssl rand -base64 32)", seal.KeyLen)
+		}
+		cfg.credentialsKey = ck
+	}
 	for _, o := range strings.Split(getenv("ORUS_API_TRUSTED_ORIGINS"), ",") {
 		if o = strings.TrimSpace(o); o != "" {
 			cfg.trustedOrigins = append(cfg.trustedOrigins, o)

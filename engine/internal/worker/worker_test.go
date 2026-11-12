@@ -20,6 +20,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/ownership"
 	"github.com/jordyorel/orus-shield/engine/internal/plan"
+	"github.com/jordyorel/orus-shield/engine/internal/seal"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
@@ -36,6 +37,8 @@ type fakeStore struct {
 	deepUsed  int      // deep scans already run this month
 	deepMarks []string // scans marked deep
 	apis      []store.API
+	cred      *store.Credential
+	sealed    []byte
 	audit     []store.AuditEntry
 	leaseLost bool // ExtendLease reports the lease as lost
 	extended  int
@@ -127,6 +130,12 @@ func (f *fakeStore) TargetAPIs(ctx context.Context, targetID string) ([]store.AP
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.apis, nil
+}
+
+func (f *fakeStore) TargetCredential(ctx context.Context, targetID string) (*store.Credential, []byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.cred, f.sealed, nil
 }
 
 func (f *fakeStore) FinishScan(ctx context.Context, r store.ScanResult) error {
@@ -979,6 +988,56 @@ func TestAPIsReachOnlyAPIScanners(t *testing.T) {
 			}
 			if strings.Contains(other, "apis") {
 				t.Errorf("other module got the APIs: %s", other)
+			}
+		})
+	}
+}
+
+// The test account reaches only the modules that can log in, opened with
+// the key, when the offer includes authenticated scans.
+func TestTestAccountReachesOnlyCredentialModules(t *testing.T) {
+	key, err := seal.NewKey(make([]byte, seal.KeyLen))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := key.Seal([]byte("Bearer s3cret"), store.CredentialOwner("t1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	soon := time.Now().Add(time.Hour)
+	for _, tt := range []struct {
+		name string
+		sub  *plan.Subscription
+		key  *seal.Key
+		want bool
+	}{
+		{"Pro", nil, key, true},
+		{"Essentiel", &plan.Subscription{Plan: plan.SME, Status: plan.Trialing, TrialEndsAt: &soon}, key, false},
+		{"no key", nil, nil, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var withCreds, other string
+			login := &fakeModule{info: module.Info{ID: "login", Name: "Login", Kind: module.KindPassive, UsesCredentials: true}, run: func(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+				withCreds = string(req.Config)
+				return nil, nil
+			}}
+			plain := &fakeModule{info: module.Info{ID: "plain", Name: "Plain", Kind: module.KindPassive}, run: func(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+				other = string(req.Config)
+				return nil, nil
+			}}
+			w, st := setup(t, true, "{}", login, plain)
+			w.cfg.Credentials = tt.key
+			st.sub = tt.sub
+			st.cred = &store.Credential{TargetID: "t1", Kind: store.CredentialHeader, HeaderName: "Authorization"}
+			st.sealed = sealed
+			if _, err := w.RunOnce(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Contains(withCreds, `"secret":"Bearer s3cret"`); got != tt.want {
+				t.Errorf("login module config = %s, want the account %v", withCreds, tt.want)
+			}
+			if strings.Contains(other, "s3cret") {
+				t.Errorf("another module got the secret: %s", other)
 			}
 		})
 	}

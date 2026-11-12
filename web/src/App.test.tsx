@@ -20,9 +20,9 @@ const me: Me = {
 };
 
 const plans: Plan[] = [
-  { id: "discovery", name: "Gratuit", domains: 1, hosts_per_scan: 5, members: 1, active_modules: false, max_frequency: "monthly", alerts: false, reports: false, threats: false, deep_scans: false, deep_scans_per_month: 0, api_scans: false, usd_monthly: 0, usd_yearly: 0, xaf_monthly: 0, xaf_yearly: 0, on_quote: false },
-  { id: "sme", name: "Essentiel", domains: 3, hosts_per_scan: 25, members: 3, active_modules: true, max_frequency: "weekly", alerts: true, reports: true, threats: true, deep_scans: false, deep_scans_per_month: 0, api_scans: false, usd_monthly: 35, usd_yearly: 29, xaf_monthly: 20000, xaf_yearly: 16500, on_quote: false },
-  { id: "pro", name: "Pro", domains: 15, hosts_per_scan: 25, members: 10, active_modules: true, max_frequency: "daily", alerts: true, reports: true, threats: true, deep_scans: true, deep_scans_per_month: 4, api_scans: true, usd_monthly: 99, usd_yearly: 79, xaf_monthly: 57000, xaf_yearly: 45500, on_quote: false },
+  { id: "discovery", name: "Gratuit", domains: 1, hosts_per_scan: 5, members: 1, active_modules: false, max_frequency: "monthly", alerts: false, reports: false, threats: false, deep_scans: false, deep_scans_per_month: 0, api_scans: false, auth_scans: false, usd_monthly: 0, usd_yearly: 0, xaf_monthly: 0, xaf_yearly: 0, on_quote: false },
+  { id: "sme", name: "Essentiel", domains: 3, hosts_per_scan: 25, members: 3, active_modules: true, max_frequency: "weekly", alerts: true, reports: true, threats: true, deep_scans: false, deep_scans_per_month: 0, api_scans: false, auth_scans: false, usd_monthly: 35, usd_yearly: 29, xaf_monthly: 20000, xaf_yearly: 16500, on_quote: false },
+  { id: "pro", name: "Pro", domains: 15, hosts_per_scan: 25, members: 10, active_modules: true, max_frequency: "daily", alerts: true, reports: true, threats: true, deep_scans: true, deep_scans_per_month: 4, api_scans: true, auth_scans: true, usd_monthly: 99, usd_yearly: 79, xaf_monthly: 57000, xaf_yearly: 45500, on_quote: false },
 ];
 
 const overview: Overview = {
@@ -88,6 +88,7 @@ function orgRoutes(extra: Record<string, ReturnType<typeof ok>> = {}, sub: Subsc
     }),
     [`GET ${base}/scans?limit=20`]: ok({ items: [] }),
     [`GET ${base}/targets/t1/apis`]: ok({ items: [] }),
+    [`GET ${base}/targets/t1/credential`]: fail(404, "no test account"),
     ...extra,
   });
 }
@@ -267,6 +268,29 @@ describe("dashboard", () => {
       base_url: "https://api.example.cg/v1",
       spec_url: "https://api.example.cg/openapi.json",
     });
+  });
+
+  it("stores a test account with consent, and never shows its secret", async () => {
+    const pro: Subscription = { ...subscription, plan: plans[2]!, status: "active", until: null };
+    const calls = orgRoutes(
+      {
+        [`GET /orgs/${ORG}/members`]: ok({ items: [] }),
+        [`PUT /orgs/${ORG}/targets/t1/credential`]: () => ({ status: 200, json: { kind: "header", header_name: "Authorization", created_at: "", created_by: "x" } }),
+      },
+      pro,
+    );
+    renderAt(`/orgs/${ORG}/reglages`);
+    fireEvent.click(await screen.findByRole("button", { name: "Ajouter un compte de test" }));
+    fireEvent.change(screen.getByLabelText(/Valeur \(par exemple/), { target: { value: "Bearer s3cret" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer le compte de test" }));
+    expect(screen.getByText("Cochez la case pour confirmer qu’il s’agit d’un compte de test.")).toBeTruthy();
+    expect(calls.some((c) => c.key.startsWith("PUT"))).toBe(false);
+    fireEvent.click(screen.getByLabelText(/Je confirme que c’est un compte de test/));
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer le compte de test" }));
+    await waitFor(() => expect(calls.some((c) => c.key === `PUT /orgs/${ORG}/targets/t1/credential`)).toBe(true));
+    expect(calls.find((c) => c.key.startsWith("PUT"))?.body).toEqual({ kind: "header", header_name: "Authorization", header_value: "Bearer s3cret", consent: true });
+    await waitFor(() => expect(screen.getByText(/en-tête Authorization/)).toBeTruthy());
+    expect(screen.queryByText(/s3cret/)).toBeNull();
   });
 
   it("sends an unknown screen back to Aujourd'hui", async () => {
