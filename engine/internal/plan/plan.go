@@ -61,6 +61,9 @@ type Plan struct {
 	// AuthScans: a test account lets the deep web scan and the API scan
 	// reach what is behind the login.
 	AuthScans bool
+	// Agents: internal networks scanned by agents installed by the
+	// customer (step J).
+	Agents bool
 	// Prices, per month: USD and XAF (Mobile Money), billed monthly or
 	// yearly. Zero with OnQuote: set by contract. XAFYearly applies the
 	// USD yearly discount, rounded to 500 FCFA (derived 2026-11-12, to
@@ -80,7 +83,7 @@ var Plans = []Plan{
 		MaxFrequency: Daily, Alerts: true, Reports: true, Threats: true, DeepScans: true, DeepScansPerMonth: 4, APIScans: true, AuthScans: true,
 		USDMonthly: 99, USDYearly: 79, XAFMonthly: 57000, XAFYearly: 45500},
 	{ID: Enterprise, Name: "Sur devis", HostsPerScan: 25, ActiveModules: true,
-		MaxFrequency: Daily, Alerts: true, Reports: true, Threats: true, DeepScans: true, APIScans: true, AuthScans: true, OnQuote: true},
+		MaxFrequency: Daily, Alerts: true, Reports: true, Threats: true, DeepScans: true, APIScans: true, AuthScans: true, Agents: true, OnQuote: true},
 }
 
 // Get returns the plan with id.

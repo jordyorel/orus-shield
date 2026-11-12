@@ -72,6 +72,10 @@ func (s *Server) listAPIs(w http.ResponseWriter, r *http.Request, req orgRequest
 
 // createAPI answers POST /orgs/{org}/targets/{target}/apis.
 func (s *Server) createAPI(w http.ResponseWriter, r *http.Request, req orgRequest, t store.Target) {
+	if t.Internal {
+		writeError(w, http.StatusBadRequest, "not for an internal network: it is verified by its agent")
+		return
+	}
 	var body createAPIRequest
 	if !decode(w, r, &body) {
 		return

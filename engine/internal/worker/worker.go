@@ -47,6 +47,7 @@ type Store interface {
 	MarkScanDeep(ctx context.Context, scanID string, attempt int) error
 	TargetAPIs(ctx context.Context, targetID string) ([]store.API, error)
 	TargetCredential(ctx context.Context, targetID string) (*store.Credential, []byte, error)
+	ClaimAgentResult(ctx context.Context) (store.AgentResult, bool, error)
 }
 
 // Ownership enforces security rule 1 for active modules (see package
@@ -179,6 +180,11 @@ func (w *Worker) EnqueueScheduled(ctx context.Context) {
 // RunOnce claims and processes at most one scan. worked is false when the
 // queue was empty.
 func (w *Worker) RunOnce(ctx context.Context) (worked bool, err error) {
+	// Agents' results first: their scans are already done, they only wait
+	// to be validated and recorded.
+	if done, err := w.ingestAgentResult(ctx); done || err != nil {
+		return done, err
+	}
 	sc, ok, err := w.store.ClaimScan(ctx, w.cfg.ID, w.cfg.Lease, w.cfg.MaxAttempts)
 	if err != nil {
 		return false, fmt.Errorf("claim scan: %w", err)
@@ -645,6 +651,14 @@ func (w *Worker) runModule(ctx context.Context, id string, t module.Target, g mo
 	if err != nil {
 		return module.Result{}, nil, err
 	}
+	return w.checkResult(id, m.Info(), t.Domain, res)
+}
+
+// checkResult validates a module's output, from this worker or from an
+// agent: findings and assets well formed and of the target, checks in the
+// module's catalog, bounded sizes. It returns the result to store and the
+// checks it evaluated.
+func (w *Worker) checkResult(id string, info module.Info, domain string, res module.Result) (module.Result, []module.CheckOutcome, error) {
 	findings := res.Findings
 	if len(findings) > maxFindingsPerModule {
 		return module.Result{}, nil, fmt.Errorf("module %s returned %d findings, limit is %d", id, len(findings), maxFindingsPerModule)
@@ -657,7 +671,7 @@ func (w *Worker) runModule(ctx context.Context, id string, t module.Target, g mo
 	// would mark the missing findings fixed.
 	now := w.now()
 	for _, f := range findings {
-		if f.ModuleID != id || f.Target != t.Domain {
+		if f.ModuleID != id || f.Target != domain {
 			return module.Result{}, nil, fmt.Errorf("module %s returned a finding for module %q, target %q", id, f.ModuleID, f.Target)
 		}
 		stamped := f
@@ -670,14 +684,14 @@ func (w *Worker) runModule(ctx context.Context, id string, t module.Target, g mo
 	// are merged so each asset is stored once.
 	var assets asset.Set
 	for _, a := range res.Assets {
-		if err := a.Validate(t.Domain); err != nil {
+		if err := a.Validate(domain); err != nil {
 			return module.Result{}, nil, fmt.Errorf("module %s returned an invalid asset: %w", id, err)
 		}
 		assets.Add(a)
 	}
 	res = module.Result{Findings: findings, Assets: assets.List(), Evaluated: res.Evaluated, Unreached: res.Unreached}
 	// Rejects findings or evaluated checks the catalog does not declare.
-	checks, err = module.Evaluate(m.Info(), res)
+	checks, err := module.Evaluate(info, res)
 	if err != nil {
 		return module.Result{}, nil, err
 	}

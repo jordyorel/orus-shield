@@ -179,8 +179,10 @@ func (s *Store) ClaimScan(ctx context.Context, workerID string, lease time.Durat
 				started_at = coalesce(started_at, now())
 			WHERE id = (
 				SELECT id FROM scans
-				WHERE status = 'queued'
-				   OR (status = 'running' AND locked_until < now() AND attempts < $2)
+				WHERE (status = 'queued'
+				   OR (status = 'running' AND locked_until < now() AND attempts < $2))
+				  -- Internal networks are scanned by their agent, never here.
+				  AND NOT EXISTS (SELECT 1 FROM agents a WHERE a.target_id = scans.target_id)
 				ORDER BY created_at
 				LIMIT 1
 				FOR UPDATE SKIP LOCKED

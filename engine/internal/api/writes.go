@@ -32,6 +32,9 @@ func (s *Server) writeRoutes(mux *http.ServeMux) {
 	base := "/api/v1/orgs/{org}"
 	write("POST "+base+"/targets", s.createTarget)
 	write("PUT "+base+"/settings", s.putSettings)
+	write("POST "+base+"/agents", s.createAgent)
+	write("POST "+base+"/agents/{agent}/code", s.newAgentCode)
+	write("DELETE "+base+"/agents/{agent}", s.revokeAgent)
 	write("POST "+base+"/targets/{target}/apis", s.targetOnly(s.createAPI))
 	write("DELETE "+base+"/targets/{target}/apis/{api}", s.targetOnly(s.deleteAPI))
 	// Test accounts: admins only, reads included (the username is theirs).
@@ -247,6 +250,10 @@ type instructionsJSON struct {
 // verificationInstructions returns the DNS record to publish, issuing a
 // token if needed. It is a POST: it may create a token.
 func (s *Server) verificationInstructions(w http.ResponseWriter, r *http.Request, req orgRequest, t store.Target) {
+	if t.Internal {
+		writeError(w, http.StatusBadRequest, "not for an internal network: it is verified by its agent")
+		return
+	}
 	in, err := ownership.New(req.org, s.cfg.DNS).Instructions(r.Context(), t.ID, actor(req))
 	if err != nil {
 		s.internalError(w, r, err)
@@ -261,6 +268,10 @@ func (s *Server) verificationInstructions(w http.ResponseWriter, r *http.Request
 // verifyTarget looks for the record. The verifier works through the
 // organization's handle, so it cannot touch another organization's target.
 func (s *Server) verifyTarget(w http.ResponseWriter, r *http.Request, req orgRequest, t store.Target) {
+	if t.Internal {
+		writeError(w, http.StatusBadRequest, "not for an internal network: it is verified by its agent")
+		return
+	}
 	err := ownership.New(req.org, s.cfg.DNS).Verify(r.Context(), t.ID, actor(req))
 	switch {
 	case errors.Is(err, ownership.ErrNoToken):

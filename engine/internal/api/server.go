@@ -68,6 +68,9 @@ type Config struct {
 const (
 	// maxBodyBytes bounds request bodies: every request here is small JSON.
 	maxBodyBytes = 1 << 20
+	// maxAgentResultBytes bounds one agent submission (the database's
+	// agent_results check is 8 MB too).
+	maxAgentResultBytes = 8 << 20
 )
 
 // Server is the API. Build it with New.
@@ -81,6 +84,8 @@ type Server struct {
 	log *slog.Logger
 	// creds seals test accounts; nil without CredentialsKey.
 	creds *seal.Key
+	// agents is the store handle of the agent endpoints (role orus_agent).
+	agents *store.Agents
 }
 
 // New returns the API server on st. It keeps only st's authentication
@@ -102,7 +107,7 @@ func New(st *store.Store, cfg Config, log *slog.Logger) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("api: %w", err)
 	}
-	srv := &Server{acct: acct, org: st.Org, cfg: cfg, log: log}
+	srv := &Server{acct: acct, org: st.Org, cfg: cfg, log: log, agents: st.Agents()}
 	if len(cfg.CredentialsKey) > 0 {
 		if srv.creds, err = seal.NewKey(cfg.CredentialsKey); err != nil {
 			return nil, fmt.Errorf("api: credentials key: %w", err)
@@ -150,6 +155,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/plans", s.listPlans)
 	s.orgRoutes(mux)
 	s.teamRoutes(mux)
+	s.agentRoutes(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
 	})
@@ -171,7 +177,12 @@ func securityHeaders(next http.Handler) http.Handler {
 
 func limitBody(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+		limit := int64(maxBodyBytes)
+		// An agent's results for a whole internal network are larger.
+		if strings.HasPrefix(r.URL.Path, "/api/v1/agent/scans/") && strings.HasSuffix(r.URL.Path, "/result") {
+			limit = maxAgentResultBytes
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
 		next.ServeHTTP(w, r)
 	})
 }

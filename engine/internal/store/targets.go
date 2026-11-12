@@ -34,6 +34,9 @@ type Target struct {
 	VerifyToken          string
 	VerifyTokenExpiresAt *time.Time // deadline to publish it; nil once verified
 	VerifyCheckedAt      *time.Time // last successful check of the record
+	// Internal: an agent's internal network (step J), verified by the
+	// agent's enrolment, scanned by the agent only.
+	Internal bool
 
 	// Schedule is nil when the target is only scanned on demand.
 	Schedule *TargetSchedule
@@ -61,7 +64,7 @@ type NewTarget struct {
 
 const targetColumns = `id::text, org_id::text, domain, verified_at, exclusions, rate_per_sec, created_at,
 	coalesce(verify_token, ''), verify_token_expires_at, verify_checked_at,
-	schedule_frequency, schedule_weekday, schedule_hour, schedule_timezone, schedule_modules, next_scan_at`
+	schedule_frequency, schedule_weekday, schedule_hour, schedule_timezone, schedule_modules, next_scan_at, internal`
 
 func scanTarget(row pgx.Row) (Target, error) {
 	var t Target
@@ -73,7 +76,7 @@ func scanTarget(row pgx.Row) (Target, error) {
 	)
 	err := row.Scan(&t.ID, &t.OrgID, &t.Domain, &t.VerifiedAt, &t.Exclusions, &t.RatePerSec, &t.CreatedAt,
 		&t.VerifyToken, &t.VerifyTokenExpiresAt, &t.VerifyCheckedAt,
-		&frequency, &weekday, &hour, &timezone, &modules, &next)
+		&frequency, &weekday, &hour, &timezone, &modules, &next, &t.Internal)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Target{}, ErrNotFound
 	}

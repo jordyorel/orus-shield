@@ -88,6 +88,10 @@ func (s *Server) getCredential(w http.ResponseWriter, r *http.Request, req orgRe
 
 // setCredential answers PUT /orgs/{org}/targets/{target}/credential.
 func (s *Server) setCredential(w http.ResponseWriter, r *http.Request, req orgRequest, t store.Target) {
+	if t.Internal {
+		writeError(w, http.StatusBadRequest, "not for an internal network: it is verified by its agent")
+		return
+	}
 	if s.creds == nil {
 		writeError(w, http.StatusServiceUnavailable, "test accounts are not configured on this server (ORUS_CREDENTIALS_KEY)")
 		return

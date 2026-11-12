@@ -138,6 +138,10 @@ func (f *fakeStore) TargetCredential(ctx context.Context, targetID string) (*sto
 	return f.cred, f.sealed, nil
 }
 
+func (f *fakeStore) ClaimAgentResult(ctx context.Context) (store.AgentResult, bool, error) {
+	return store.AgentResult{}, false, nil
+}
+
 func (f *fakeStore) FinishScan(ctx context.Context, r store.ScanResult) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

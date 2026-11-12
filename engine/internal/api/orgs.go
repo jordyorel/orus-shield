@@ -60,6 +60,7 @@ func (s *Server) orgRoutes(mux *http.ServeMux) {
 	read("/report", s.report)
 	read("/subscription", s.subscription)
 	read("/settings", s.getSettings)
+	read("/agents", s.listAgents)
 	read("/activity", s.activity)
 	read("/scans", s.recentScans)
 	read("/targets", s.listTargets)
@@ -109,6 +110,8 @@ type targetJSON struct {
 	CreatedAt       time.Time       `json:"created_at"`
 	// Schedule is null for a target scanned on demand only.
 	Schedule *scheduleJSON `json:"schedule"`
+	// Internal: an agent's internal network, not a domain.
+	Internal bool `json:"internal"`
 }
 
 // scheduleJSON is a target's schedule. Weekday: 0 is Sunday, 6 Saturday.
@@ -125,6 +128,7 @@ func toTargetJSON(t store.Target) targetJSON {
 	out := targetJSON{
 		ID: t.ID, Domain: t.Domain, Verified: t.Verified(), VerifiedAt: t.VerifiedAt,
 		VerifyCheckedAt: t.VerifyCheckedAt, RatePerSec: t.RatePerSec, Exclusions: t.Exclusions, CreatedAt: t.CreatedAt,
+		Internal: t.Internal,
 	}
 	if sc := t.Schedule; sc != nil {
 		out.Schedule = &scheduleJSON{
