@@ -43,10 +43,10 @@ func parse(t *testing.T, lines ...string) []result {
 }
 
 func TestConvert(t *testing.T) {
-	cve := map[string]any{"classification": map[string]any{"cve-id": []string{"CVE-2021-41773"}, "cwe-id": []string{"CWE-22"}, "cvss-score": 7.5},
+	cve := map[string]any{"classification": map[string]any{"cve-id": []string{"CVE-2021-41773"}, "cwe-id": []string{"CWE-22"}, "cvss-score": 7.5, "epss-score": 0.94},
 		"reference": []string{"https://nvd.nist.gov/vuln/detail/CVE-2021-41773", "javascript:alert(1)"}, "remediation": "Upgrade Apache."}
 	results := parse(t,
-		line("CVE-2021-41773", "high", "https://www.example.com/cgi-bin/.%2e/x?payload=1", []string{"cve", "apache"}, cve),
+		line("CVE-2021-41773", "high", "https://www.example.com/cgi-bin/.%2e/x?payload=1", []string{"cve", "apache", "kev"}, cve),
 		line("git-config", "medium", "https://example.com/.git/config", []string{"config", "git", "exposure"}, nil),
 		line("git-config", "medium", "https://example.com/.git/config", []string{"config", "git", "exposure"}, nil), // second matcher: same finding
 		line("jenkins-panel", "info", "http://ci.example.com/login", []string{"panel", "jenkins"}, nil),
@@ -81,7 +81,8 @@ func TestConvert(t *testing.T) {
 		slices.Contains(c.References, "javascript:alert(1)") || c.Remediation[0] != "Upgrade Apache." {
 		t.Errorf("cve references %v, remediation %v", c.References, c.Remediation)
 	}
-	if !strings.Contains(c.Evidence, "cvss: 7.5") || !strings.Contains(c.Evidence, "matched at") {
+	if !strings.Contains(c.Evidence, "cvss: 7.5") || !strings.Contains(c.Evidence, "matched at") ||
+		!strings.Contains(c.Evidence, "epss: 0.9400") || !strings.Contains(c.Evidence, "CISA KEV") || !slices.Contains(c.References, kevCatalog) {
 		t.Errorf("cve evidence %q", c.Evidence)
 	}
 	if f := got["https://example.com/.git/config#git-config"]; f.CheckID != CheckExposedData {

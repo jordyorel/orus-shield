@@ -29,6 +29,7 @@ type result struct {
 			CVE       strList `json:"cve-id"`
 			CWE       strList `json:"cwe-id"`
 			CVSSScore float64 `json:"cvss-score"`
+			EPSSScore float64 `json:"epss-score"`
 		} `json:"classification"`
 	} `json:"info"`
 	Type        string  `json:"type"`
@@ -228,11 +229,22 @@ func (r result) finding(domain string) (finding.Finding, bool) {
 	if r.Info.Classification.CVSSScore > 0 {
 		fmt.Fprintf(&ev, "cvss: %.1f\n", r.Info.Classification.CVSSScore)
 	}
+	if e := r.Info.Classification.EPSSScore; e > 0 && e <= 1 {
+		// FIRST's EPSS: probability of exploitation in the next 30 days.
+		fmt.Fprintf(&ev, "epss: %.4f\n", e)
+	}
+	kev := r.hasTag("kev")
+	if kev {
+		ev.WriteString("known exploited: yes (CISA KEV catalog)\n")
+	}
 	for _, x := range cleanList(r.Extracted, 5, 200) {
 		fmt.Fprintf(&ev, "extracted: %s\n", x)
 	}
 
 	refs := append(cves, cleanList(r.Info.Classification.CWE, 5, 20)...)
+	if kev {
+		refs = append(refs, kevCatalog)
+	}
 	for _, ref := range cleanList(r.Info.Reference, 8, 300) {
 		if strings.HasPrefix(ref, "https://") || strings.HasPrefix(ref, "http://") {
 			refs = append(refs, ref)
@@ -259,6 +271,10 @@ func (r result) finding(domain string) (finding.Finding, bool) {
 		References:    refs,
 	}, true
 }
+
+// kevCatalog is CISA's Known Exploited Vulnerabilities catalog: a CVE in it
+// is being exploited by attackers now.
+const kevCatalog = "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
 
 var defaultRemediation = map[string][]string{
 	CheckKnownCVE: {
