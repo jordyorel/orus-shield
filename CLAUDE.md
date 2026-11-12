@@ -14,7 +14,9 @@ cookies, disclosed versions) is done too, and so is attack surface discovery (pa
 runs it first and every module scans `module.Target.Hosts`, at most 25 names). Known
 vulnerabilities come from the active `vulns` module (2026-11-12): Nuclei, a pinned external
 binary, whose only way out is `gateproxy`, a local proxy that sends each of its requests
-through the scan's gate (see "External tools"). Step 7 follows the order in
+through the scan's gate (see "External tools"). Emerging threats (package `threats`,
+migration 0014) rescan the verified domains whose detected technologies match the new CVE
+templates of an installed release. Step 7 follows the order in
 `docs/ui-adaptation.md`: organizations (multi-tenant scoping, `store.Org` + PostgreSQL
 row-level security), the findings lifecycle (`fixed_at`, `finding_events` history) and the
 asset inventory (`module.Result` with findings and assets, `assets` table) and the check
@@ -105,6 +107,8 @@ engine/
   internal/worker/   claims scans, runs modules, records results
   internal/mailer/   SMTP email and French templates (password reset, invitations, alerts)
   internal/notify/   delivers queued alert emails (outbox), in the worker process
+  internal/threats/  emerging threats: indexes new CVE templates, matches them to detected
+                     technologies, queues vulns rescans (worker process)
   internal/modules/all/  the list of shipped modules
 deploy/              local infrastructure files (PostgreSQL init; lab/setup.sh: the test lab server;
                      nuclei/install.sh: pinned Nuclei and templates, checksums verified)
@@ -239,6 +243,17 @@ minutes at the default 5 requests per second (module timeout 2 hours, `module.In
 `go test ./internal/modules/vulns` runs the real binary against a local server when both
 variables are set. Findings' asset is the matched URL plus `#template-id`; detected
 technologies go to the hostname's `technologies` detail.
+
+Emerging threats: the worker indexes the critical and high CVE templates of
+`ORUS_NUCLEI_TEMPLATES` at start and every hour (`threats.Watcher`) into `threat_templates`.
+The first sync is the baseline: only the templates the release lists in `.new-additions` are
+emerging; afterwards, every template not seen before is. Each emerging template is matched,
+through its product tags (generic tags such as `rce` or `cve` never match), against the
+`technologies` detail of the current hostnames of every verified target; each matched target
+gets one `vulns` rescan (requested by `threats`, audited; a queued vulns scan is reused) and
+one `emerging_threat` email per activated admin. A match never creates a finding: the rescan
+decides (rule 8). `GET /orgs/{org}/threats` lists them. Installing a newer release (update
+the versions and hashes in `deploy/nuclei/install.sh`) is what brings new threats.
 
 DNS: `ORUS_DNS_SERVER` (an IP, e.g. 127.0.0.1 for Unbound or 1.1.1.1) sends every lookup of
 the worker, the API and orusctl to one server; unset, the machine's resolver is used. Set it

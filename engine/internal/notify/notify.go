@@ -1,6 +1,6 @@
 // Package notify delivers the email notifications that scans leave in the
 // outbox (store table notifications): alerts about new critical and high
-// findings.
+// findings, and about emerging threats (package threats).
 //
 // It runs in the worker process. Each pass claims due notifications with a
 // lease, sends them, and records the outcome: sent, retried later with a
@@ -128,19 +128,30 @@ func (n *Notifier) failed(ctx context.Context, nt store.Notification, sendErr er
 
 // message builds the email of a notification.
 func (n *Notifier) message(nt store.Notification) (mailer.Message, error) {
-	if nt.Kind != store.NotifyNewFindings {
-		return mailer.Message{}, fmt.Errorf("unknown notification kind %q", nt.Kind)
+	switch nt.Kind {
+	case store.NotifyNewFindings:
+		var a store.NewFindingsAlert
+		if err := json.Unmarshal(nt.Payload, &a); err != nil {
+			return mailer.Message{}, fmt.Errorf("read payload: %w", err)
+		}
+		items := make([]mailer.AlertItem, 0, len(a.Findings))
+		for _, f := range a.Findings {
+			items = append(items, mailer.AlertItem{
+				Severity: string(f.Severity), Title: f.Title, Asset: f.Asset, Reopened: f.Reopened,
+				Link: mailer.FindingsLink(n.publicURL, a.OrgID, f.ID),
+			})
+		}
+		return mailer.NewFindings(nt.Recipient, a.OrgName, a.Domain, items, a.Total, mailer.FindingsLink(n.publicURL, a.OrgID, "")), nil
+	case store.NotifyEmergingThreat:
+		var a store.EmergingThreatAlert
+		if err := json.Unmarshal(nt.Payload, &a); err != nil {
+			return mailer.Message{}, fmt.Errorf("read payload: %w", err)
+		}
+		items := make([]mailer.ThreatItem, 0, len(a.Threats))
+		for _, t := range a.Threats {
+			items = append(items, mailer.ThreatItem{CVE: t.CVE, Name: t.Name, Severity: t.Severity, KEV: t.KEV, EPSS: t.EPSS, Products: t.Products})
+		}
+		return mailer.EmergingThreats(nt.Recipient, a.OrgName, a.Domain, items, a.Total, mailer.ScansLink(n.publicURL, a.OrgID)), nil
 	}
-	var a store.NewFindingsAlert
-	if err := json.Unmarshal(nt.Payload, &a); err != nil {
-		return mailer.Message{}, fmt.Errorf("read payload: %w", err)
-	}
-	items := make([]mailer.AlertItem, 0, len(a.Findings))
-	for _, f := range a.Findings {
-		items = append(items, mailer.AlertItem{
-			Severity: string(f.Severity), Title: f.Title, Asset: f.Asset, Reopened: f.Reopened,
-			Link: mailer.FindingsLink(n.publicURL, a.OrgID, f.ID),
-		})
-	}
-	return mailer.NewFindings(nt.Recipient, a.OrgName, a.Domain, items, a.Total, mailer.FindingsLink(n.publicURL, a.OrgID, "")), nil
+	return mailer.Message{}, fmt.Errorf("unknown notification kind %q", nt.Kind)
 }

@@ -38,7 +38,7 @@ stay in the modules' English (decided 2026-11-10).
 | Open findings by severity, remediation time | findings, finding_events | done |
 | Rule-based priorities | overview endpoint | done |
 | New assets since last period | assets | done |
-| **Emerging threats banner**: "A new critical CVE affects your stack; rescan queued / done" | threat feed + matched technologies | C |
+| **Emerging threats banner**: "A new critical CVE affects your stack; rescan queued / done" | `GET /orgs/{org}/threats` (done) | C: data done, UI waits for a design |
 | **Leaks summary**: exposed accounts found this month | leak module | G |
 | Plan usage: domains used / allowed, next scheduled scan | plan limits | F |
 
@@ -48,7 +48,7 @@ stay in the modules' English (decided 2026-11-10).
 |---|---|---|
 | List, filters (severity, status, module, domain), detail with evidence and remediation | findings | done |
 | Accept a risk, history of a finding | finding_events | done |
-| **CVE details**: CVE ID, CVSS score, EPSS (probability of exploitation), "known exploited" (CISA KEV) badge, affected version, fixed version | vulns module (Nuclei) | A (CVE, CVSS), C (EPSS, KEV) |
+| **CVE details**: CVE ID, CVSS score, EPSS (probability of exploitation), "known exploited" (CISA KEV) badge, affected version, fixed version | vulns module (Nuclei): CVE, CVSS, EPSS and KEV in evidence and references | done (engine); UI badges later |
 | **Filter "known vulnerabilities" / "configuration"** | check category | A |
 | **Source badge**: which scan found it (passive, active, deep web scan) | module ID | A |
 | Export (CSV now, PDF with the report) | | E |
@@ -76,7 +76,7 @@ stay in the modules' English (decided 2026-11-10).
 | **Deep scan settings**: start URL, pages to skip, optional test account for the app (login form), max duration | ZAP config per target | D |
 | **Deep scan warning and consent**: "this scan sends test inputs to your forms; run it on a test environment if you can" | | D |
 | Scan quota display: "3 scans approfondis restants ce mois" | plan limits | F |
-| Rescans triggered by emerging threats, shown with a "Menace émergente" tag | scans.requested_by = threats | C |
+| Rescans triggered by emerging threats, shown with a "Menace émergente" tag | scans.requested_by = threats | C: data done, tag in the UI later |
 | Continuous mode ("Continue") | | later |
 
 ## 7. Reports (Rapports) — new screen
@@ -103,9 +103,9 @@ stay in the modules' English (decided 2026-11-10).
 
 | Feature | What the user sees / does | Status |
 |---|---|---|
-| Feed of new critical CVEs relevant to the customer's detected technologies | new Nuclei templates + KEV, matched against detected tech | C |
-| For each: affected assets, rescan status (queued, clean, vulnerable) | | C |
-| Alert email: "Nouvelle faille critique X : vos serveurs ont été vérifiés, résultat ..." | | C |
+| Feed of new critical CVEs relevant to the customer's detected technologies | `GET /orgs/{org}/threats`: CVE, name, severity, KEV, EPSS, domain, matched technologies | done (API); screen not in the mockups yet |
+| For each: affected domain, rescan status (queued, running, done, failed) | threat_matches + scans | done (API) |
+| Alert email: "N nouvelles failles pouvant concerner X, vérification en cours" | notifications `emerging_threat` | done |
 
 ## 10. Alerts and notifications
 

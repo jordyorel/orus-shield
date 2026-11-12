@@ -16,6 +16,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/notify"
 	"github.com/jordyorel/orus-shield/engine/internal/ownership"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
+	"github.com/jordyorel/orus-shield/engine/internal/threats"
 	"github.com/jordyorel/orus-shield/engine/internal/worker"
 )
 
@@ -65,6 +66,10 @@ func run(log *slog.Logger) error {
 	}
 	if cfg.nuclei.Binary == "" {
 		log.Warn("ORUS_NUCLEI_BIN is not set: the vulns module (known vulnerabilities) will fail")
+	} else {
+		// Emerging threats: new CVE templates of the installed release,
+		// matched against what was detected on every verified domain.
+		go threats.NewWatcher(st, cfg.nuclei.Templates, log.With("component", "threats")).Run(ctx, threats.DefaultInterval)
 	}
 	return worker.New(st, registry, verifier, cfg.worker, log).Run(ctx)
 }

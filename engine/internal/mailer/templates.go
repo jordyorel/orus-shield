@@ -259,3 +259,82 @@ rien n'a changé sur votre compte.
 `, loginURL, forgotURL, signature),
 	}
 }
+
+// ThreatItem is one emerging threat listed in an alert.
+type ThreatItem struct {
+	CVE      string // may be empty
+	Name     string // the template's English name
+	Severity string // "critical" or "high"
+	KEV      bool   // exploited in the wild (CISA KEV)
+	EPSS     float64
+	Products []string // the detected technologies it concerns
+}
+
+// EmergingThreats tells admins that newly published vulnerabilities may
+// concern their domain and that a check was started. It never says the
+// domain is vulnerable: the rescan decides, and a new_findings alert
+// follows if it is.
+func EmergingThreats(to, org, domain string, items []ThreatItem, total int, scansLink string) Message {
+	domain = oneLine(domain, 253)
+	org = oneLine(org, 80)
+	subject := fmt.Sprintf("Orus Shield : %d nouvelle%s faille%s pouvant concerner %s, vérification en cours",
+		total, plural(total), plural(total), domain)
+	var b strings.Builder
+	for _, it := range items {
+		label := severityFR[it.Severity]
+		if label == "" {
+			label = oneLine(it.Severity, 20)
+		}
+		id := oneLine(it.CVE, 40)
+		if id != "" {
+			id += " : "
+		}
+		fmt.Fprintf(&b, "- [%s] %s%s\n", label, id, oneLine(it.Name, 200))
+		var notes []string
+		if len(it.Products) > 0 {
+			var p []string
+			for _, x := range it.Products {
+				p = append(p, oneLine(x, 40))
+			}
+			notes = append(notes, "concerne : "+strings.Join(p, ", "))
+		}
+		if it.KEV {
+			notes = append(notes, "déjà exploitée par des attaquants (catalogue CISA KEV)")
+		}
+		if it.EPSS >= 0.01 {
+			notes = append(notes, fmt.Sprintf("probabilité d'exploitation sous 30 jours : %.0f %%", it.EPSS*100))
+		}
+		if len(notes) > 0 {
+			fmt.Fprintf(&b, "  %s\n", strings.Join(notes, " ; "))
+		}
+	}
+	more := ""
+	if total > len(items) {
+		more = fmt.Sprintf("\n... et %d autre%s.\n", total-len(items), plural(total-len(items)))
+	}
+	return Message{
+		To:      to,
+		Subject: subject,
+		Text: fmt.Sprintf(`Bonjour,
+
+De nouvelles failles de sécurité viennent d'être publiées pour des
+logiciels que nous avons détectés sur %s (organisation « %s ») :
+
+%s%s
+Cela ne veut pas dire que vous êtes vulnérable : la version que vous
+utilisez est peut-être déjà corrigée. Nous avons lancé une vérification
+de vos serveurs. Si elle confirme une faille, vous recevrez une alerte
+avec les étapes de correction. Suivre la vérification :
+
+%s
+
+Vous recevez cet email parce que vous êtes administrateur de « %s ».
+%s
+`, domain, org, b.String(), more, scansLink, org, signature),
+	}
+}
+
+// ScansLink is the dashboard's scans page of an organization.
+func ScansLink(publicURL, orgID string) string {
+	return strings.TrimRight(publicURL, "/") + "/orgs/" + url.PathEscape(orgID) + "/scans"
+}

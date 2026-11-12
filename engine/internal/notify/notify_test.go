@@ -133,3 +133,35 @@ func TestFailuresAreRetriedThenAbandoned(t *testing.T) {
 		t.Errorf("sent = %v", st.sent)
 	}
 }
+
+func TestDeliversEmergingThreats(t *testing.T) {
+	payload, err := json.Marshal(store.EmergingThreatAlert{
+		OrgID: "org-1", OrgName: "Acme", Domain: "acme.example", ScanID: "s9", Total: 2,
+		Threats: []store.EmergingThreat{
+			{TemplateID: "CVE-2026-6279", CVE: "CVE-2026-6279", Name: "Avada - Unauthenticated RCE", Severity: "critical", KEV: true, EPSS: 0.42, Products: []string{"wordpress"}},
+			{TemplateID: "x-high", Name: "Plugin - SQL injection", Severity: "high", Products: []string{"wordpress"}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := &fakeStore{due: []store.Notification{{ID: "n1", Kind: store.NotifyEmergingThreat, Recipient: "admin@acme.example",
+		Payload: payload, CreatedAt: now, Attempts: 1}}, retried: map[string]time.Time{}, abandoned: map[string]string{}}
+	m := &fakeMail{}
+	if sent, err := newNotifier(st, m).RunOnce(context.Background()); err != nil || sent != 1 {
+		t.Fatalf("sent %d, err %v, abandoned %v", sent, err, st.abandoned)
+	}
+	msg := m.sent[0]
+	if msg.Subject != "Orus Shield : 2 nouvelles failles pouvant concerner acme.example, vérification en cours" {
+		t.Errorf("subject %q", msg.Subject)
+	}
+	for _, want := range []string{
+		"[Critique] CVE-2026-6279 : Avada - Unauthenticated RCE", "concerne : wordpress",
+		"catalogue CISA KEV", "sous 30 jours : 42 %", "[Élevée] Plugin - SQL injection",
+		"Cela ne veut pas dire que vous êtes vulnérable", "https://app.example/orgs/org-1/scans",
+	} {
+		if !strings.Contains(msg.Text, want) {
+			t.Errorf("body misses %q:\n%s", want, msg.Text)
+		}
+	}
+}
