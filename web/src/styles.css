@@ -617,3 +617,6 @@ button.asset:hover{transform:translateY(-2px);border-color:var(--azur)}
 .brand img,.rail .logo img{display:block}
 :root[data-theme=dark] .brandmark{filter:drop-shadow(0 0 1px rgba(255,255,255,.55))}
 .pwbox label.md{margin-top:4px}
+.legaltext{color:var(--ink2);font-size:15px;margin-top:10px;display:grid;gap:10px;max-width:68ch}
+.legaltext ul{margin:0;padding-left:20px;display:grid;gap:6px}
+.legaltext a{color:var(--azur-ink)}

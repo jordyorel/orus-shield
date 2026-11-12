@@ -483,11 +483,11 @@ export function InscriptionPage() {
               <input type="checkbox" id="su-terms" checked={terms} onChange={(e) => setTerms(e.target.checked)} />
               <span>
                 J’accepte les{" "}
-                <a href="/" onClick={(e) => (e.preventDefault(), toast("Conditions d’utilisation : bientôt disponibles"))}>
+                <a href="/conditions" target="_blank" rel="noopener">
                   conditions d’utilisation
                 </a>{" "}
                 et la{" "}
-                <a href="/" onClick={(e) => (e.preventDefault(), toast("Politique de confidentialité : bientôt disponible"))}>
+                <a href="/confidentialite" target="_blank" rel="noopener">
                   politique de confidentialité
                 </a>
                 .

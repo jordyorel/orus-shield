@@ -8,6 +8,7 @@ import { AujourdhuiPage } from "./ui/pages/Aujourdhui";
 import { ConnexionPage, InscriptionPage, MfaSetupPage, SetPasswordPage } from "./ui/pages/auth";
 import { ProblemesPage } from "./ui/pages/Problemes";
 import { ProfilPage } from "./ui/pages/Profil";
+import { ConditionsPage, ConfidentialitePage, TraitementPage } from "./ui/pages/legal";
 import { AccueilPage, PaiementPage, TarifsPage } from "./ui/pages/public";
 import { RapportsPage } from "./ui/pages/Rapports";
 import { ReglagesPage } from "./ui/pages/Reglages";
@@ -50,6 +51,9 @@ export function App() {
   // Pages open to everyone.
   if (path === "/") return <Page><AccueilPage /></Page>;
   if (path === "/tarifs") return <Page><TarifsPage /></Page>;
+  if (path === "/conditions") return <Page><ConditionsPage /></Page>;
+  if (path === "/confidentialite") return <Page><ConfidentialitePage /></Page>;
+  if (path === "/traitement-des-donnees") return <Page><TraitementPage /></Page>;
   if (path === "/setup-password") return <Page><SetPasswordPage kind="setup" /></Page>;
   if (path === "/signup/complete") return <Page><SetPasswordPage kind="signup" /></Page>;
   if (path === "/connexion") return state.status === "signed-in" ? <Redirect to="/app" /> : <Page><ConnexionPage /></Page>;

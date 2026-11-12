@@ -11,7 +11,7 @@ import { money } from "../model";
 import { useBodyClass, useUI } from "../ui";
 import { limitRows } from "./Reglages";
 
-function PubHead({ cur }: { cur: "accueil" | "tarifs" }) {
+export function PubHead({ cur }: { cur: "accueil" | "tarifs" | "legal" }) {
   const { theme, setTheme } = useUI();
   const { state } = useAuth();
   return (
@@ -47,18 +47,13 @@ function PubHead({ cur }: { cur: "accueil" | "tarifs" }) {
   );
 }
 
-function PubFoot() {
-  const { toast } = useUI();
+export function PubFoot() {
   return (
     <footer className="pubfoot">
       <span>Orus Shield</span>
       <span>
-        <a href="/" onClick={(e) => (e.preventDefault(), toast("Conditions d’utilisation : bientôt disponibles"))}>
-          Conditions d’utilisation
-        </a>
-        <a href="/" onClick={(e) => (e.preventDefault(), toast("Politique de confidentialité : bientôt disponible"))}>
-          Confidentialité
-        </a>
+        <Link to="/conditions">Conditions d’utilisation</Link>
+        <Link to="/confidentialite">Confidentialité</Link>
         <Link to="/tarifs">Tarifs</Link>
       </span>
     </footer>

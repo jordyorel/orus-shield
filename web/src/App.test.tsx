@@ -131,6 +131,21 @@ describe("public site", () => {
     fireEvent.paste(first, { clipboardData: { getData: () => "123456" } });
   };
 
+  it("shows the legal pages, marked as drafts", async () => {
+    for (const [path, title] of [
+      ["/conditions", "Conditions d’utilisation"],
+      ["/confidentialite", "Politique de confidentialité"],
+      ["/traitement-des-donnees", "Accord de traitement des données"],
+    ] as const) {
+      mockApi({ "GET /auth/me": fail(401) });
+      const view = renderAt(path);
+      expect(await screen.findByRole("heading", { level: 1, name: title })).toBeTruthy();
+      expect(screen.getByText(/à faire valider par un juriste/)).toBeTruthy();
+      expect(screen.getAllByRole("link", { name: "Confidentialité" })[0]?.getAttribute("href")).toBe("/confidentialite");
+      view.unmount();
+    }
+  });
+
   it("logs in with a 6-digit code", async () => {
     const calls = loginRoutes(true);
     await loginWithCode();
