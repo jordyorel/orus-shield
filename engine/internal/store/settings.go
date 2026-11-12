@@ -170,3 +170,9 @@ func isCheckViolation(err error, constraint string) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23514" && pgErr.ConstraintName == constraint
 }
+
+// isUniqueViolation reports whether err is PostgreSQL's unique_violation.
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}

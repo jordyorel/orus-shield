@@ -69,6 +69,7 @@ export function catOfModule(moduleId: string): Cat | null {
       return "ports";
     case "vulns":
     case "zap":
+    case "api":
       return "menaces";
   }
   return null;
@@ -90,6 +91,8 @@ export function moduleName(f: Finding): string {
       return "Vulnérabilités";
     case "zap":
       return "Application web";
+    case "api":
+      return "API";
   }
   return f.module_id;
 }

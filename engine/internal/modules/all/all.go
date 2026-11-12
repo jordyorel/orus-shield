@@ -39,6 +39,7 @@ func Registry(dns resolver.Resolver, opts Options) (*module.Registry, error) {
 		discovery.New(dns, discovery.Crtsh{}),
 		vulns.New(dns, dialer.NewSystem(), opts.Nuclei),
 		zap.New(dns, dialer.NewSystem(), opts.ZAP),
+		zap.NewAPI(dns, dialer.NewSystem(), opts.ZAP),
 	} {
 		if err := reg.Register(m); err != nil {
 			return nil, err

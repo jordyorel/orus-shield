@@ -192,3 +192,62 @@ func TestDeepProfile(t *testing.T) {
 		t.Errorf("deep on Essentiel = %d %s", r.status, r.body)
 	}
 }
+
+func TestDeclaredAPIs(t *testing.T) {
+	e := newEnv(t)
+	a := e.tenant("A", "example.com")
+	path := "/api/v1/orgs/" + a.orgID + "/targets/" + a.target.ID + "/apis"
+
+	ok := createAPIRequest{Name: "Users", Kind: "openapi", BaseURL: "https://api.example.com/v1", SpecURL: "https://api.example.com/openapi.json"}
+	if r := e.do("POST", path, a.viewer, ok); r.status != http.StatusForbidden {
+		t.Errorf("viewer = %d, want 403", r.status)
+	}
+	var created apiJSON
+	r := e.do("POST", path, a.session, ok)
+	r.json(t, &created)
+	if r.status != http.StatusCreated || created.ID == "" || created.SpecURL != ok.SpecURL {
+		t.Fatalf("create = %d %s", r.status, r.body)
+	}
+	if r := e.do("POST", path, a.session, ok); r.status != http.StatusConflict {
+		t.Errorf("same base URL = %d, want 409", r.status)
+	}
+	for name, bad := range map[string]createAPIRequest{
+		"other domain":        {Name: "x", Kind: "openapi", BaseURL: "https://api.other.org/v1", Spec: "{}"},
+		"look-alike":          {Name: "x", Kind: "openapi", BaseURL: "https://evilexample.com/v1", Spec: "{}"},
+		"spec elsewhere":      {Name: "x", Kind: "openapi", BaseURL: "https://example.com/v2", SpecURL: "https://raw.github.com/x.json"},
+		"credentials in URL":  {Name: "x", Kind: "openapi", BaseURL: "https://user:pw@example.com/v3", Spec: "{}"}, //nolint:gosec // G101: a fake credential, the request the API must refuse
+		"openapi without doc": {Name: "x", Kind: "openapi", BaseURL: "https://example.com/v4"},
+		"unknown kind":        {Name: "x", Kind: "soap", BaseURL: "https://example.com/v5"},
+		"no name":             {Kind: "graphql", BaseURL: "https://example.com/graphql"},
+	} {
+		if r := e.do("POST", path, a.session, bad); r.status != http.StatusBadRequest {
+			t.Errorf("%s = %d %s, want 400", name, r.status, r.body)
+		}
+	}
+	if r := e.do("POST", path, a.session, createAPIRequest{Name: "Graph", Kind: "graphql", BaseURL: "https://example.com/graphql"}); r.status != http.StatusCreated {
+		t.Errorf("graphql = %d %s", r.status, r.body)
+	}
+	var list list[apiJSON]
+	e.do("GET", path, a.viewer, nil).json(t, &list)
+	if len(list.Items) != 2 {
+		t.Errorf("list = %+v", list.Items)
+	}
+	if r := e.do("DELETE", path+"/"+created.ID, a.session, nil); r.status != http.StatusNoContent {
+		t.Errorf("delete = %d", r.status)
+	}
+	if r := e.do("DELETE", path+"/"+created.ID, a.session, nil); r.status != http.StatusNotFound {
+		t.Errorf("delete again = %d, want 404", r.status)
+	}
+	// Another tenant cannot see or touch them.
+	b := e.tenant("B", "example.org")
+	other := "/api/v1/orgs/" + b.orgID + "/targets/" + a.target.ID + "/apis"
+	if r := e.do("GET", other, b.session, nil); r.status != http.StatusNotFound {
+		t.Errorf("cross-tenant list = %d, want 404", r.status)
+	}
+	// An offer without API scans refuses new ones.
+	soon := time.Now().Add(time.Hour)
+	e.setPlan(a.orgID, plan.Subscription{Plan: plan.SME, Status: plan.Trialing, TrialEndsAt: &soon})
+	if r := e.do("POST", path, a.session, createAPIRequest{Name: "x", Kind: "graphql", BaseURL: "https://example.com/gql"}); r.status != http.StatusForbidden {
+		t.Errorf("Essentiel = %d, want 403", r.status)
+	}
+}

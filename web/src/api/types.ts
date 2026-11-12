@@ -288,6 +288,8 @@ export interface Plan {
   deep_scans: boolean;
   /** Deep scans per calendar month, 0 unlimited. */
   deep_scans_per_month: number;
+  /** Declared APIs are scanned (step H). */
+  api_scans: boolean;
   usd_monthly: number;
   usd_yearly: number;
   xaf_monthly: number;
@@ -359,4 +361,18 @@ export interface AuthActivity {
   at: string;
   action: string;
   ip: string;
+}
+
+/** apiJSON: an API declared on a target. */
+export interface DeclaredAPI {
+  id: string;
+  target_id: string;
+  name: string;
+  kind: "openapi" | "graphql";
+  base_url: string;
+  spec_url?: string;
+  /** Size of the uploaded description, bytes. */
+  spec_size?: number;
+  created_at: string;
+  created_by: string;
 }

@@ -142,9 +142,15 @@ func truncate(s string, max int) string {
 
 var reURL = regexp.MustCompile(`https?://[^\s<>"']+`)
 
-// convert turns the report into findings: one per alert and page (URL
-// without its query), with up to maxInstance proofs.
+// convert turns the report into the zap module's findings.
 func convert(domain string, r report) module.Result {
+	return convertWith(ID, classify, domain, r)
+}
+
+// convertWith turns the report into findings of moduleID, classified by
+// classify: one per alert and page (URL without its query), with up to
+// maxInstance proofs.
+func convertWith(moduleID string, classify func(alert) (string, finding.Severity), domain string, r report) module.Result {
 	type key struct{ check, asset string }
 	byKey := map[key]*finding.Finding{}
 	var order []key
@@ -184,8 +190,8 @@ func convert(domain string, r report) module.Result {
 					}
 					f = &finding.Finding{
 						SchemaVersion: finding.SchemaVersion,
-						ID:            finding.NewID(ID, check, domain, assetValue),
-						ModuleID:      ID,
+						ID:            finding.NewID(moduleID, check, domain, assetValue),
+						ModuleID:      moduleID,
 						CheckID:       check,
 						Target:        domain,
 						Asset:         assetValue,

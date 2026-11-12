@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { api, ApiError } from "../../api/client";
-import type { Member, OrgSettings, Plan, Role, Target } from "../../api/types";
+import type { DeclaredAPI, Member, OrgSettings, Plan, Role, Target } from "../../api/types";
 import { formatExclusions, parseExclusions } from "../../exclusions";
 import { Link } from "../../router";
 import { MODS, ModIcon, Soon } from "../icons";
@@ -45,6 +45,7 @@ export function limitRows(plans: Plan[]): [string, ...string[]][] {
     ["Fréquence des scans", ...col((p) => freq[p.max_frequency])],
     ["Ports vérifiés", ...col((p) => (p.active_modules ? "50 ports courants" : "Aucun"))],
     ["Vulnérabilités connues", ...col((p) => (p.active_modules ? "Oui" : "Non"))],
+    ["Analyse des API", ...col((p) => (p.api_scans ? "Oui" : "Non"))],
     ["Fuites de données", "Bientôt", "Bientôt", "Bientôt"],
     ["Menaces émergentes", ...col((p) => (p.threats ? "Oui" : "Non"))],
     ["Alertes email", ...col((p) => (p.alerts ? "Oui" : "Non"))],
@@ -532,9 +533,168 @@ function Domains({ targets }: { targets: Target[] }) {
                 </button>
               </div>
             )}
+            <TargetAPIs target={t} />
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** maxSpec mirrors the API's limit on an uploaded description. */
+const MAX_SPEC = 900 * 1024;
+
+/** TargetAPIs lists and declares the APIs of one domain (step H). */
+function TargetAPIs({ target }: { target: Target }) {
+  const { org, isAdmin, data } = useOrg();
+  const { toast } = useUI();
+  const [apis, setApis] = useState<DeclaredAPI[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState<"openapi" | "graphql">("openapi");
+  const [base, setBase] = useState("");
+  const [specURL, setSpecURL] = useState("");
+  const [spec, setSpec] = useState<{ name: string; text: string } | null>(null);
+  const [err, setErr] = useState("");
+  const included = data?.subscription.plan.api_scans ?? false;
+
+  const load = () =>
+    api.apis(org.org_id, target.id).then(
+      (r) => setApis(r.items),
+      () => setApis([]),
+    );
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target.id]);
+
+  const pickFile = async (f: File | undefined) => {
+    if (!f) return;
+    if (f.size > MAX_SPEC) {
+      setErr("Ce fichier dépasse 900 Ko : donnez plutôt l’adresse de la spécification.");
+      return;
+    }
+    setSpec({ name: f.name, text: await f.text() });
+    setErr("");
+  };
+  const add = async () => {
+    setErr("");
+    try {
+      await api.createAPI(org.org_id, target.id, {
+        name: name.trim(),
+        kind,
+        base_url: base.trim(),
+        ...(specURL.trim() ? { spec_url: specURL.trim() } : {}),
+        ...(spec ? { spec: spec.text } : {}),
+      });
+      setAdding(false);
+      setName("");
+      setBase("");
+      setSpecURL("");
+      setSpec(null);
+      toast("API ajoutée : elle sera analysée au prochain scan");
+      void load();
+    } catch (e) {
+      setErr(
+        e instanceof ApiError && e.status === 409
+          ? "Une API avec cette adresse est déjà déclarée."
+          : e instanceof ApiError && e.code === "plan_limit"
+            ? "L’analyse des API est incluse dans l’offre Pro."
+            : e instanceof ApiError && e.status === 400
+              ? `Vérifiez les adresses : elles doivent être sur ${target.domain} ou un de ses sous-domaines, et une API OpenAPI a besoin de sa spécification.`
+              : "API non enregistrée, réessayez.",
+      );
+    }
+  };
+  const remove = async (a: DeclaredAPI) => {
+    if (!window.confirm(`Retirer l’API ${a.name} ?`)) return;
+    try {
+      await api.deleteAPI(org.org_id, target.id, a.id);
+      toast("API retirée");
+      void load();
+    } catch {
+      toast("Suppression impossible pour le moment");
+    }
+  };
+  const field = { height: 44, borderRadius: 14, border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", font: "inherit", padding: "0 14px" };
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+        <p className="md">
+          API de {target.domain} : {apis.length ? apis.length : "aucune"}
+          {!included && <span className="soon">Offre Pro</span>}
+        </p>
+        {isAdmin && included && (
+          <button className="link" type="button" onClick={() => setAdding(!adding)}>
+            {adding ? "Annuler" : "Ajouter une API"}
+          </button>
+        )}
+      </div>
+      {apis.length > 0 && (
+        <ul className="svc">
+          {apis.map((a) => (
+            <li key={a.id}>
+              <b>{a.kind === "graphql" ? "GQL" : "REST"}</b>
+              <span>
+                {a.name}
+                {isAdmin && (
+                  <button className="link" type="button" style={{ minHeight: 0, marginLeft: 10, fontSize: 13 }} onClick={() => void remove(a)}>
+                    Retirer
+                  </button>
+                )}
+              </span>
+              <small>
+                {a.base_url}
+                {a.spec_url ? ` · spécification ${a.spec_url}` : a.spec_size ? " · spécification envoyée" : ""}
+              </small>
+            </li>
+          ))}
+        </ul>
+      )}
+      {adding && (
+        <div className="pwbox">
+          <label className="md" htmlFor={"api-name-" + target.id}>
+            Nom
+          </label>
+          <input id={"api-name-" + target.id} style={field} value={name} placeholder="API clients" onChange={(e) => setName(e.target.value)} />
+          <div className="seg2" role="group" aria-label="Type d’API" style={{ display: "inline-flex" }}>
+            {(
+              [
+                ["openapi", "OpenAPI (REST)"],
+                ["graphql", "GraphQL"],
+              ] as const
+            ).map(([k, l]) => (
+              <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)}>
+                {l}
+              </button>
+            ))}
+          </div>
+          <label className="md" htmlFor={"api-base-" + target.id}>
+            {kind === "graphql" ? "Adresse de l’API GraphQL" : "Adresse de base de l’API"}
+          </label>
+          <input id={"api-base-" + target.id} style={field} value={base} placeholder={`https://api.${target.domain}/v1`} onChange={(e) => setBase(e.target.value)} />
+          <label className="md" htmlFor={"api-spec-" + target.id}>
+            {kind === "graphql" ? "Schéma (facultatif : sinon l’API est interrogée)" : "Adresse de la spécification OpenAPI, ou un fichier ci-dessous"}
+          </label>
+          <input
+            id={"api-spec-" + target.id}
+            style={field}
+            value={specURL}
+            placeholder={`https://api.${target.domain}/openapi.json`}
+            onChange={(e) => setSpecURL(e.target.value)}
+          />
+          <input type="file" accept=".json,.yaml,.yml,.graphql,.gql,application/json" aria-label="Fichier de spécification" onChange={(e) => void pickFile(e.target.files?.[0])} />
+          {spec && <p className="md">Fichier : {spec.name}</p>}
+          <p className="md">L’analyse envoie des requêtes de test à cette API : utilisez si possible un environnement de test.</p>
+          <p className="err" role="alert">
+            {err}
+          </p>
+          <button className="btn" type="button" onClick={() => void add()}>
+            Ajouter
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -22,6 +22,7 @@ var fixMinutes = map[string]int{
 	"ports": 20, // a firewall rule, a service to stop or update
 	"vulns": 30, // a software update
 	"zap":   60, // a change in the application's code
+	"api":   45, // a change in the API's code or its gateway
 	"cdn":   15,
 }
 

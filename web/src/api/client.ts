@@ -1,4 +1,4 @@
-import type { Activity, AuthActivity, Check, DeviceSession, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, OrgSettings, Overview, Plan, RecoveryCodes, Role, Scan, ScheduleInput, Subscription, Target } from "./types";
+import type { Activity, DeclaredAPI, AuthActivity, Check, DeviceSession, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, OrgSettings, Overview, Plan, RecoveryCodes, Role, Scan, ScheduleInput, Subscription, Target } from "./types";
 import type { Exclusions } from "../exclusions";
 
 /**
@@ -102,6 +102,12 @@ export const api = {
   sessions: (signal?: AbortSignal) => request<List<DeviceSession>>("GET", "/auth/sessions", undefined, signal),
   endSession: (id: string) => request<void>("DELETE", `/auth/sessions/${encodeURIComponent(id)}`),
   authActivity: (signal?: AbortSignal) => request<List<AuthActivity>>("GET", "/auth/activity", undefined, signal),
+  apis: (orgId: string, targetId: string, signal?: AbortSignal) =>
+    request<List<DeclaredAPI>>("GET", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/apis`, undefined, signal),
+  createAPI: (orgId: string, targetId: string, a: { name: string; kind: string; base_url: string; spec_url?: string; spec?: string }) =>
+    request<DeclaredAPI>("POST", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/apis`, a),
+  deleteAPI: (orgId: string, targetId: string, id: string) =>
+    request<void>("DELETE", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/apis/${encodeURIComponent(id)}`),
 };
 
 /** The URL of an organization's PDF report: the API builds it on demand, the browser downloads it. */

@@ -44,6 +44,7 @@ type Store interface {
 	ScanProfileOf(ctx context.Context, orgID string) (string, error)
 	DeepScansSince(ctx context.Context, orgID string, since time.Time) (int, error)
 	MarkScanDeep(ctx context.Context, scanID string, attempt int) error
+	TargetAPIs(ctx context.Context, targetID string) ([]store.API, error)
 }
 
 // Ownership enforces security rule 1 for active modules (see package
@@ -218,14 +219,32 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 	// The deep profile, read now like the offer: chosen with a consent on
 	// record, and included in the offer in force. Every module receives
 	// it; those without a deep mode ignore it. Unreadable: standard.
-	var config json.RawMessage
+	var rc module.RunConfig
 	if offer.DeepScans && w.includesDeepOnly(sc.Modules) {
 		profile, err := w.store.ScanProfileOf(scanCtx, target.OrgID)
 		if err != nil {
 			log.Warn("read scan profile", "err", err)
 		}
-		if profile == store.ProfileDeep && w.deepAllowed(scanCtx, sc, target, offer, log) {
-			config = json.RawMessage(`{"deep":true}`)
+		rc.Deep = profile == store.ProfileDeep && w.deepAllowed(scanCtx, sc, target, offer, log)
+	}
+	config, err := json.Marshal(rc)
+	if err != nil {
+		return w.fail(ctx, sc, fmt.Sprintf("module config: %v", err))
+	}
+	// Declared APIs (step H) go only to the modules that scan them, when
+	// the offer includes API scans: a document can weigh 900 KB.
+	apiConfig := config
+	if offer.APIScans && w.includesAPIScanner(sc.Modules) {
+		apis, err := w.store.TargetAPIs(scanCtx, target.ID)
+		if err != nil {
+			return w.fail(ctx, sc, fmt.Sprintf("load apis: %v", err))
+		}
+		with := rc
+		for _, a := range apis {
+			with.APIs = append(with.APIs, module.ScanAPI{ID: a.ID, Name: a.Name, Kind: a.Kind, BaseURL: a.BaseURL, SpecURL: a.SpecURL, Spec: a.Spec})
+		}
+		if apiConfig, err = json.Marshal(with); err != nil {
+			return w.fail(ctx, sc, fmt.Sprintf("module config: %v", err))
 		}
 	}
 	mt := module.Target{Domain: target.Domain, Verified: w.stillVerified(scanCtx, sc, target, g, log)}
@@ -279,7 +298,11 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 		if m, ok := w.modules.Get(id); ok && m.Info().Kind == module.KindActive && !offer.ActiveModules {
 			err = &refusedError{fmt.Errorf("module %q: the %s offer runs passive checks only", id, offer.Name)}
 		} else {
-			res, checks, err = w.runModule(scanCtx, id, mt, gateFor(id), config)
+			cfg := config
+			if m, ok := w.modules.Get(id); ok && m.Info().UsesAPIs {
+				cfg = apiConfig
+			}
+			res, checks, err = w.runModule(scanCtx, id, mt, gateFor(id), cfg)
 		}
 		if err == nil && w.providesHosts(id) {
 			mt.Hosts = capHosts(mergeHosts(mt.Hosts, res.Assets), offer.HostsPerScan)
@@ -398,6 +421,17 @@ func (s *ipSet) covers(value string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.ips[ip.Unmap()]
+}
+
+// includesAPIScanner reports whether the scan runs a module that scans
+// declared APIs (module.Info.UsesAPIs).
+func (w *Worker) includesAPIScanner(ids []string) bool {
+	for _, id := range ids {
+		if m, ok := w.modules.Get(id); ok && m.Info().UsesAPIs {
+			return true
+		}
+	}
+	return false
 }
 
 // includesDeepOnly reports whether the scan runs a module of the deep

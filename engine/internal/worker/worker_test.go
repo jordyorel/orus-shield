@@ -35,6 +35,7 @@ type fakeStore struct {
 	profile   string
 	deepUsed  int      // deep scans already run this month
 	deepMarks []string // scans marked deep
+	apis      []store.API
 	audit     []store.AuditEntry
 	leaseLost bool // ExtendLease reports the lease as lost
 	extended  int
@@ -120,6 +121,12 @@ func (f *fakeStore) MarkScanDeep(ctx context.Context, scanID string, attempt int
 	defer f.mu.Unlock()
 	f.deepMarks = append(f.deepMarks, scanID)
 	return nil
+}
+
+func (f *fakeStore) TargetAPIs(ctx context.Context, targetID string) ([]store.API, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.apis, nil
 }
 
 func (f *fakeStore) FinishScan(ctx context.Context, r store.ScanResult) error {
@@ -846,9 +853,9 @@ func TestDeepProfileConfig(t *testing.T) {
 		sub     *plan.Subscription
 		want    string
 	}{
-		{"standard", store.ProfileStandard, nil, ""},
+		{"standard", store.ProfileStandard, nil, "{}"},
 		{"deep on Pro", store.ProfileDeep, nil, `{"deep":true}`},
-		{"deep on Essentiel", store.ProfileDeep, &plan.Subscription{Plan: plan.SME, Status: plan.Trialing, TrialEndsAt: &soon}, ""},
+		{"deep on Essentiel", store.ProfileDeep, &plan.Subscription{Plan: plan.SME, Status: plan.Trialing, TrialEndsAt: &soon}, "{}"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -934,7 +941,45 @@ func TestVerificationScanStaysStandard(t *testing.T) {
 	if _, err := w.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if got != "" || len(st.deepMarks) != 0 {
+	if got != "{}" || len(st.deepMarks) != 0 {
 		t.Errorf("verification scan: config %q, deep marks %v; want standard", got, st.deepMarks)
+	}
+}
+
+// Declared APIs reach only the modules that scan them, when the offer
+// includes API scans.
+func TestAPIsReachOnlyAPIScanners(t *testing.T) {
+	soon := time.Now().Add(time.Hour)
+	for _, tt := range []struct {
+		name string
+		sub  *plan.Subscription
+		want bool
+	}{
+		{"Pro", nil, true},
+		{"Essentiel", &plan.Subscription{Plan: plan.SME, Status: plan.Trialing, TrialEndsAt: &soon}, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var scanner, other string
+			apiMod := &fakeModule{info: module.Info{ID: "apis", Name: "APIs", Kind: module.KindPassive, UsesAPIs: true}, run: func(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+				scanner = string(req.Config)
+				return nil, nil
+			}}
+			plain := &fakeModule{info: module.Info{ID: "plain", Name: "Plain", Kind: module.KindPassive}, run: func(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+				other = string(req.Config)
+				return nil, nil
+			}}
+			w, st := setup(t, true, "{}", apiMod, plain)
+			st.sub = tt.sub
+			st.apis = []store.API{{ID: "a1", Name: "Users", Kind: store.APIOpenAPI, BaseURL: "https://api.example.com/v1", Spec: "{}"}}
+			if _, err := w.RunOnce(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Contains(scanner, `"base_url":"https://api.example.com/v1"`); got != tt.want {
+				t.Errorf("scanner config = %s, want APIs %v", scanner, tt.want)
+			}
+			if strings.Contains(other, "apis") {
+				t.Errorf("other module got the APIs: %s", other)
+			}
+		})
 	}
 }

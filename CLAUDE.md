@@ -289,6 +289,14 @@ shows the month's count.
   `ORUS_ZAP_NETWORK=host` and `ORUS_ZAP_PROXY_HOST=127.0.0.1`. `go test ./internal/modules/zap`
   runs the real image against a local app when `ORUS_ZAP_IMAGE` (and `ORUS_ZAP_WORKDIR`) are set.
 
+API security (step H, Pro and Sur devis, plan.APIScans): an admin declares APIs per domain in
+Réglages > Domaines (`/targets/{target}/apis`, migration 0019): name, OpenAPI or GraphQL, base
+URL and the description (URL or uploaded document, 900 KB at most), every URL on the verified
+domain or under it. The `api` module (package zap, same image and gateproxy) imports them with
+ZAP's automation framework and runs the active scan; checks: injection, access control, data
+exposure, misconfiguration (CORS), other high risk. The worker passes the APIs only to modules
+with `module.Info.UsesAPIs`, as `module.RunConfig.APIs`. Without declared APIs it does nothing.
+
 Emerging threats: the worker indexes the critical and high CVE templates of
 `ORUS_NUCLEI_TEMPLATES` at start and every hour (`threats.Watcher`) into `threat_templates`.
 The first sync is the baseline: only the templates the release lists in `.new-additions` are

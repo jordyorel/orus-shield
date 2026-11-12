@@ -20,9 +20,9 @@ const me: Me = {
 };
 
 const plans: Plan[] = [
-  { id: "discovery", name: "Gratuit", domains: 1, hosts_per_scan: 5, members: 1, active_modules: false, max_frequency: "monthly", alerts: false, reports: false, threats: false, deep_scans: false, deep_scans_per_month: 0, usd_monthly: 0, usd_yearly: 0, xaf_monthly: 0, xaf_yearly: 0, on_quote: false },
-  { id: "sme", name: "Essentiel", domains: 3, hosts_per_scan: 25, members: 3, active_modules: true, max_frequency: "weekly", alerts: true, reports: true, threats: true, deep_scans: false, deep_scans_per_month: 0, usd_monthly: 35, usd_yearly: 29, xaf_monthly: 20000, xaf_yearly: 16500, on_quote: false },
-  { id: "pro", name: "Pro", domains: 15, hosts_per_scan: 25, members: 10, active_modules: true, max_frequency: "daily", alerts: true, reports: true, threats: true, deep_scans: true, deep_scans_per_month: 4, usd_monthly: 99, usd_yearly: 79, xaf_monthly: 57000, xaf_yearly: 45500, on_quote: false },
+  { id: "discovery", name: "Gratuit", domains: 1, hosts_per_scan: 5, members: 1, active_modules: false, max_frequency: "monthly", alerts: false, reports: false, threats: false, deep_scans: false, deep_scans_per_month: 0, api_scans: false, usd_monthly: 0, usd_yearly: 0, xaf_monthly: 0, xaf_yearly: 0, on_quote: false },
+  { id: "sme", name: "Essentiel", domains: 3, hosts_per_scan: 25, members: 3, active_modules: true, max_frequency: "weekly", alerts: true, reports: true, threats: true, deep_scans: false, deep_scans_per_month: 0, api_scans: false, usd_monthly: 35, usd_yearly: 29, xaf_monthly: 20000, xaf_yearly: 16500, on_quote: false },
+  { id: "pro", name: "Pro", domains: 15, hosts_per_scan: 25, members: 10, active_modules: true, max_frequency: "daily", alerts: true, reports: true, threats: true, deep_scans: true, deep_scans_per_month: 4, api_scans: true, usd_monthly: 99, usd_yearly: 79, xaf_monthly: 57000, xaf_yearly: 45500, on_quote: false },
 ];
 
 const overview: Overview = {
@@ -87,6 +87,7 @@ function orgRoutes(extra: Record<string, ReturnType<typeof ok>> = {}, sub: Subsc
       items: [{ kind: "finding", at: new Date().toISOString(), target_id: "t1", domain: "example.cg", finding_id: "f1", title: "No DMARC record", asset: "_dmarc.example.cg", severity: "high", to: "open" }],
     }),
     [`GET ${base}/scans?limit=20`]: ok({ items: [] }),
+    [`GET ${base}/targets/t1/apis`]: ok({ items: [] }),
     ...extra,
   });
 }
@@ -242,6 +243,30 @@ describe("dashboard", () => {
     const body = calls.find((c) => c.key === `PUT /orgs/${ORG}/settings`)?.body as OrgSettings;
     expect(body.profile).toBe("deep");
     expect(body.deep_consent).toBe(true);
+  });
+
+  it("declares an API on a domain", async () => {
+    const pro: Subscription = { ...subscription, plan: plans[2]!, status: "active", until: null };
+    const calls = orgRoutes(
+      {
+        [`GET /orgs/${ORG}/members`]: ok({ items: [] }),
+        [`POST /orgs/${ORG}/targets/t1/apis`]: (b) => ({ status: 201, json: { ...(b as object), id: "a1", target_id: "t1", created_at: "", created_by: "x" } }),
+      },
+      pro,
+    );
+    renderAt(`/orgs/${ORG}/reglages`);
+    fireEvent.click(await screen.findByRole("button", { name: "Ajouter une API" }));
+    fireEvent.change(screen.getByLabelText("Nom"), { target: { value: "Clients" } });
+    fireEvent.change(screen.getByLabelText("Adresse de base de l’API"), { target: { value: "https://api.example.cg/v1" } });
+    fireEvent.change(screen.getByLabelText(/Adresse de la spécification OpenAPI/), { target: { value: "https://api.example.cg/openapi.json" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter" }));
+    await waitFor(() => expect(calls.some((c) => c.key === `POST /orgs/${ORG}/targets/t1/apis`)).toBe(true));
+    expect(calls.find((c) => c.key === `POST /orgs/${ORG}/targets/t1/apis`)?.body).toEqual({
+      name: "Clients",
+      kind: "openapi",
+      base_url: "https://api.example.cg/v1",
+      spec_url: "https://api.example.cg/openapi.json",
+    });
   });
 
   it("sends an unknown screen back to Aujourd'hui", async () => {

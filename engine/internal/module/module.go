@@ -47,6 +47,9 @@ type Info struct {
 	// the others of a scan, and the hostnames it reports are added to
 	// Target.Hosts for the modules that follow.
 	ProvidesHosts bool
+	// UsesAPIs marks a module that scans the target's declared APIs
+	// (RunConfig.APIs); the worker loads them only for such modules.
+	UsesAPIs bool
 	// DeepOnly marks a module of the deep profile only (the deep web
 	// scan). A scan runs deep only when it includes such a module: the
 	// full scans the deep profile schedules, or a full manual scan; a
@@ -219,6 +222,27 @@ type Destination struct {
 // forget the other.
 type Gate interface {
 	Allow(ctx context.Context, dest Destination) error
+}
+
+// RunConfig is what the worker passes as every module's Config: the
+// organization's choices that change how modules scan. Modules decode the
+// fields they use and ignore the others.
+type RunConfig struct {
+	// Deep: the deep profile ("Approfondi") applies to this scan.
+	Deep bool `json:"deep,omitempty"`
+	// APIs declared on the target, for modules with Info.UsesAPIs, when
+	// the offer includes API scans.
+	APIs []ScanAPI `json:"apis,omitempty"`
+}
+
+// ScanAPI is a declared API (step H).
+type ScanAPI struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Kind    string `json:"kind"` // openapi, graphql
+	BaseURL string `json:"base_url"`
+	SpecURL string `json:"spec_url,omitempty"`
+	Spec    string `json:"spec,omitempty"` // uploaded document
 }
 
 // Request carries everything a module needs for one run. Modules read nothing

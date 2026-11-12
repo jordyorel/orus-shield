@@ -18,8 +18,8 @@ import (
 var switchableModules = []string{"email", "tls", "ports", "vulns"}
 
 // quickSkips are the modules the quick profile leaves out: the known
-// vulnerability pass takes some 20 minutes per site.
-var quickSkips = []string{"vulns"}
+// vulnerability pass takes some 20 minutes per site, an API scan as long.
+var quickSkips = []string{"vulns", "api"}
 
 // deepOnly are the modules only the deep profile schedules (the deep web
 // scan; it does nothing without the deep configuration anyway).
