@@ -186,6 +186,22 @@ describe("dashboard", () => {
     await waitFor(() => expect(check.getAttribute("aria-pressed")).toBe("false"));
   });
 
+  it("goes back from a problem to its asset in the side sheet", async () => {
+    orgRoutes();
+    renderAt(`/orgs/${ORG}/aujourdhui`);
+    // A dot of the radar opens its asset, with its open problems.
+    fireEvent.click(await screen.findByRole("button", { name: /example\.cg : 1 problème/ }));
+    const sheet = document.getElementById("sheet-title")!.closest("aside")!;
+    await waitFor(() => expect(sheet.querySelector("#sheet-title")?.textContent).toBe("example.cg"));
+    expect(sheet.querySelector(".back")).toBeNull();
+    // A problem of the list replaces it, with a way back.
+    fireEvent.click(sheet.querySelector(".rowmain")!);
+    await waitFor(() => expect(sheet.querySelector("#sheet-title")?.textContent).toBe("No DMARC record"));
+    fireEvent.click(sheet.querySelector(".back")!);
+    await waitFor(() => expect(sheet.querySelector("#sheet-title")?.textContent).toBe("example.cg"));
+    expect(sheet.querySelector(".back")).toBeNull();
+  });
+
   it("opens a problem's sheet with its steps and proof", async () => {
     orgRoutes();
     renderAt(`/orgs/${ORG}/problemes`);

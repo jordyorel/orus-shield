@@ -1,7 +1,8 @@
 // What every screen shares: the toast, the side sheet, the search palette
 // and the theme (the mockup's toast(), showSheet(), closeAll(), openPal()).
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Arrow } from "./icons";
 
 interface UI {
   toast: (msg: string) => void;
@@ -35,7 +36,9 @@ function storedTheme(): "light" | "dark" {
 export function UIProvider({ children }: { children: ReactNode }) {
   const [toastMsg, setToastMsg] = useState("");
   const [toastOn, setToastOn] = useState(false);
-  const [sheet, setSheet] = useState<ReactNode>(null);
+  // The sheet keeps a history: a sheet opened from another one (a problem
+  // from its asset) can go back to it.
+  const [stack, setStack] = useState<ReactNode[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [palOpen, setPalOpen] = useState(false);
   const [theme, setThemeState] = useState<"light" | "dark">(storedTheme);
@@ -55,11 +58,17 @@ export function UIProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const showSheet = useCallback((content: ReactNode) => {
-    if (!sheetRef.current?.classList.contains("on")) lastFocus.current = document.activeElement as HTMLElement | null;
-    setSheet(content);
+    const open = sheetRef.current?.classList.contains("on") ?? false;
+    if (!open) lastFocus.current = document.activeElement as HTMLElement | null;
+    setStack((st) => (open ? [...st, content] : [content]));
     setSheetOpen(true);
     if (sheetRef.current) sheetRef.current.scrollTop = 0;
     requestAnimationFrame(() => sheetRef.current?.querySelector<HTMLElement>("[data-close]")?.focus());
+  }, []);
+
+  const back = useCallback(() => {
+    setStack((st) => (st.length > 1 ? st.slice(0, -1) : st));
+    if (sheetRef.current) sheetRef.current.scrollTop = 0;
   }, []);
 
   const closeAll = useCallback(() => {
@@ -101,7 +110,13 @@ export function UIProvider({ children }: { children: ReactNode }) {
       {children}
       <div className={"scrim" + (sheetOpen || palOpen ? " on" : "")} onClick={closeAll} />
       <aside ref={sheetRef} className={"sheet" + (sheetOpen ? " on" : "")} role="dialog" aria-modal="true" aria-labelledby="sheet-title" aria-hidden={!sheetOpen}>
-        {sheet}
+        {stack.length > 1 && (
+          <button className="back" type="button" onClick={back}>
+            <Arrow />
+            Retour
+          </button>
+        )}
+        <Fragment key={stack.length}>{stack[stack.length - 1]}</Fragment>
       </aside>
       <div className={"toast" + (toastOn ? " on" : "")} role="status">
         {toastMsg}
