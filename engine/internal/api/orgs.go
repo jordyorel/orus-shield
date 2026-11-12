@@ -58,6 +58,9 @@ func (s *Server) orgRoutes(mux *http.ServeMux) {
 	read("/trends", s.trends)
 	read("/threats", s.threats)
 	read("/report", s.report)
+	read("/subscription", s.subscription)
+	read("/settings", s.getSettings)
+	read("/activity", s.activity)
 	read("/scans", s.recentScans)
 	read("/targets", s.listTargets)
 	read("/targets/{target}", s.targetOnly(s.getTarget))
@@ -325,6 +328,7 @@ func (s *Server) listFindings(w http.ResponseWriter, r *http.Request, req orgReq
 type orgFinding struct {
 	TargetID string `json:"target_id"`
 	finding.Finding
+	findingExtras
 }
 
 // orgFindings lists the findings of every target of the organization, the
@@ -346,6 +350,11 @@ func (s *Server) orgFindings(w http.ResponseWriter, r *http.Request, req orgRequ
 		s.internalError(w, r, err)
 		return
 	}
+	threats, err := req.org.ListThreats(r.Context(), 500)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
 	out := []orgFinding{}
 	for _, t := range targets {
 		fs, err := req.org.ListFindings(r.Context(), t.ID)
@@ -353,9 +362,14 @@ func (s *Server) orgFindings(w http.ResponseWriter, r *http.Request, req orgRequ
 			s.internalError(w, r, err)
 			return
 		}
+		e, err := s.enricher(r.Context(), req.org, t.ID, fs, threats)
+		if err != nil {
+			s.internalError(w, r, err)
+			return
+		}
 		for _, f := range fs {
 			if (status == "" || f.Status == status) && (severity == "" || f.Severity == severity) {
-				out = append(out, orgFinding{TargetID: t.ID, Finding: f})
+				out = append(out, orgFinding{TargetID: t.ID, Finding: f, findingExtras: e.extras(f)})
 			}
 		}
 	}

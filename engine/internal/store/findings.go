@@ -48,6 +48,8 @@ type ScanResult struct {
 	// assets are not retired; both keep their last_seen. nil: everything
 	// was in reach.
 	Unobserved func(kind asset.Kind, value string) bool
+	// NoAlerts: the organization's offer has no email alerts (plan.Plan).
+	NoAlerts bool
 }
 
 // FinishScan records a scan's results in one transaction: the scan is marked
@@ -64,9 +66,9 @@ type ScanResult struct {
 //     then it is left unchanged;
 //   - accepted_risk is the customer's decision and is never changed here.
 //
-// Findings it opens or reopens that are Alertable are queued as email
-// notifications to the organization's admins (notifications table), in the
-// same transaction.
+// Findings it opens or reopens at or above the organization's alert level
+// (org_settings, high by default) are queued as email notifications to the
+// organization's admins (notifications table), in the same transaction.
 //
 // Every status change (opened, fixed, reopened) is also recorded in
 // finding_events, in the same transaction, for remediation history. The
@@ -134,7 +136,9 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 		if err != nil {
 			return fmt.Errorf("finish scan %s: save finding %s: %w", r.ScanID, f.ID, err)
 		}
-		if (previous == nil || *previous == string(finding.StatusFixed)) && Alertable(f) {
+		// Every new or reopened finding is a candidate; queueAlerts keeps
+		// those at or above the organization's alert level.
+		if previous == nil || *previous == string(finding.StatusFixed) {
 			alerts = append(alerts, AlertFinding{ID: f.ID, Title: f.Title, Asset: f.Asset, Severity: f.Severity, Reopened: previous != nil})
 		}
 		switch {
@@ -193,6 +197,9 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 		return fmt.Errorf("finish scan %s: %w", r.ScanID, err)
 	}
 	// Same transaction: the alerts exist if and only if the results do.
+	if r.NoAlerts {
+		alerts = nil
+	}
 	notified, err := queueAlerts(ctx, tx, orgID, targetID, r.ScanID, domain, alerts)
 	if err != nil {
 		return fmt.Errorf("finish scan %s: %w", r.ScanID, err)
@@ -291,11 +298,12 @@ func (o *Org) ListFindings(ctx context.Context, targetID string) ([]finding.Find
 	return findings, tx.Commit(ctx)
 }
 
-// SetFindingStatus records a customer decision: accepted_risk, or open to
-// undo it. "fixed" is set by scans only, never by hand.
+// SetFindingStatus records a customer decision: accepted_risk, fixed (the
+// customer says it is fixed; the API then queues a verification scan), or
+// open to undo either.
 func (o *Org) SetFindingStatus(ctx context.Context, targetID, findingID string, status finding.Status, actor string) error {
-	if status != finding.StatusAcceptedRisk && status != finding.StatusOpen {
-		return fmt.Errorf("set finding status: %q cannot be set manually", status)
+	if !status.Valid() {
+		return fmt.Errorf("set finding status: %q is not a status", status)
 	}
 	if !isUUID(targetID) {
 		return fmt.Errorf("set finding status %s: %w", findingID, ErrNotFound)
@@ -306,13 +314,18 @@ func (o *Org) SetFindingStatus(ctx context.Context, targetID, findingID string, 
 	}
 	defer tx.Rollback(ctx)
 
-	// A fixed finding whose risk is accepted is no longer fixed: fixed_at
-	// is cleared, in the column and in the JSON copy.
+	// Only a fixed finding has fixed_at, in the column and in the JSON
+	// copy. A customer who marks a finding fixed claims it now; the
+	// verification scan the API queues reopens it if it is still there
+	// (FinishScan), so scans keep the last word.
 	var domain, previous string
 	var at time.Time
 	err = tx.QueryRow(ctx, `
-		UPDATE findings f SET status = $3, fixed_at = NULL,
-			data = (f.data - 'fixed_at') || jsonb_build_object('status', $3::text)
+		UPDATE findings f SET status = $3,
+			fixed_at = CASE WHEN $3 = 'fixed' THEN coalesce(f.fixed_at, now()) END,
+			data = CASE WHEN $3 = 'fixed'
+				THEN f.data || jsonb_build_object('status', $3::text, 'fixed_at', coalesce(f.fixed_at, now()))
+				ELSE (f.data - 'fixed_at') || jsonb_build_object('status', $3::text) END
 		FROM targets t
 		WHERE t.id = f.target_id AND f.org_id = $4 AND f.target_id = $1 AND f.id = $2
 		RETURNING t.domain, old.status, now()`,

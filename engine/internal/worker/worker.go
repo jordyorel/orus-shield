@@ -24,6 +24,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/gate"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/ownership"
+	"github.com/jordyorel/orus-shield/engine/internal/plan"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
@@ -38,6 +39,7 @@ type Store interface {
 	AppendAudit(ctx context.Context, e store.AuditEntry) error
 	EnqueueDueScans(ctx context.Context, now time.Time, limit int) (int, error)
 	CurrentHostnames(ctx context.Context, targetID string) ([]string, error)
+	SubscriptionOf(ctx context.Context, orgID string) (*plan.Subscription, error)
 }
 
 // Ownership enforces security rule 1 for active modules (see package
@@ -201,6 +203,14 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 	if err != nil {
 		return w.fail(ctx, sc, fmt.Sprintf("invalid target settings: %v", err))
 	}
+	// The offer in force now: a subscription may have lapsed since the
+	// scan was requested. Unreadable: fail closed, on the free offer.
+	sub, err := w.store.SubscriptionOf(scanCtx, target.OrgID)
+	if err != nil {
+		log.Warn("read subscription", "err", err)
+		sub = nil
+	}
+	offer := plan.Resolve(sub, w.now()).Plan
 	mt := module.Target{Domain: target.Domain, Verified: w.stillVerified(scanCtx, sc, target, g, log)}
 	// The names to scan: the inventory's current hostnames (subdomains found
 	// by earlier scans), plus what a discovery module finds in this one.
@@ -208,7 +218,7 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 	if err != nil {
 		return w.fail(ctx, sc, fmt.Sprintf("load hostnames: %v", err))
 	}
-	mt.Hosts = known
+	mt.Hosts = capHosts(known, offer.HostsPerScan)
 
 	// Active modules get a stricter gate, built on first use: it only lets
 	// them reach IPs whose ownership is proven (rule 1, per IP).
@@ -227,7 +237,7 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 	}
 
 	result := store.ScanResult{
-		ScanID: sc.ID, Attempt: sc.Attempt, WorkerID: w.cfg.ID,
+		ScanID: sc.ID, Attempt: sc.Attempt, WorkerID: w.cfg.ID, NoAlerts: !offer.Alerts,
 		Failed: make(map[string]string),
 		Assets: make(map[string][]asset.Asset),
 		Checks: make(map[string][]module.CheckOutcome),
@@ -247,9 +257,15 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 			break
 		}
 		start := time.Now()
-		res, checks, err := w.runModule(scanCtx, id, mt, gateFor(id))
+		var res module.Result
+		var checks []module.CheckOutcome
+		if m, ok := w.modules.Get(id); ok && m.Info().Kind == module.KindActive && !offer.ActiveModules {
+			err = &refusedError{fmt.Errorf("module %q: the %s offer runs passive checks only", id, offer.Name)}
+		} else {
+			res, checks, err = w.runModule(scanCtx, id, mt, gateFor(id))
+		}
 		if err == nil && w.providesHosts(id) {
-			mt.Hosts = mergeHosts(mt.Hosts, res.Assets)
+			mt.Hosts = capHosts(mergeHosts(mt.Hosts, res.Assets), offer.HostsPerScan)
 		}
 		var refused *refusedError
 		switch {
@@ -365,6 +381,19 @@ func (s *ipSet) covers(value string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.ips[ip.Unmap()]
+}
+
+// capHosts keeps the names the offer covers: ScanHosts always adds the
+// domain and www., so limit-2 more at most (0: no limit of the offer;
+// module.MaxHosts still applies).
+func capHosts(hosts []string, limit int) []string {
+	if limit == 0 {
+		return hosts
+	}
+	if keep := max(limit-2, 0); len(hosts) > keep {
+		return hosts[:keep]
+	}
+	return hosts
 }
 
 // hostSet collects the names modules reported as unreached.

@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -147,8 +148,25 @@ func TestSetFindingStatus(t *testing.T) {
 	if findings.Items[0].Status != finding.StatusAcceptedRisk {
 		t.Errorf("status = %s", findings.Items[0].Status)
 	}
-	if r := e.do("PUT", path, a.session, findingStatusRequest{Status: finding.StatusFixed}); r.status != http.StatusBadRequest {
-		t.Errorf("manual fixed = %d, want 400", r.status)
+	// Marked fixed by the customer: recorded, and a verification scan of
+	// the finding's module is queued.
+	if r := e.do("PUT", path, a.session, findingStatusRequest{Status: finding.StatusFixed}); r.status != http.StatusNoContent {
+		t.Fatalf("manual fixed = %d %s", r.status, r.body)
+	}
+	e.do("GET", "/api/v1/orgs/"+a.orgID+"/targets/"+a.target.ID+"/findings", a.session, nil).json(t, &findings)
+	if findings.Items[0].Status != finding.StatusFixed || findings.Items[0].FixedAt == nil {
+		t.Errorf("after manual fix: %+v", findings.Items[0])
+	}
+	var scans list[scanJSON]
+	e.do("GET", "/api/v1/orgs/"+a.orgID+"/targets/"+a.target.ID+"/scans", a.session, nil).json(t, &scans)
+	if len(scans.Items) == 0 || scans.Items[0].Status != "queued" || !slices.Equal(scans.Items[0].Modules, []string{a.finding.ModuleID}) {
+		t.Errorf("verification scan not queued: %+v", scans.Items)
+	}
+	if r := e.do("PUT", path, a.session, findingStatusRequest{Status: "done"}); r.status != http.StatusBadRequest {
+		t.Errorf("unknown status = %d, want 400", r.status)
+	}
+	if r := e.do("PUT", path, a.viewer, findingStatusRequest{Status: finding.StatusFixed}); r.status != http.StatusForbidden {
+		t.Errorf("viewer marks fixed = %d, want 403", r.status)
 	}
 	unknown := strings.Replace(path, a.finding.ID, "nope", 1)
 	if r := e.do("PUT", unknown, a.session, findingStatusRequest{Status: finding.StatusOpen}); r.status != http.StatusNotFound {

@@ -19,6 +19,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/ownership"
+	"github.com/jordyorel/orus-shield/engine/internal/plan"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
@@ -30,6 +31,7 @@ type fakeStore struct {
 	targets   map[string]store.Target
 	finished  []store.ScanResult
 	failed    []string // reasons
+	sub       *plan.Subscription
 	audit     []store.AuditEntry
 	leaseLost bool // ExtendLease reports the lease as lost
 	extended  int
@@ -82,6 +84,17 @@ func (f *fakeStore) CurrentHostnames(ctx context.Context, targetID string) ([]st
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.hostnames, nil
+}
+
+// SubscriptionOf: tests of the worker run on Pro without end unless they
+// set f.sub (limits are tested in limits_test.go of package api and here).
+func (f *fakeStore) SubscriptionOf(ctx context.Context, orgID string) (*plan.Subscription, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sub != nil {
+		return f.sub, nil
+	}
+	return &plan.Subscription{Plan: plan.Pro, Status: plan.Active}, nil
 }
 
 func (f *fakeStore) FinishScan(ctx context.Context, r store.ScanResult) error {

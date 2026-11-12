@@ -34,6 +34,14 @@ func (s *Server) report(w http.ResponseWriter, r *http.Request, req orgRequest) 
 		return
 	}
 
+	p, ok := s.planOf(w, r, req)
+	if !ok {
+		return
+	}
+	if !p.Reports {
+		planLimit(w, "PDF reports are not included in the "+p.Name+" offer")
+		return
+	}
 	d, err := s.reportData(r, req)
 	if err != nil {
 		s.internalError(w, r, err)

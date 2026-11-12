@@ -16,6 +16,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/mailer"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/password"
+	"github.com/jordyorel/orus-shield/engine/internal/plan"
 	"github.com/jordyorel/orus-shield/engine/internal/seal"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 	"github.com/jordyorel/orus-shield/engine/internal/store/storetest"
@@ -32,6 +33,7 @@ type env struct {
 	dns     *fakeDNS
 	secrets map[string][]byte // TOTP secrets of enrolled users, by email
 	mail    *fakeMailer
+	srv     *Server
 }
 
 // fakeMailer records the emails the API sends (in the background).
@@ -58,6 +60,7 @@ func newEnv(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
+	e.srv = srv
 	if e.handler, err = srv.Handler(); err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +74,17 @@ func (e *env) org(name string) string {
 	if err != nil {
 		e.t.Fatal(err)
 	}
+	// Pro without end: tests of other features are not about limits
+	// (limits_test.go sets the plans it needs).
+	e.setPlan(o.ID, plan.Subscription{Plan: plan.Pro, Status: plan.Active})
 	return o.ID
+}
+
+func (e *env) setPlan(orgID string, sub plan.Subscription) {
+	e.t.Helper()
+	if err := e.st.SetSubscription(context.Background(), orgID, sub, "manual", "test"); err != nil {
+		e.t.Fatal(err)
+	}
 }
 
 // user creates an account with testPassword and the given role in orgID.
@@ -189,7 +202,7 @@ func TestLoginAndMe(t *testing.T) {
 	if r.header.Get("Cache-Control") != "no-store" || r.header.Get("X-Content-Type-Options") != "nosniff" {
 		t.Errorf("security headers missing: %v", r.header)
 	}
-	if strings.Contains(string(r.body), "password") || strings.Contains(string(r.body), "argon2") {
+	if strings.Contains(string(r.body), "password_hash") || strings.Contains(string(r.body), "argon2") {
 		t.Errorf("me leaks password data: %s", r.body)
 	}
 }

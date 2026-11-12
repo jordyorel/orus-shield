@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/account"
 	"github.com/jordyorel/orus-shield/engine/internal/password"
@@ -38,6 +39,10 @@ type meResponse struct {
 	MFAEnabled bool             `json:"mfa_enabled"`
 	MFASession bool             `json:"mfa_session"`
 	Orgs       []membershipJSON `json:"orgs"`
+	// Name: the display name, "" until the user sets one.
+	Name              string     `json:"name"`
+	PasswordChangedAt *time.Time `json:"password_changed_at"`
+	RecoveryCodesLeft int        `json:"recovery_codes_left"`
 }
 
 // accountError answers an error of package account. badCredentials is the
@@ -123,7 +128,13 @@ func (s *Server) writeMe(w http.ResponseWriter, r *http.Request, sess store.Sess
 		s.internalError(w, r, err)
 		return
 	}
-	resp := meResponse{UserID: sess.UserID, Email: sess.Email, MFAEnabled: sess.MFAEnabled, MFASession: sess.MFA, Orgs: []membershipJSON{}}
+	prof, err := s.acct.Profile(r.Context(), sess)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	resp := meResponse{UserID: sess.UserID, Email: sess.Email, MFAEnabled: sess.MFAEnabled, MFASession: sess.MFA, Orgs: []membershipJSON{},
+		Name: prof.Name, PasswordChangedAt: prof.PasswordChangedAt, RecoveryCodesLeft: prof.RecoveryCodesLeft}
 	for _, m := range ms {
 		resp.Orgs = append(resp.Orgs, membershipJSON{OrgID: m.OrgID, OrgName: m.OrgName, Role: m.Role})
 	}

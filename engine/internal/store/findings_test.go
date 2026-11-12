@@ -253,14 +253,37 @@ func TestListFindingsOrder(t *testing.T) {
 	}
 }
 
-func TestSetFindingStatusRejects(t *testing.T) {
+func TestSetFindingStatusFixedByCustomer(t *testing.T) {
 	l := newLifecycle(t)
 	ctx := context.Background()
 	spf := makeFinding("email", "spf-missing", "example.com")
 	l.mustScan(t1, []string{"email"}, nil, spf)
 
-	if err := l.org.SetFindingStatus(ctx, l.target.ID, spf.ID, finding.StatusFixed, "jordy"); err == nil {
-		t.Error("manual fixed = nil, want error: only scans mark findings fixed")
+	// The customer says it is fixed: fixed, with fixed_at.
+	if err := l.org.SetFindingStatus(ctx, l.target.ID, spf.ID, finding.StatusFixed, "jordy"); err != nil {
+		t.Fatalf("manual fixed: %v", err)
+	}
+	if f := l.state()["spf-missing"]; f.Status != finding.StatusFixed || f.FixedAt == nil {
+		t.Errorf("after manual fix: status %s, fixed_at %v", f.Status, f.FixedAt)
+	}
+	// The verification scan still sees it: reopened, scans have the last word.
+	l.mustScan(t2, []string{"email"}, nil, spf)
+	l.expect("spf-missing", finding.StatusOpen, t1, t2)
+	if f := l.state()["spf-missing"]; f.FixedAt != nil {
+		t.Errorf("reopened finding keeps fixed_at %v", f.FixedAt)
+	}
+	// Reopening by hand clears fixed_at too.
+	if err := l.org.SetFindingStatus(ctx, l.target.ID, spf.ID, finding.StatusFixed, "jordy"); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.org.SetFindingStatus(ctx, l.target.ID, spf.ID, finding.StatusOpen, "jordy"); err != nil {
+		t.Fatal(err)
+	}
+	if f := l.state()["spf-missing"]; f.Status != finding.StatusOpen || f.FixedAt != nil {
+		t.Errorf("after manual reopen: status %s, fixed_at %v", f.Status, f.FixedAt)
+	}
+	if err := l.org.SetFindingStatus(ctx, l.target.ID, spf.ID, "done", "jordy"); err == nil {
+		t.Error("unknown status = nil, want error")
 	}
 	if err := l.org.SetFindingStatus(ctx, l.target.ID, "unknown", finding.StatusAcceptedRisk, "jordy"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown finding = %v, want ErrNotFound", err)

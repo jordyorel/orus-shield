@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"slices"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/gate"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/ownership"
+	"github.com/jordyorel/orus-shield/engine/internal/plan"
 	"github.com/jordyorel/orus-shield/engine/internal/schedule"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
@@ -29,6 +31,7 @@ func (s *Server) writeRoutes(mux *http.ServeMux) {
 	}
 	base := "/api/v1/orgs/{org}"
 	write("POST "+base+"/targets", s.createTarget)
+	write("PUT "+base+"/settings", s.putSettings)
 	write("PATCH "+base+"/targets/{target}", s.targetOnly(s.updateTarget))
 	write("POST "+base+"/targets/{target}/verification", s.targetOnly(s.verificationInstructions))
 	write("POST "+base+"/targets/{target}/verify", s.targetOnly(s.verifyTarget))
@@ -70,12 +73,31 @@ func (s *Server) createTarget(w http.ResponseWriter, r *http.Request, req orgReq
 		writeError(w, http.StatusBadRequest, "rate_per_sec must be between 0 (default) and 200")
 		return
 	}
+	p, ok := s.planOf(w, r, req)
+	if !ok {
+		return
+	}
+	n, err := req.org.CountTargets(r.Context())
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	if !plan.Within(n+1, p.Domains) {
+		planLimit(w, fmt.Sprintf("the %s offer includes %d domain(s)", p.Name, p.Domains))
+		return
+	}
 	t, err := req.org.CreateTarget(r.Context(), store.NewTarget{Domain: body.Domain, Exclusions: body.Exclusions, RatePerSec: body.RatePerSec})
 	switch {
 	case errors.Is(err, store.ErrExists):
 		writeError(w, http.StatusConflict, "this domain is already a target of the organization")
 		return
 	case err != nil:
+		s.internalError(w, r, err)
+		return
+	}
+	// A new domain follows Réglages: the organization's schedule, and its
+	// rate unless the request set one.
+	if t, err = s.applyOrgSettings(r, req, p, t, body.RatePerSec == 0); err != nil {
 		s.internalError(w, r, err)
 		return
 	}
@@ -160,6 +182,16 @@ func (s *Server) updateTarget(w http.ResponseWriter, r *http.Request, req orgReq
 	if msg != "" {
 		writeError(w, http.StatusBadRequest, msg)
 		return
+	}
+	if sc := settings.Schedule; sc != nil {
+		p, ok := s.planOf(w, r, req)
+		if !ok || !s.checkModules(w, p, sc.Modules) {
+			return
+		}
+		if !p.Allows(frequencyOf(sc.Frequency)) {
+			planLimit(w, fmt.Sprintf("the %s offer does not allow %s scans", p.Name, sc.Frequency))
+			return
+		}
 	}
 	if body.Exclusions != nil {
 		// An object, never null: the stored value must stay readable as
@@ -265,6 +297,10 @@ func (s *Server) startScan(w http.ResponseWriter, r *http.Request, req orgReques
 			return
 		}
 	}
+	p, ok := s.planOf(w, r, req)
+	if !ok || !s.checkModules(w, p, modules) {
+		return
+	}
 	sc, err := req.org.EnqueueScan(r.Context(), t.ID, slices.Compact(slices.Sorted(slices.Values(modules))), actor(req))
 	if err != nil {
 		s.internalError(w, r, err)
@@ -277,18 +313,36 @@ type findingStatusRequest struct {
 	Status finding.Status `json:"status"`
 }
 
-// setFindingStatus records a customer decision: accepted_risk, or open to
-// withdraw it. "fixed" is decided by scans only.
+// setFindingStatus records a customer decision: accepted_risk, fixed, or
+// open to withdraw either. A finding marked fixed gets a verification scan
+// of its module right away: the scan reopens it if it is still there, so
+// the customer's word never outlives the next observation (rule 8).
 func (s *Server) setFindingStatus(w http.ResponseWriter, r *http.Request, req orgRequest, t store.Target) {
 	var body findingStatusRequest
 	if !decode(w, r, &body) {
 		return
 	}
-	if body.Status != finding.StatusAcceptedRisk && body.Status != finding.StatusOpen {
-		writeError(w, http.StatusBadRequest, "status must be accepted_risk or open")
+	if !body.Status.Valid() {
+		writeError(w, http.StatusBadRequest, "status must be open, fixed or accepted_risk")
 		return
 	}
-	err := req.org.SetFindingStatus(r.Context(), t.ID, r.PathValue("finding"), body.Status, actor(req))
+	ctx := r.Context()
+	id := r.PathValue("finding")
+	var moduleID string
+	if body.Status == finding.StatusFixed {
+		fs, err := req.org.ListFindings(ctx, t.ID)
+		if err != nil {
+			s.internalError(w, r, err)
+			return
+		}
+		i := slices.IndexFunc(fs, func(f finding.Finding) bool { return f.ID == id })
+		if i < 0 {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		moduleID = fs[i].ModuleID
+	}
+	err := req.org.SetFindingStatus(ctx, t.ID, id, body.Status, actor(req))
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "not found")
 		return
@@ -296,6 +350,15 @@ func (s *Server) setFindingStatus(w http.ResponseWriter, r *http.Request, req or
 	if err != nil {
 		s.internalError(w, r, err)
 		return
+	}
+	if moduleID != "" && slices.Contains(s.cfg.Modules, moduleID) {
+		// Best effort: the status is recorded either way, and an offer
+		// without the module (active ones on the free offer) skips it.
+		if p, err := req.org.Plan(ctx, s.cfg.Now()); err == nil && (p.Plan.ActiveModules || len(s.activeModules([]string{moduleID})) == 0) {
+			if _, err := req.org.EnqueueScan(ctx, t.ID, []string{moduleID}, actor(req)); err != nil {
+				s.log.Warn("queue verification scan", "err", err)
+			}
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

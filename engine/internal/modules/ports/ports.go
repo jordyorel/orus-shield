@@ -164,9 +164,11 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 }
 
 // asset describes the open port for the inventory. The banner is already
-// sanitized and bounded by probe.
+// sanitized and bounded by probe. host is the name the IP was resolved
+// from (the first one when several share it): the dashboard lists the
+// services of a hostname with it.
 func (o openPort) asset(a address) asset.Asset {
-	details := map[string]string{"expected": o.svc.name}
+	details := map[string]string{"expected": o.svc.name, "host": a.host}
 	if o.banner != "" {
 		details["banner"] = asset.TruncateDetail(o.banner)
 	}

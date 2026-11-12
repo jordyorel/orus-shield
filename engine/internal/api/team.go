@@ -2,9 +2,12 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/jordyorel/orus-shield/engine/internal/account"
+	"github.com/jordyorel/orus-shield/engine/internal/plan"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
@@ -79,6 +82,21 @@ func (s *Server) inviteMember(w http.ResponseWriter, r *http.Request, req orgReq
 	}
 	if _, err := store.NormalizeEmail(body.Email); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid email address")
+		return
+	}
+	p, ok := s.planOf(w, r, req)
+	if !ok {
+		return
+	}
+	ms, err := s.acct.Members(r.Context(), req.org.ID())
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	email, _ := store.NormalizeEmail(body.Email)
+	already := slices.ContainsFunc(ms, func(m store.Member) bool { return m.Email == email })
+	if !already && !plan.Within(len(ms)+1, p.Members) {
+		planLimit(w, fmt.Sprintf("the %s offer includes %d member(s)", p.Name, p.Members))
 		return
 	}
 	inv, emailed, err := s.acct.Invite(r.Context(), req.org.ID(), body.Email, body.Role, req.sess)

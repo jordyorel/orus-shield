@@ -40,18 +40,38 @@ type NewFindingsAlert struct {
 	Total    int            `json:"total"`
 }
 
-// Alertable reports whether a finding that a scan opened or reopened is
-// worth an email: critical and high only, so a daily scan never turns into
-// daily noise. A certificate expiring within a week is high (tls module),
-// so it alerts; the 30-day warning does not.
-func Alertable(f finding.Finding) bool {
-	return f.Severity.Rank() >= finding.SeverityHigh.Rank()
+// alertMinimum is the lowest severity an alert level sends (Réglages >
+// Comment on vous prévient). The default, high, keeps critical and high
+// only, so a daily scan never turns into daily noise: a certificate
+// expiring within a week is high (tls module) and alerts, the 30-day
+// warning does not. Info findings never send an email.
+func alertMinimum(level string) finding.Severity {
+	switch level {
+	case AlertCritical:
+		return finding.SeverityCritical
+	case AlertAll:
+		return finding.SeverityLow
+	}
+	return finding.SeverityHigh
 }
 
 // queueAlerts writes one notification per admin of the organization, inside
 // FinishScan's transaction. Admins whose account is not activated or is
 // disabled are skipped.
 func queueAlerts(ctx context.Context, tx pgx.Tx, orgID, targetID, scanID, domain string, alerts []AlertFinding) (int, error) {
+	if len(alerts) == 0 {
+		return 0, nil
+	}
+	// Réglages > Comment on vous prévient: the level and the email switch.
+	level, email, err := alertSettings(ctx, tx, orgID)
+	if err != nil {
+		return 0, fmt.Errorf("queue alerts: %w", err)
+	}
+	if !email {
+		return 0, nil
+	}
+	minimum := alertMinimum(level).Rank()
+	alerts = slices.DeleteFunc(alerts, func(a AlertFinding) bool { return a.Severity.Rank() < minimum })
 	if len(alerts) == 0 {
 		return 0, nil
 	}

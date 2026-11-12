@@ -119,6 +119,10 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/login", s.login)
 	mux.HandleFunc("POST /api/v1/auth/logout", s.withSession(s.logout))
 	mux.HandleFunc("GET /api/v1/auth/me", s.withSession(s.me))
+	mux.HandleFunc("PATCH /api/v1/auth/me", s.withSession(s.updateMe))
+	mux.HandleFunc("GET /api/v1/auth/sessions", s.withSession(s.listSessions))
+	mux.HandleFunc("DELETE /api/v1/auth/sessions/{session}", s.withSession(s.endSession))
+	mux.HandleFunc("GET /api/v1/auth/activity", s.withSession(s.authActivity))
 	mux.HandleFunc("POST /api/v1/auth/setup-password", s.setupPassword)
 	mux.HandleFunc("POST /api/v1/auth/forgot-password", s.forgotPassword)
 	if !s.cfg.SignupClosed {
@@ -129,6 +133,8 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/mfa/setup", s.withSession(s.mfaSetup))
 	mux.HandleFunc("POST /api/v1/auth/mfa/confirm", s.withSession(s.mfaConfirm))
 	mux.HandleFunc("POST /api/v1/auth/mfa/disable", s.withSession(s.mfaDisable))
+	// The offers, for the public pricing page: no session needed.
+	mux.HandleFunc("GET /api/v1/plans", s.listPlans)
 	s.orgRoutes(mux)
 	s.teamRoutes(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
