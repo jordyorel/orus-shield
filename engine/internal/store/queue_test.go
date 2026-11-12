@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -109,10 +110,11 @@ func TestClaimOrderAndEmptyQueue(t *testing.T) {
 // Many workers claiming at once must each get a different scan.
 func TestConcurrentClaimsNeverShareAScan(t *testing.T) {
 	s := newTestStore(t)
-	target := newTarget(t, s, "example.com")
 	const n = 10
-	for range n {
-		enqueue(t, s, target, "email")
+	// One scan per target: scans of one target with the same modules are
+	// merged while they wait (TestEnqueueReusesWaitingScan).
+	for i := range n {
+		enqueue(t, s, newTarget(t, s, fmt.Sprintf("example%d.com", i)), "email")
 	}
 
 	var mu sync.Mutex
@@ -227,5 +229,46 @@ func TestFailScan(t *testing.T) {
 	}
 	if err := s.FailScan(ctx, sc.ID, sc.Attempt, "worker:a", "again"); !errors.Is(err, ErrLeaseLost) {
 		t.Errorf("second FailScan = %v, want ErrLeaseLost", err)
+	}
+}
+
+// A scan still waiting with at least the requested modules answers a new
+// request; once it started, a new scan is queued. Every request is audited.
+func TestEnqueueReusesWaitingScan(t *testing.T) {
+	s := newTestStore(t)
+	org := defaultOrg(t, s)
+	target := newTarget(t, s, "example.com")
+	ctx := context.Background()
+	first, err := org.EnqueueScan(ctx, target.ID, []string{"email", "tls"}, "jordy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := org.EnqueueScan(ctx, target.ID, []string{"tls"}, "alice")
+	if err != nil || again.ID != first.ID {
+		t.Errorf("covered request = %s, %v; want the waiting scan %s", again.ID, err, first.ID)
+	}
+	other, err := org.EnqueueScan(ctx, target.ID, []string{"ports"}, "alice")
+	if err != nil || other.ID == first.ID {
+		t.Errorf("other modules = %s, %v; want a new scan", other.ID, err)
+	}
+	if _, ok, err := s.ClaimScan(ctx, "worker", time.Minute, 3); err != nil || !ok {
+		t.Fatalf("claim: %v %v", ok, err)
+	}
+	after, err := org.EnqueueScan(ctx, target.ID, []string{"tls"}, "jordy")
+	if err != nil || after.ID == first.ID {
+		t.Errorf("after the claim = %s, %v; want a new scan", after.ID, err)
+	}
+	entries, err := org.AuditLog(ctx, "example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	requests := 0
+	for _, e := range entries {
+		if e.Action == ActionScanRequested {
+			requests++
+		}
+	}
+	if requests != 4 {
+		t.Errorf("%d scan requests audited, want 4", requests)
 	}
 }

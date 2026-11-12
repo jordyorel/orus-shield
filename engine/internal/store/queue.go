@@ -67,6 +67,11 @@ func scanScan(row pgx.Row) (Scan, error) {
 // and records who requested it in the audit log, in the same transaction: a
 // scan can never exist without its audit entry (security rule 4). A target of
 // another organization is ErrNotFound.
+//
+// A scan of the target still waiting in the queue with at least these
+// modules is reused instead: clicking "Revérifier" or "Marquer comme
+// corrigé" twice must not queue the same work twice. The request is
+// audited either way, with the scan that will answer it.
 func (o *Org) EnqueueScan(ctx context.Context, targetID string, modules []string, requestedBy string) (Scan, error) {
 	if len(modules) == 0 {
 		return Scan{}, errors.New("enqueue scan: no modules")
@@ -84,15 +89,22 @@ func (o *Org) EnqueueScan(ctx context.Context, targetID string, modules []string
 	}
 	defer tx.Rollback(ctx)
 
-	// The foreign key on (org_id, target_id) rejects a target of another
-	// organization, exactly like a target that does not exist.
 	sc, err := scanScan(tx.QueryRow(ctx, `
-		WITH s AS (
-			INSERT INTO scans (org_id, target_id, modules, requested_by) VALUES ($1, $2, $3, $4)
-			RETURNING *
-		)
-		SELECT `+scanColumns+` FROM s JOIN targets t ON t.id = s.target_id`,
-		o.orgID, targetID, modules, requestedBy))
+		SELECT `+scanColumns+` FROM scans s JOIN targets t ON t.id = s.target_id
+		WHERE s.org_id = $1 AND s.target_id = $2 AND s.status = 'queued' AND s.modules @> $3
+		ORDER BY s.created_at LIMIT 1`, o.orgID, targetID, modules))
+	reused := err == nil
+	if errors.Is(err, ErrNotFound) { // nothing waiting: a new scan
+		// The foreign key on (org_id, target_id) rejects a target of another
+		// organization, exactly like a target that does not exist.
+		sc, err = scanScan(tx.QueryRow(ctx, `
+			WITH s AS (
+				INSERT INTO scans (org_id, target_id, modules, requested_by) VALUES ($1, $2, $3, $4)
+				RETURNING *
+			)
+			SELECT `+scanColumns+` FROM s JOIN targets t ON t.id = s.target_id`,
+			o.orgID, targetID, modules, requestedBy))
+	}
 	if err != nil {
 		return Scan{}, fmt.Errorf("enqueue scan for target %s: %w", targetID, foreignKeyNotFound(err))
 	}
@@ -101,7 +113,7 @@ func (o *Org) EnqueueScan(ctx context.Context, targetID string, modules []string
 		Actor:   requestedBy,
 		Action:  ActionScanRequested,
 		Target:  sc.Domain,
-		Details: map[string]any{"scan_id": sc.ID, "modules": modules},
+		Details: map[string]any{"scan_id": sc.ID, "modules": modules, "reused_queued_scan": reused},
 	}); err != nil {
 		return Scan{}, err
 	}

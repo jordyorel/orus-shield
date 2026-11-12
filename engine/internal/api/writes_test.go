@@ -125,10 +125,12 @@ func TestStartScan(t *testing.T) {
 	if sc.Status != "queued" || strings.Join(sc.Modules, ",") != "email,tls" || sc.RequestedBy != "user:admin@example.com" {
 		t.Errorf("scan = %+v", sc)
 	}
+	// Covered by the scan still waiting: that scan answers.
+	first := sc.ID
 	r = e.do("POST", path, a.session, startScanRequest{Modules: []string{"tls", "tls"}})
 	r.json(t, &sc)
-	if r.status != http.StatusAccepted || strings.Join(sc.Modules, ",") != "tls" {
-		t.Errorf("scan with modules = %d %+v", r.status, sc)
+	if r.status != http.StatusAccepted || sc.ID != first {
+		t.Errorf("scan with modules = %d %+v, want the waiting scan", r.status, sc)
 	}
 	if r := e.do("POST", path, a.session, startScanRequest{Modules: []string{"nmap"}}); r.status != http.StatusBadRequest {
 		t.Errorf("unknown module = %d, want 400", r.status)
