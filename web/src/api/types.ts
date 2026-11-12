@@ -286,6 +286,8 @@ export interface Plan {
   threats: boolean;
   /** The deep profile ("Approfondi"). */
   deep_scans: boolean;
+  /** Deep scans per calendar month, 0 unlimited. */
+  deep_scans_per_month: number;
   usd_monthly: number;
   usd_yearly: number;
   xaf_monthly: number;
@@ -300,7 +302,8 @@ export interface Subscription {
   until: string | null;
   in_grace: boolean;
   lapsed: boolean;
-  usage: { domains: number; members: number };
+  /** deep_scans: run this calendar month (UTC). */
+  usage: { domains: number; members: number; deep_scans: number };
   plans: Plan[];
 }
 

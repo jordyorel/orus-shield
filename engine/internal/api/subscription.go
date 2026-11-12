@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/plan"
+	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
 
 // planJSON is one offer and what it allows. Limits: 0 means unlimited.
@@ -20,6 +21,7 @@ type planJSON struct {
 	Reports       bool    `json:"reports"`
 	Threats       bool    `json:"threats"`
 	DeepScans     bool    `json:"deep_scans"`
+	DeepPerMonth  int     `json:"deep_scans_per_month"` // 0: unlimited
 	USDMonthly    int     `json:"usd_monthly"`
 	USDYearly     int     `json:"usd_yearly"` // per month, billed yearly
 	XAFMonthly    int     `json:"xaf_monthly"`
@@ -30,13 +32,15 @@ type planJSON struct {
 func toPlanJSON(p plan.Plan) planJSON {
 	freq := map[plan.Frequency]string{plan.Monthly: "monthly", plan.Weekly: "weekly", plan.Daily: "daily"}[p.MaxFrequency]
 	return planJSON{ID: p.ID, Name: p.Name, Domains: p.Domains, HostsPerScan: p.HostsPerScan, Members: p.Members,
-		ActiveModules: p.ActiveModules, MaxFrequency: freq, Alerts: p.Alerts, Reports: p.Reports, Threats: p.Threats, DeepScans: p.DeepScans,
+		ActiveModules: p.ActiveModules, MaxFrequency: freq, Alerts: p.Alerts, Reports: p.Reports, Threats: p.Threats, DeepScans: p.DeepScans, DeepPerMonth: p.DeepScansPerMonth,
 		USDMonthly: p.USDMonthly, USDYearly: p.USDYearly, XAFMonthly: p.XAFMonthly, XAFYearly: p.XAFYearly, OnQuote: p.OnQuote}
 }
 
 type usageJSON struct {
 	Domains int `json:"domains"`
 	Members int `json:"members"`
+	// DeepScans run this calendar month (UTC).
+	DeepScans int `json:"deep_scans"`
 }
 
 type subscriptionJSON struct {
@@ -70,9 +74,14 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request, req orgReq
 		s.internalError(w, r, err)
 		return
 	}
+	deep, err := req.org.DeepScansSince(ctx, store.MonthStart(s.cfg.Now()))
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
 	out := subscriptionJSON{
 		Plan: toPlanJSON(eff.Plan), Status: "none", Until: eff.Until, InGrace: eff.InGrace, Lapsed: eff.Lapsed,
-		Usage: usageJSON{Domains: domains, Members: len(members)},
+		Usage: usageJSON{Domains: domains, Members: len(members), DeepScans: deep},
 	}
 	if sub != nil {
 		out.Status = string(sub.Status)

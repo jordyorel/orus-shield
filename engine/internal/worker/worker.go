@@ -42,6 +42,8 @@ type Store interface {
 	CurrentHostnames(ctx context.Context, targetID string) ([]string, error)
 	SubscriptionOf(ctx context.Context, orgID string) (*plan.Subscription, error)
 	ScanProfileOf(ctx context.Context, orgID string) (string, error)
+	DeepScansSince(ctx context.Context, orgID string, since time.Time) (int, error)
+	MarkScanDeep(ctx context.Context, scanID string, attempt int) error
 }
 
 // Ownership enforces security rule 1 for active modules (see package
@@ -222,7 +224,7 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 		if err != nil {
 			log.Warn("read scan profile", "err", err)
 		}
-		if profile == store.ProfileDeep {
+		if profile == store.ProfileDeep && w.deepAllowed(scanCtx, sc, target, offer, log) {
 			config = json.RawMessage(`{"deep":true}`)
 		}
 	}
@@ -396,6 +398,34 @@ func (s *ipSet) covers(value string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.ips[ip.Unmap()]
+}
+
+// deepAllowed checks the month's deep scan quota of the offer, and marks
+// the scan deep when it fits. Over the quota (or when the count cannot be
+// read: fail closed), the scan runs as a standard one, and the audit log
+// says why.
+func (w *Worker) deepAllowed(ctx context.Context, sc store.Scan, target store.Target, offer plan.Plan, log *slog.Logger) bool {
+	if limit := offer.DeepScansPerMonth; limit > 0 {
+		n, err := w.store.DeepScansSince(ctx, target.OrgID, store.MonthStart(w.now()))
+		if err != nil {
+			log.Warn("count deep scans", "err", err)
+			return false
+		}
+		if n >= limit {
+			if err := w.store.AppendAudit(ctx, store.AuditEntry{
+				OrgID: target.OrgID, Actor: w.cfg.ID, Action: store.ActionDeepQuota, Target: target.Domain,
+				Details: map[string]any{"scan_id": sc.ID, "deep_scans_this_month": n, "limit": limit},
+			}); err != nil {
+				log.Warn("audit deep quota", "err", err)
+			}
+			return false
+		}
+	}
+	if err := w.store.MarkScanDeep(ctx, sc.ID, sc.Attempt); err != nil {
+		log.Warn("mark scan deep", "err", err)
+		return false
+	}
+	return true
 }
 
 // capHosts keeps the names the offer covers: ScanHosts always adds the

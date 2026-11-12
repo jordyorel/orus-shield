@@ -49,7 +49,7 @@ export function limitRows(plans: Plan[]): [string, ...string[]][] {
     ["Menaces émergentes", ...col((p) => (p.threats ? "Oui" : "Non"))],
     ["Alertes email", ...col((p) => (p.alerts ? "Oui" : "Non"))],
     ["Rapports PDF", ...col((p) => (p.reports ? "Direction et Technique" : "Non"))],
-    ["Profil approfondi", ...col((p) => (p.deep_scans ? "Oui" : "Non"))],
+    ["Profil approfondi", ...col((p) => (!p.deep_scans ? "Non" : p.deep_scans_per_month ? `${p.deep_scans_per_month} scans par mois` : "Illimité"))],
   ];
 }
 
@@ -156,6 +156,7 @@ export function ReglagesPage() {
     ["Actifs surveillés", hostCount, assetsCap],
     ["Scans ce mois-ci", scansThisMonth, 0],
   ];
+  if (plan.deep_scans) prog.push(["Scans approfondis ce mois-ci", sub.usage.deep_scans, plan.deep_scans_per_month]);
 
   return (
     <>

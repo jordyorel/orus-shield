@@ -137,7 +137,7 @@ silent failure. Numbers are a proposal (not validated):
 | Domains | 1 | 3 | 15 | on quote |
 | Hosts per scan | 5 | 25 | 25 | more |
 | Modules | passive only | all except deep | all | all |
-| Deep web scans (ZAP) | no | no | 4 / month | on quote |
+| Deep web scans (ZAP) | no | no | 4 / month (enforced) | unlimited |
 | Schedule | monthly | weekly | daily | daily |
 | Email alerts | no | yes | yes | yes |
 | PDF reports | no | monthly | on demand | on demand + branding |

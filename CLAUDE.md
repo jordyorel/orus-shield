@@ -267,6 +267,10 @@ Deep profile ("Approfondi", Réglages > Profondeur du scan; Pro and Sur devis, p
 chosen with an explicit consent recorded in org_settings (migration 0017, who and when; PUT
 /settings needs `deep_consent` the first time). The worker reads the profile at each scan and
 passes `{"deep": true}` as every module's Config; modules without a deep mode ignore it.
+Quota: `plan.DeepScansPerMonth` (Pro 4, Sur devis unlimited) per calendar month in UTC; the
+worker marks the scans it runs deep (`scans.deep`, migration 0018) and runs a scan over the
+quota as a standard one, with a `scan.deep_quota_reached` audit entry. Réglages > Abonnement
+shows the month's count.
 - `ports` (deep): every port 1 to 1024 plus about 130 registered ports often exposed (not Nmap's
   top 1000, whose data falls under the NPSL), version identification from banners (SSH, FTP,
   SMTP, POP3, IMAP, MySQL, VNC) and, for a silent service, one `HEAD /` request allowed by the

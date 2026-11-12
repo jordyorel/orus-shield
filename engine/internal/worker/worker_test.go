@@ -33,6 +33,8 @@ type fakeStore struct {
 	failed    []string // reasons
 	sub       *plan.Subscription
 	profile   string
+	deepUsed  int      // deep scans already run this month
+	deepMarks []string // scans marked deep
 	audit     []store.AuditEntry
 	leaseLost bool // ExtendLease reports the lease as lost
 	extended  int
@@ -105,6 +107,19 @@ func (f *fakeStore) ScanProfileOf(ctx context.Context, orgID string) (string, er
 		return store.ProfileStandard, nil
 	}
 	return f.profile, nil
+}
+
+func (f *fakeStore) DeepScansSince(ctx context.Context, orgID string, since time.Time) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.deepUsed + len(f.deepMarks), nil
+}
+
+func (f *fakeStore) MarkScanDeep(ctx context.Context, scanID string, attempt int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.deepMarks = append(f.deepMarks, scanID)
+	return nil
 }
 
 func (f *fakeStore) FinishScan(ctx context.Context, r store.ScanResult) error {
@@ -849,6 +864,46 @@ func TestDeepProfileConfig(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("config = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// Beyond the offer's deep scans of the month, a scan runs as a standard
+// one, and the audit log says why.
+func TestDeepScanQuota(t *testing.T) {
+	tests := []struct {
+		name      string
+		sub       *plan.Subscription
+		used      int
+		wantDeep  bool
+		wantAudit bool
+	}{
+		{"Pro, under the quota", nil, 3, true, false},
+		{"Pro, quota used", nil, 4, false, true},
+		{"Sur devis, unlimited", &plan.Subscription{Plan: plan.Enterprise, Status: plan.Active}, 50, true, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got string
+			m := &fakeModule{info: module.Info{ID: "probe", Name: "Probe", Kind: module.KindPassive}, run: func(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+				got = string(req.Config)
+				return nil, nil
+			}}
+			w, st := setup(t, true, "{}", m)
+			st.profile, st.deepUsed = store.ProfileDeep, tt.used
+			if tt.sub != nil {
+				st.sub = tt.sub
+			}
+			if _, err := w.RunOnce(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			if deep := got == `{"deep":true}`; deep != tt.wantDeep || (len(st.deepMarks) == 1) != tt.wantDeep {
+				t.Errorf("config %q, marks %v; want deep %v", got, st.deepMarks, tt.wantDeep)
+			}
+			audited := slices.ContainsFunc(st.audit, func(e store.AuditEntry) bool { return e.Action == store.ActionDeepQuota })
+			if audited != tt.wantAudit {
+				t.Errorf("quota audit = %v, want %v", audited, tt.wantAudit)
 			}
 		})
 	}

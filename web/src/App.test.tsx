@@ -20,9 +20,9 @@ const me: Me = {
 };
 
 const plans: Plan[] = [
-  { id: "discovery", name: "Gratuit", domains: 1, hosts_per_scan: 5, members: 1, active_modules: false, max_frequency: "monthly", alerts: false, reports: false, threats: false, deep_scans: false, usd_monthly: 0, usd_yearly: 0, xaf_monthly: 0, xaf_yearly: 0, on_quote: false },
-  { id: "sme", name: "Essentiel", domains: 3, hosts_per_scan: 25, members: 3, active_modules: true, max_frequency: "weekly", alerts: true, reports: true, threats: true, deep_scans: false, usd_monthly: 35, usd_yearly: 29, xaf_monthly: 20000, xaf_yearly: 16500, on_quote: false },
-  { id: "pro", name: "Pro", domains: 15, hosts_per_scan: 25, members: 10, active_modules: true, max_frequency: "daily", alerts: true, reports: true, threats: true, deep_scans: true, usd_monthly: 99, usd_yearly: 79, xaf_monthly: 57000, xaf_yearly: 45500, on_quote: false },
+  { id: "discovery", name: "Gratuit", domains: 1, hosts_per_scan: 5, members: 1, active_modules: false, max_frequency: "monthly", alerts: false, reports: false, threats: false, deep_scans: false, deep_scans_per_month: 0, usd_monthly: 0, usd_yearly: 0, xaf_monthly: 0, xaf_yearly: 0, on_quote: false },
+  { id: "sme", name: "Essentiel", domains: 3, hosts_per_scan: 25, members: 3, active_modules: true, max_frequency: "weekly", alerts: true, reports: true, threats: true, deep_scans: false, deep_scans_per_month: 0, usd_monthly: 35, usd_yearly: 29, xaf_monthly: 20000, xaf_yearly: 16500, on_quote: false },
+  { id: "pro", name: "Pro", domains: 15, hosts_per_scan: 25, members: 10, active_modules: true, max_frequency: "daily", alerts: true, reports: true, threats: true, deep_scans: true, deep_scans_per_month: 4, usd_monthly: 99, usd_yearly: 79, xaf_monthly: 57000, xaf_yearly: 45500, on_quote: false },
 ];
 
 const overview: Overview = {
@@ -68,7 +68,7 @@ const dmarc: Finding = {
 
 const settings: OrgSettings = { alert_level: "high", email_alerts: true, profile: "standard", disabled_modules: [], frequency: "weekly", weekday: 6, hour: 2, timezone: "UTC", rate_per_sec: 0, deep_consent_at: null };
 
-const subscription: Subscription = { plan: plans[1]!, status: "trialing", until: "2026-11-26T00:00:00Z", in_grace: false, lapsed: false, usage: { domains: 1, members: 1 }, plans };
+const subscription: Subscription = { plan: plans[1]!, status: "trialing", until: "2026-11-26T00:00:00Z", in_grace: false, lapsed: false, usage: { domains: 1, members: 1, deep_scans: 0 }, plans };
 
 function orgRoutes(extra: Record<string, ReturnType<typeof ok>> = {}, sub: Subscription = subscription) {
   const base = `/orgs/${ORG}`;
