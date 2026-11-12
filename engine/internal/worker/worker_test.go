@@ -113,6 +113,7 @@ type fakeModule struct {
 	run       func(ctx context.Context, req module.Request) ([]finding.Finding, error)
 	assets    []asset.Asset
 	evaluated []string
+	unreached []string
 }
 
 func (m *fakeModule) Info() module.Info { return m.info }
@@ -120,10 +121,10 @@ func (m *fakeModule) Info() module.Info { return m.info }
 func (m *fakeModule) Run(ctx context.Context, req module.Request) (module.Result, error) {
 	m.runs.Add(1)
 	if m.run == nil {
-		return module.Result{Assets: m.assets, Evaluated: m.evaluated}, nil
+		return module.Result{Assets: m.assets, Evaluated: m.evaluated, Unreached: m.unreached}, nil
 	}
 	findings, err := m.run(ctx, req)
-	return module.Result{Findings: findings, Assets: m.assets, Evaluated: m.evaluated}, err
+	return module.Result{Findings: findings, Assets: m.assets, Evaluated: m.evaluated, Unreached: m.unreached}, err
 }
 
 func newModule(id string, kind module.Kind, run func(context.Context, module.Request) ([]finding.Finding, error)) *fakeModule {
@@ -701,6 +702,47 @@ func TestUnobservedCoversExclusionsAndRefusedIPs(t *testing.T) {
 		if got := unobserved(tt.kind, tt.value); got != tt.want {
 			t.Errorf("Unobserved(%q, %q) = %v, want %v", tt.kind, tt.value, got, tt.want)
 		}
+	}
+}
+
+// Names a module could not reach (the gate refused them) keep their
+// findings, whatever the form of the finding's asset.
+func TestUnobservedCoversUnreachedNames(t *testing.T) {
+	vulns := newModule("vulns", module.KindActive, returns())
+	vulns.unreached = []string{"app.example.com"}
+	w, st := setup(t, true, "{}", vulns)
+	if err := runOnce(t, w); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	unobserved := st.finished[0].Unobserved
+	for value, want := range map[string]bool{
+		"https://app.example.com/.git/config#git-config": true,
+		"app.example.com":            true,
+		"app.example.com:443":        true,
+		"https://www.example.com/#x": false,
+		"www.example.com":            false,
+	} {
+		if got := unobserved("", value); got != want {
+			t.Errorf("Unobserved(%q) = %v, want %v", value, got, want)
+		}
+	}
+}
+
+// A module's own Timeout replaces the worker's default.
+func TestModuleTimeout(t *testing.T) {
+	var left time.Duration
+	long := newModule("long", module.KindPassive, func(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+		dl, _ := ctx.Deadline()
+		left = time.Until(dl)
+		return nil, nil
+	})
+	long.info.Timeout = 30 * time.Second // the worker's default here is 1s
+	w, _ := setup(t, false, "{}", long)
+	if err := runOnce(t, w); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	if left < 20*time.Second {
+		t.Errorf("module deadline in %v, want its own 30s", left)
 	}
 }
 

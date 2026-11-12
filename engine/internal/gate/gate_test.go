@@ -240,6 +240,13 @@ func TestCovers(t *testing.T) {
 		{"_dmarc.example.com", false},
 		{"www.example.com:99999", false}, // not a valid port: not covered
 		{"", false},
+		// URLs: vulns module findings (template in the fragment)
+		{"https://www.example.com/admin/login#panel", true}, // excluded path
+		{"https://www.example.com/.git/config#git-config", false},
+		{"http://www.example.com:8080/#x", true},                                    // excluded port
+		{"https://staging.example.com/#x", true},                                    // excluded host
+		{"https://198.51.100.7/#x", true},                                           // excluded ip
+		{"https://www.example.com:0/#x", false},                                     // invalid port
 		{"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", false}, // certificate hash
 	}
 	for _, tt := range tests {

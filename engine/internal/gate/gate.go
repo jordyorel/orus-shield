@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -150,12 +151,13 @@ func (r Rules) Match(dest module.Destination) string {
 
 // Covers reports whether an exclusion applies to value, the asset of a
 // finding or an inventory asset value: "203.0.113.5", "203.0.113.5:8080",
-// "203.0.113.5:8080/tcp", "www.example.com:443" or "www.example.com".
+// "203.0.113.5:8080/tcp", "www.example.com:443", "www.example.com" or a URL
+// ("https://www.example.com/admin/#template": host, port and path).
 //
 // The worker uses it after a scan: a module that skipped an excluded
 // destination did not observe it, so findings and assets on it must not be
-// marked fixed or gone. Path exclusions cannot be matched this way (assets
-// carry no path); see the worker for that limit.
+// marked fixed or gone. Path exclusions match only URL values (findings of
+// the vulns module); other assets carry no path.
 func (r Rules) Covers(value string) bool {
 	dest, ok := destinationOf(value)
 	return ok && r.Match(dest) != ""
@@ -163,6 +165,28 @@ func (r Rules) Covers(value string) bool {
 
 // destinationOf parses an asset value into the destination it designates.
 func destinationOf(value string) (module.Destination, bool) {
+	if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
+		u, err := url.Parse(value)
+		if err != nil || u.Hostname() == "" {
+			return module.Destination{}, false
+		}
+		port := 443
+		if u.Scheme == "http" {
+			port = 80
+		}
+		if p := u.Port(); p != "" {
+			n, err := strconv.Atoi(p)
+			if err != nil || n < 1 || n > 65535 {
+				return module.Destination{}, false
+			}
+			port = n
+		}
+		d := module.Destination{Host: u.Hostname(), Port: port, Path: u.Path}
+		if ip, err := netip.ParseAddr(u.Hostname()); err == nil {
+			d = module.Destination{IP: ip, Port: port, Path: u.Path}
+		}
+		return d, true
+	}
 	v := strings.TrimSuffix(value, "/tcp")
 	if ap, err := netip.ParseAddrPort(v); err == nil {
 		return module.Destination{IP: ap.Addr(), Port: int(ap.Port())}, true

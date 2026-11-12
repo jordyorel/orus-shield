@@ -11,7 +11,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/netip"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -212,6 +214,7 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 	// them reach IPs whose ownership is proven (rule 1, per IP).
 	var activeGate module.Gate
 	refused := &ipSet{}
+	unreached := &hostSet{}
 	gateFor := func(id string) module.Gate {
 		m, ok := w.modules.Get(id)
 		if !ok || m.Info().Kind != module.KindActive {
@@ -236,7 +239,7 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 			if kind == asset.KindCertificate {
 				return false // a hash, not a destination
 			}
-			return g.Covers(value) || refused.covers(value)
+			return g.Covers(value) || refused.covers(value) || unreached.covers(value)
 		},
 	}
 	for _, id := range w.discoveryFirst(sc.Modules) {
@@ -268,6 +271,7 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 			log.Info("module done", "module", id, "findings", len(res.Findings), "assets", len(res.Assets),
 				"duration_ms", time.Since(start).Milliseconds())
 			result.Succeeded = append(result.Succeeded, id)
+			unreached.add(res.Unreached)
 			result.Findings = append(result.Findings, res.Findings...)
 			if len(res.Assets) > 0 {
 				result.Assets[id] = res.Assets
@@ -363,6 +367,33 @@ func (s *ipSet) covers(value string) bool {
 	return s.ips[ip.Unmap()]
 }
 
+// hostSet collects the names modules reported as unreached.
+type hostSet struct{ names map[string]bool }
+
+func (s *hostSet) add(names []string) {
+	for _, n := range names {
+		if s.names == nil {
+			s.names = make(map[string]bool)
+		}
+		s.names[strings.ToLower(n)] = true
+	}
+}
+
+// covers reports whether value (a name, "name:port" or a URL) is on an
+// unreached name.
+func (s *hostSet) covers(value string) bool {
+	if len(s.names) == 0 {
+		return false
+	}
+	host := value
+	if u, err := url.Parse(value); err == nil && u.Host != "" {
+		host = u.Hostname()
+	} else if h, _, err := net.SplitHostPort(value); err == nil {
+		host = h
+	}
+	return s.names[strings.ToLower(host)]
+}
+
 // refuseAll is the active gate when no ownership checker is configured.
 type refuseAll struct{}
 
@@ -440,7 +471,11 @@ func (w *Worker) runModule(ctx context.Context, id string, t module.Target, g mo
 		}
 	}()
 
-	mctx, cancel := context.WithTimeout(ctx, w.cfg.ModuleTimeout)
+	timeout := w.cfg.ModuleTimeout
+	if t := m.Info().Timeout; t > 0 {
+		timeout = t
+	}
+	mctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	res, err = m.Run(mctx, module.Request{Target: t, Gate: g})
 	if err != nil {
@@ -476,7 +511,7 @@ func (w *Worker) runModule(ctx context.Context, id string, t module.Target, g mo
 		}
 		assets.Add(a)
 	}
-	res = module.Result{Findings: findings, Assets: assets.List(), Evaluated: res.Evaluated}
+	res = module.Result{Findings: findings, Assets: assets.List(), Evaluated: res.Evaluated, Unreached: res.Unreached}
 	// Rejects findings or evaluated checks the catalog does not declare.
 	checks, err = module.Evaluate(m.Info(), res)
 	if err != nil {

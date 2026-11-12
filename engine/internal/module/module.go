@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/netip"
 	"strings"
+	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/asset"
 	"github.com/jordyorel/orus-shield/engine/internal/dnsname"
@@ -46,6 +47,10 @@ type Info struct {
 	// the others of a scan, and the hostnames it reports are added to
 	// Target.Hosts for the modules that follow.
 	ProvidesHosts bool
+	// Timeout is how long one run may take; zero means the worker's
+	// default (ORUS_MODULE_TIMEOUT). Set it for modules that drive a long
+	// external scan, such as Nuclei.
+	Timeout time.Duration
 }
 
 // Category groups checks for the dashboard's risk categories.
@@ -234,6 +239,11 @@ type Result struct {
 	// not applicable: for example DMARC policy checks when the domain has
 	// no DMARC record, or certificate checks when no server answered.
 	Evaluated []string
+	// Unreached lists the names the module meant to check but could not,
+	// because the gate refused them (exclusion, unverified IPs). Findings
+	// and assets on them keep their state instead of being marked fixed or
+	// gone: nothing was learned about them.
+	Unreached []string
 }
 
 // Module is one independent security check.
