@@ -1,6 +1,8 @@
 package store
 
 import (
+	"github.com/jordyorel/orus-shield/engine/internal/plan"
+
 	"context"
 	"encoding/json"
 	"testing"
@@ -137,5 +139,43 @@ func TestThreats(t *testing.T) {
 	_ = s.pool.QueryRow(ctx, `SELECT count(*) FROM notifications`).Scan(&notes)
 	if notes != 2 {
 		t.Errorf("%d notifications, want 2", notes)
+	}
+}
+
+// An organization whose offer has no emerging threats (the free one) gets
+// neither a match, nor a rescan, nor an email.
+func TestThreatsFollowTheOffer(t *testing.T) {
+	l := newLifecycle(t)
+	s, ctx := l.s, context.Background()
+	l.member("admin@example.com", RoleAdmin, true)
+	now := time.Now()
+	if err := s.SetSubscription(ctx, l.target.OrgID, plan.Subscription{Plan: plan.Discovery, Status: plan.Active}, "manual", "test"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SyncThreatTemplates(ctx, []ThreatTemplate{
+		{ID: "CVE-2026-9", CVE: "CVE-2026-9", Name: "New WordPress RCE", Severity: "critical", Products: []string{"wordpress"}, New: true},
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+	verifyWithTech(t, s, l.target, "WordPress 6.1")
+	match := []ThreatMatch{{TemplateID: "CVE-2026-9", TargetID: l.target.ID, Products: []string{"wordpress"}}}
+	rescans, err := s.RecordThreats(ctx, []string{"CVE-2026-9"}, match, now)
+	if err != nil || rescans != 0 {
+		t.Fatalf("record on the free offer: %d rescans, %v", rescans, err)
+	}
+	var matches, notes, scans int
+	if err := s.pool.QueryRow(ctx, `SELECT
+		(SELECT count(*) FROM threat_matches WHERE target_id = $1),
+		(SELECT count(*) FROM notifications WHERE target_id = $1 AND kind = $2),
+		(SELECT count(*) FROM scans WHERE target_id = $1 AND requested_by = $3)`,
+		l.target.ID, NotifyEmergingThreat, ActorThreats).Scan(&matches, &notes, &scans); err != nil {
+		t.Fatal(err)
+	}
+	if matches != 0 || notes != 0 || scans != 0 {
+		t.Errorf("free offer: %d matches, %d emails, %d rescans; want none", matches, notes, scans)
+	}
+	// Processed anyway: the template is not retried forever.
+	if pending, err := s.PendingThreats(ctx, 10); err != nil || len(pending) != 0 {
+		t.Errorf("pending = %+v, %v", pending, err)
 	}
 }

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/jordyorel/orus-shield/engine/internal/plan"
 )
 
 // ActorThreats is who requested a rescan triggered by an emerging threat,
@@ -251,6 +253,17 @@ func recordTargetThreats(ctx context.Context, tx pgx.Tx, targetID string, matche
 	}
 	if err != nil {
 		return false, fmt.Errorf("record threats for target %s: %w", targetID, err)
+	}
+	// The offer in force decides (plan.Plan.Threats): without emerging
+	// threats, nothing is recorded, so no rescan and no email. The free
+	// offer has no active modules: the rescan would be refused anyway.
+	sub, err := scanSubscription(tx.QueryRow(ctx,
+		"SELECT "+subscriptionColumns+" FROM subscriptions WHERE org_id = $1", orgID))
+	if err != nil {
+		return false, fmt.Errorf("record threats for target %s: %w", targetID, err)
+	}
+	if !plan.Resolve(sub, now).Plan.Threats {
+		return false, nil
 	}
 
 	var fresh []ThreatMatch
