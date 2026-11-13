@@ -30,7 +30,7 @@ function AuthAside({ kind }: { kind: "in" | "up" }) {
       ? [
           ["Gratuit pour commencer", "Un domaine, sans carte bancaire."],
           ["Votre premier résultat en 5 minutes", "Contrôles passifs dès l’inscription."],
-          ["Payez quand vous voulez", "Carte ou Mobile Money, sans engagement."],
+          ["Payez quand vous voulez", "Carte ou PayPal, sans engagement."],
         ]
       : [
           ["Ce que vous exposez sur internet", "Domaines, emails, serveurs, certificats."],

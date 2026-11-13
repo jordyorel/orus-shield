@@ -133,7 +133,6 @@ describe("helpers", () => {
   it("formats names and money", () => {
     expect(initials("Jordy Konda", "j@x.cg")).toBe("JK");
     expect(initials("", "j@x.cg")).toBe("J");
-    expect(money(35, "usd")).toBe("35 $");
-    expect(money(20000, "xaf").replace(/\s/g, " ")).toBe("20 000 FCFA");
+    expect(money(35)).toBe("35 $");
   });
 });

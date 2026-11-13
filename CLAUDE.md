@@ -3,7 +3,7 @@
 Continuous security audit platform for small and mid-sized businesses. It discovers what a
 company exposes on the internet, checks it, scores it, and turns each finding into a
 prioritized, plain-language action plan. The market is international, with particular
-attention to French-speaking Africa (local payment methods, French-first reports).
+attention to French-speaking Africa (French-first reports; payments by card and PayPal).
 
 Status: roadmap steps 1 to 6 are done (finding schema, Module interface, gated DNS
 resolver and dialer, email and TLS modules, PostgreSQL storage and queue, gate, worker,
@@ -325,7 +325,7 @@ reported as not supported). Release: `deploy/agent/build.sh` (Linux amd64/arm64,
 and SHA256SUMS, unsigned until a code signing certificate exists), `deploy/agent/orus-agent.service`
 (systemd, DynamicUser, config as a credential); Windows: a scheduled task at startup for now.
 
-Payments (step F, cards and PayPal; Mobile Money later): Paddle Billing, merchant of record
+Payments (step F, cards and PayPal only; no Mobile Money, dropped 2026-11-12): Paddle Billing, merchant of record
 (package paddle, stdlib only; `ORUS_PADDLE_*`, all or none, see `.env.example`). The payment page
 asks `POST /orgs/{org}/checkout` (admins), which creates the Paddle transaction with the
 organization in its custom_data, and opens it in Paddle.js (loaded on that page only; card

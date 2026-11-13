@@ -90,13 +90,11 @@ export function usePlans(): Plan[] {
   return plans;
 }
 
-type Cur = "usd" | "xaf";
 type Bill = "mois" | "an";
 
-export function price(p: Plan | undefined, cur: Cur, bill: Bill): string {
+export function price(p: Plan | undefined, bill: Bill): string {
   if (!p) return "…";
-  const v = cur === "usd" ? (bill === "an" ? p.usd_yearly : p.usd_monthly) : bill === "an" ? p.xaf_yearly : p.xaf_monthly;
-  return money(v, cur);
+  return money(bill === "an" ? p.usd_yearly : p.usd_monthly);
 }
 
 /** features describes an offer in the cards of Tarifs and Paiement. */
@@ -221,8 +219,8 @@ export function AccueilPage() {
           </section>
 
           <section className="band cta">
-            <h2>Essentiel à partir de {price(ess, "usd", "mois")} par mois</h2>
-            <p className="sub">Une offre gratuite pour commencer. Paiement par carte ou Mobile Money bientôt disponible.</p>
+            <h2>Essentiel à partir de {price(ess, "mois")} par mois</h2>
+            <p className="sub">Une offre gratuite pour commencer. Paiement par carte ou PayPal.</p>
             <div className="actions" style={{ justifyContent: "center" }}>
               <Link className="btn" to="/tarifs">
                 Voir les tarifs
@@ -243,7 +241,6 @@ export function TarifsPage() {
   useBodyClass(["public"]);
   const plans = usePlans();
   const [bill, setBill] = useState<Bill>("mois");
-  const [cur, setCur] = useState<Cur>("usd");
   const by = (id: Plan["id"]) => plans.find((p) => p.id === id);
   const cards: [Plan | undefined, string, string, string, boolean, string][] = [
     [by("discovery"), "Gratuit", "Pour voir où vous en êtes.", "Commencer", false, ""],
@@ -270,18 +267,6 @@ export function TarifsPage() {
                 </button>
               ))}
             </div>
-            <div className="seg2" role="group" aria-label="Monnaie">
-              {(
-                [
-                  ["usd", "Dollars"],
-                  ["xaf", "FCFA"],
-                ] as const
-              ).map(([k, l]) => (
-                <button key={k} type="button" aria-pressed={cur === k} onClick={() => setCur(k)}>
-                  {l}
-                </button>
-              ))}
-            </div>
           </div>
         </section>
         <div className="plans">
@@ -291,7 +276,7 @@ export function TarifsPage() {
               <h2>{n}</h2>
               <p className="md">{d}</p>
               <p className="price">
-                <b>{n === "Gratuit" ? money(0, cur) : price(p, cur, bill)}</b>
+                <b>{n === "Gratuit" ? money(0) : price(p, bill)}</b>
                 <span>{n === "Gratuit" ? "pour toujours" : bill === "an" ? "par mois, payé à l’année" : "par mois"}</span>
               </p>
               <ul>
@@ -339,12 +324,6 @@ export function TarifsPage() {
             {["Carte bancaire", "PayPal"].map((x) => (
               <span key={x}>{x}</span>
             ))}
-            {["MTN Mobile Money", "Airtel Money", "Orange Money"].map((x) => (
-              <span key={x} className="is-soon">
-                {x}
-                <Soon />
-              </span>
-            ))}
           </div>
         </section>
         <section className="band">
@@ -353,7 +332,6 @@ export function TarifsPage() {
             {[
               ["Puis-je tester un domaine qui n’est pas le mien ?", "Non. Les contrôles passifs lisent des données publiques. Tous les tests actifs demandent une preuve que le domaine et le serveur vous appartiennent."],
               ["Qui corrige les problèmes ?", "Vous ou votre informaticien, en suivant nos étapes. Nous revérifions ensuite. Un service d’accompagnement est proposé à part si vous préférez qu’on le fasse avec vous."],
-              ["Comment payer en Mobile Money ?", "Vous choisissez votre opérateur au moment du paiement et vous validez sur votre téléphone. Le prix en FCFA est fixe."],
               ["Puis-je arrêter quand je veux ?", "Oui. L’abonnement s’arrête à la fin de la période payée, et vos rapports restent téléchargeables."],
             ].map(([q, a]) => (
               <details key={q}>
@@ -369,33 +347,22 @@ export function TarifsPage() {
   );
 }
 
-const OPS: [string, string, string, string][] = [
-  ["mtn", "MTN Mobile Money", "#FFCB05", "#1A1A1A"],
-  ["airtel", "Airtel Money", "#E40000", "#FFFFFF"],
-  ["orange", "Orange Money", "#FF7900", "#1A1A1A"],
-];
-
 /**
- * PaiementPage reproduces the payment flow; no payment provider is
- * connected yet, so the final buttons are greyed "Bientôt" and nothing is
- * charged or simulated.
+ * PaiementPage takes the payment: our API creates the Paddle transaction,
+ * then Paddle's checkout (card inline, PayPal in an overlay) collects it.
  */
 export function PaiementPage() {
   useBodyClass(["pay"]);
   const { search } = useLocation();
   const { state } = useAuth();
-  const { toast } = useUI();
   const plans = usePlans();
   const [plan, setPlan] = useState<"sme" | "pro">(search.get("offre") === "pro" ? "pro" : "sme");
   const [bill, setBill] = useState<Bill>("mois");
-  const [method, setMethod] = useState<"card" | "momo" | "paypal">("card");
-  const [op, setOp] = useState("mtn");
+  const [method, setMethod] = useState<"card" | "paypal">("card");
   const p = plans.find((x) => x.id === plan);
-  const cur: Cur = method === "momo" ? "xaf" : "usd";
-  const per = price(p, cur, bill);
-  const total = p ? money((cur === "usd" ? (bill === "an" ? p.usd_yearly : p.usd_monthly) : bill === "an" ? p.xaf_yearly : p.xaf_monthly) * (bill === "an" ? 12 : 1), cur) : "…";
+  const per = price(p, bill);
+  const total = p ? money((bill === "an" ? p.usd_yearly : p.usd_monthly) * (bill === "an" ? 12 : 1)) : "…";
   const back = state.status === "signed-in" ? "/app" : "/tarifs";
-  const soon = () => toast("Mobile Money : bientôt disponible. La carte et PayPal sont déjà possibles.");
   const [busy, setBusy] = useState(false);
   const [opened, setOpened] = useState(false);
   const [payErr, setPayErr] = useState("");
@@ -433,9 +400,8 @@ export function PaiementPage() {
     }
   };
   const names = { sme: "Essentiel", pro: "Pro" };
-  const methods: ["card" | "momo" | "paypal", string, string][] = [
+  const methods: ["card" | "paypal", string, string][] = [
     ["card", "Carte bancaire", "Visa, Mastercard"],
-    ["momo", "Mobile Money", "MTN, Airtel, Orange"],
     ["paypal", "PayPal", "Votre compte PayPal"],
   ];
 
@@ -493,7 +459,7 @@ export function PaiementPage() {
                       <small>{x ? `${x.domains} domaines, ${x.hosts_per_scan} actifs par domaine, scan chaque ${x.max_frequency === "daily" ? "jour" : "semaine"}` : ""}</small>
                     </span>
                     <span className="pp">
-                      {price(x, cur, bill)}
+                      {price(x, bill)}
                       <small>/mois</small>
                     </span>
                   </button>
@@ -542,33 +508,6 @@ export function PaiementPage() {
                   )}
                 </div>
               )}
-              {method === "momo" && (
-                <form className="aform" noValidate onSubmit={(e) => (e.preventDefault(), soon())}>
-                  <div className="ops" role="radiogroup" aria-label="Opérateur">
-                    {OPS.map(([k, l, bg, fg]) => (
-                      <button key={k} type="button" role="radio" aria-checked={op === k} onClick={() => setOp(k)}>
-                        <span className="opdot" style={{ background: bg, color: fg }}>
-                          {l[0]}
-                        </span>
-                        {l}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="field">
-                    <label htmlFor="mm-phone">Numéro de téléphone</label>
-                    <div className="prefix">
-                      <span>+242</span>
-                      <input id="mm-phone" type="tel" inputMode="numeric" autoComplete="tel-national" placeholder="06 123 45 67" disabled />
-                    </div>
-                  </div>
-                  <p className="md">Vous paierez {total} en FCFA. Le montant est fixe, sans conversion.</p>
-                  <p className="err" role="alert" />
-                  <button className="btn wide" type="submit" aria-disabled="true">
-                    Envoyer la demande de paiement
-                    <Soon />
-                  </button>
-                </form>
-              )}
               {method === "paypal" && (
                 <div className="aform">
                   <p className="sub" style={{ margin: 0 }}>
@@ -597,7 +536,7 @@ export function PaiementPage() {
             </div>
             <div className="sumline">
               <span>Aujourd’hui</span>
-              <b>{money(0, cur)}</b>
+              <b>{money(0)}</b>
             </div>
             <div className="sumline total">
               <span>À la fin de l’essai de 14 jours</span>

@@ -298,8 +298,6 @@ export interface Plan {
   agents: boolean;
   usd_monthly: number;
   usd_yearly: number;
-  xaf_monthly: number;
-  xaf_yearly: number;
   on_quote: boolean;
 }
 

@@ -416,7 +416,7 @@ export function initials(name: string, email: string): string {
   return s || (email[0] ?? "?").toUpperCase();
 }
 
-/** money formats a price: "35 $" or "20 000 FCFA". */
-export function money(v: number, cur: "usd" | "xaf"): string {
-  return cur === "usd" ? `${v} $` : `${v.toLocaleString("fr-FR")} FCFA`;
+/** money formats a price in dollars: "35 $". */
+export function money(v: number): string {
+  return `${v} $`;
 }

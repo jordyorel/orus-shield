@@ -451,7 +451,7 @@ export function ReglagesPage() {
             </button>
           </div>
           <p className="sub" style={{ marginTop: 14 }}>
-            Paiement par carte ou PayPal, avec Paddle ; Mobile Money bientôt disponible.
+            Paiement par carte ou PayPal, avec Paddle.
           </p>
           <div style={{ overflowX: "auto", marginTop: 18 }}>
             <table className={"limits plan" + planCol}>

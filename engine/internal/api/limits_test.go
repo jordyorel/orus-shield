@@ -47,7 +47,7 @@ func TestPlanLimits(t *testing.T) {
 	var sub subscriptionJSON
 	e.do("GET", base+"/subscription", a.viewer, nil).json(t, &sub)
 	if sub.Plan.ID != plan.Discovery || sub.Status != "active" || sub.Usage.Domains != 1 || sub.Usage.Members != 2 ||
-		len(sub.Plans) != 4 || sub.Plans[1].XAFMonthly == 0 {
+		len(sub.Plans) != 4 || sub.Plans[1].USDMonthly == 0 {
 		t.Errorf("subscription = %+v", sub)
 	}
 

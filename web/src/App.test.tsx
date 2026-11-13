@@ -20,9 +20,9 @@ const me: Me = {
 };
 
 const plans: Plan[] = [
-  { id: "discovery", name: "Gratuit", domains: 1, hosts_per_scan: 5, members: 1, active_modules: false, max_frequency: "monthly", alerts: false, reports: false, threats: false, deep_scans: false, deep_scans_per_month: 0, api_scans: false, auth_scans: false, agents: false, usd_monthly: 0, usd_yearly: 0, xaf_monthly: 0, xaf_yearly: 0, on_quote: false },
-  { id: "sme", name: "Essentiel", domains: 3, hosts_per_scan: 25, members: 3, active_modules: true, max_frequency: "weekly", alerts: true, reports: true, threats: true, deep_scans: false, deep_scans_per_month: 0, api_scans: false, auth_scans: false, agents: false, usd_monthly: 35, usd_yearly: 29, xaf_monthly: 20000, xaf_yearly: 16500, on_quote: false },
-  { id: "pro", name: "Pro", domains: 15, hosts_per_scan: 25, members: 10, active_modules: true, max_frequency: "daily", alerts: true, reports: true, threats: true, deep_scans: true, deep_scans_per_month: 4, api_scans: true, auth_scans: true, agents: false, usd_monthly: 99, usd_yearly: 79, xaf_monthly: 57000, xaf_yearly: 45500, on_quote: false },
+  { id: "discovery", name: "Gratuit", domains: 1, hosts_per_scan: 5, members: 1, active_modules: false, max_frequency: "monthly", alerts: false, reports: false, threats: false, deep_scans: false, deep_scans_per_month: 0, api_scans: false, auth_scans: false, agents: false, usd_monthly: 0, usd_yearly: 0, on_quote: false },
+  { id: "sme", name: "Essentiel", domains: 3, hosts_per_scan: 25, members: 3, active_modules: true, max_frequency: "weekly", alerts: true, reports: true, threats: true, deep_scans: false, deep_scans_per_month: 0, api_scans: false, auth_scans: false, agents: false, usd_monthly: 35, usd_yearly: 29, on_quote: false },
+  { id: "pro", name: "Pro", domains: 15, hosts_per_scan: 25, members: 10, active_modules: true, max_frequency: "daily", alerts: true, reports: true, threats: true, deep_scans: true, deep_scans_per_month: 4, api_scans: true, auth_scans: true, agents: false, usd_monthly: 99, usd_yearly: 79, on_quote: false },
 ];
 
 const overview: Overview = {
@@ -104,13 +104,13 @@ function renderAt(path: string) {
 }
 
 describe("public site", () => {
-  it("shows real prices on Tarifs, greyed payment means", async () => {
+  it("shows real prices on Tarifs, cards and PayPal only", async () => {
     mockApi({ "GET /auth/me": fail(401), "GET /plans": ok({ items: plans }) });
     renderAt("/tarifs");
     expect(await screen.findByText("35 $")).toBeTruthy();
     expect(screen.getByText("99 $")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "FCFA" }));
-    expect(screen.getByText(/20\s000 FCFA/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "FCFA" })).toBeNull();
+    expect(screen.queryByText(/Mobile Money/)).toBeNull();
   });
 
   // signedIn: whether the browser keeps the session cookie (the second

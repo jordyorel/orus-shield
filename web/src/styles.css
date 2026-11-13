@@ -304,8 +304,8 @@ body.pay main{max-width:1120px;padding:0 18px 48px}
 .field label,.flabel{font-size:14px;font-weight:600}
 .flabel{display:flex;justify-content:space-between;align-items:center}
 .flabel .link{font-weight:500;font-size:14px;min-height:0}
-.field input,.prefix{height:52px;border-radius:16px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:16px;padding:0 16px;min-width:0;width:100%;transition:border-color .2s,box-shadow .2s}
-.field input:focus,.prefix:focus-within{outline:none;border-color:var(--azur);box-shadow:0 0 0 4px color-mix(in srgb,var(--azur) 18%,transparent)}
+.field input{height:52px;border-radius:16px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:16px;padding:0 16px;min-width:0;width:100%;transition:border-color .2s,box-shadow .2s}
+.field input:focus{outline:none;border-color:var(--azur);box-shadow:0 0 0 4px color-mix(in srgb,var(--azur) 18%,transparent)}
 .pwwrap{position:relative}
 .pwwrap input{padding-right:56px}
 .eye{position:absolute;right:4px;top:4px;width:44px;height:44px;border:0;background:none;border-radius:12px;color:var(--ink2);display:grid;place-items:center}
@@ -352,10 +352,10 @@ body.pay main{max-width:1120px;padding:0 18px 48px}
 .payh{font-size:clamp(28px,5vw,36px)}
 .payh2{font-size:18px;margin:28px 0 0}
 .planpick{display:grid;gap:10px;margin-top:16px}
-.planpick button,.methods button,.ops button{text-align:left;background:var(--surface);border:1.5px solid var(--line);border-radius:20px;transition:border-color .2s,background .2s,transform .2s}
+.planpick button,.methods button{text-align:left;background:var(--surface);border:1.5px solid var(--line);border-radius:20px;transition:border-color .2s,background .2s,transform .2s}
 .planpick button{display:grid;grid-template-columns:24px 1fr auto;gap:12px;align-items:center;padding:16px}
-.planpick button:hover:not(:disabled),.methods button:hover:not(:disabled),.ops button:hover{transform:translateY(-2px)}
-.planpick button[aria-checked=true],.methods button[aria-checked=true],.ops button[aria-checked=true]{border-color:var(--azur);background:color-mix(in srgb,var(--azur) 7%,var(--surface))}
+.planpick button:hover:not(:disabled),.methods button:hover:not(:disabled){transform:translateY(-2px)}
+.planpick button[aria-checked=true],.methods button[aria-checked=true]{border-color:var(--azur);background:color-mix(in srgb,var(--azur) 7%,var(--surface))}
 .radio{width:22px;height:22px;border-radius:50%;border:1.8px solid var(--ring);position:relative;transition:border-color .2s}
 [aria-checked=true] .radio{border-color:var(--azur)}
 [aria-checked=true] .radio::after{content:"";position:absolute;inset:4px;border-radius:50%;background:var(--azur);animation:pop .3s cubic-bezier(.3,1.6,.5,1)}
@@ -368,25 +368,10 @@ body.pay main{max-width:1120px;padding:0 18px 48px}
 .payform{margin-top:6px;animation:rowin .35s}
 .payform .aform{margin-top:16px}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.ops{display:grid;gap:8px}
-.ops button{display:flex;align-items:center;gap:12px;padding:10px 14px;min-height:52px;font-weight:600}
-.opdot{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;font-weight:800;font-size:14px}
-.prefix{display:flex;align-items:center;gap:10px;padding:0 16px}
-.prefix span{color:var(--ink2);font-weight:600;padding-right:10px;border-right:1px solid var(--line)}
-.prefix input{border:0;background:none;height:48px;flex:1;min-width:0;font:inherit;font-size:16px;color:var(--ink);outline:none}
 .btn.paypal{background:#FFC439;color:#14213D}
 :root[data-theme=dark] .btn.paypal{color:#14213D}
 .secure{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink2);margin-top:18px}
-.momowait{display:grid;gap:20px;align-items:center;margin-top:18px;animation:rowin .4s}
-.phone{width:150px;height:260px;margin:0 auto;border-radius:30px;border:3px solid var(--ink);padding:12px;background:var(--surface);box-shadow:var(--shadow);animation:float 3s ease-in-out infinite}
 .pscreen{height:100%;border-radius:20px;background:var(--soft);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-align:center;padding:10px}
-.ptitle{font-size:11px;font-weight:700;color:var(--ink2)}
-.pamt{font-family:'Bricolage Grotesque Variable',sans-serif;font-weight:700;font-size:20px}
-.pto{font-size:11px;color:var(--ink2)}
-.pins{display:flex;gap:8px;margin-top:14px}
-.pins i{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--ink);animation:pin 2.4s infinite}
-.pins i:nth-child(2){animation-delay:.3s}.pins i:nth-child(3){animation-delay:.6s}.pins i:nth-child(4){animation-delay:.9s}
-@keyframes pin{0%,30%{background:transparent}40%,90%{background:var(--ink)}100%{background:transparent}}
 .summary{background:var(--surface);border:1px solid var(--line);border-radius:28px;padding:22px;align-self:start}
 .sumplan{font-family:'Bricolage Grotesque Variable',sans-serif;font-size:28px;font-weight:700;margin:2px 0 12px}
 .sumline{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--line);font-size:15px}
@@ -407,7 +392,6 @@ body.pay main{max-width:1120px;padding:0 18px 48px}
  .paygrid{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:48px}
  .summary{position:sticky;top:20px;margin-top:64px}
  .stepper{order:0;width:auto;flex:0 1 360px}
- .momowait{grid-template-columns:170px 1fr}
 }
 .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .pagehead{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:2px;font-size:17px}

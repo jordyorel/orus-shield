@@ -64,12 +64,10 @@ type Plan struct {
 	// Agents: internal networks scanned by agents installed by the
 	// customer (step J).
 	Agents bool
-	// Prices, per month: USD and XAF (Mobile Money), billed monthly or
-	// yearly. Zero with OnQuote: set by contract. XAFYearly applies the
-	// USD yearly discount, rounded to 500 FCFA (derived 2026-11-12, to
-	// validate with the other prices).
-	USDMonthly, USDYearly, XAFMonthly, XAFYearly int
-	OnQuote                                      bool
+	// Prices in USD, per month, billed monthly or yearly (cards and PayPal
+	// through Paddle). Zero with OnQuote: set by contract.
+	USDMonthly, USDYearly int
+	OnQuote               bool
 }
 
 // Plans lists the offers, cheapest first.
@@ -78,10 +76,10 @@ var Plans = []Plan{
 		MaxFrequency: Monthly},
 	{ID: SME, Name: "Essentiel", Domains: 3, HostsPerScan: 25, Members: 3, ActiveModules: true,
 		MaxFrequency: Weekly, Alerts: true, Reports: true, Threats: true,
-		USDMonthly: 35, USDYearly: 29, XAFMonthly: 20000, XAFYearly: 16500},
+		USDMonthly: 35, USDYearly: 29},
 	{ID: Pro, Name: "Pro", Domains: 15, HostsPerScan: 25, Members: 10, ActiveModules: true,
 		MaxFrequency: Daily, Alerts: true, Reports: true, Threats: true, DeepScans: true, DeepScansPerMonth: 4, APIScans: true, AuthScans: true,
-		USDMonthly: 99, USDYearly: 79, XAFMonthly: 57000, XAFYearly: 45500},
+		USDMonthly: 99, USDYearly: 79},
 	{ID: Enterprise, Name: "Sur devis", HostsPerScan: 25, ActiveModules: true,
 		MaxFrequency: Daily, Alerts: true, Reports: true, Threats: true, DeepScans: true, APIScans: true, AuthScans: true, Agents: true, OnQuote: true},
 }
@@ -115,9 +113,8 @@ func (s Status) Valid() bool { return s == Trialing || s == Active || s == Cance
 // TrialDays is the length of the trial a new organization gets.
 const TrialDays = 14
 
-// GraceDays is how long a lapsed paid plan keeps working: Mobile Money is
-// paid by hand each period, and a late payment must not cut the service
-// the same day.
+// GraceDays is how long a lapsed paid plan keeps working: a failed renewal
+// (expired card, Paddle's retries) must not cut the service the same day.
 const GraceDays = 7
 
 // Subscription is what is stored for an organization.

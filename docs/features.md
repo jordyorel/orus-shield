@@ -15,7 +15,7 @@ stay in the modules' English (decided 2026-11-10).
 | Feature | What the user sees / does | Status |
 |---|---|---|
 | Landing page | What Orus Shield does, for whom, the scan types, trust points (ownership check, no intrusive test) | later |
-| Pricing page | The 4 offers, monthly / yearly toggle, local currencies (EUR, XOF/XAF, USD), payment methods logos | F |
+| Pricing page | The 4 offers, monthly / yearly toggle, prices in USD, payment methods (card, PayPal) | F |
 | Free external check | Enter a domain, get a short passive report (email, TLS, web headers) by email, to convert visitors | later |
 | Sign up | Email + organization name, confirmation link | done |
 | Sign in, MFA, password reset, setup password | | done |
@@ -27,7 +27,7 @@ stay in the modules' English (decided 2026-11-10).
 |---|---|---|
 | Add a first domain | Domain field, then the TXT record to publish, "Vérifier" button | done |
 | Guided first scan | Passive scan starts at once (no verification needed), active modules unlock after verification | done (to polish) |
-| Choose an offer / start a trial | 14-day trial of PME, then card or Mobile Money | F |
+| Choose an offer / start a trial | 14-day trial of PME, then card or PayPal | F |
 | Checklist | Verify domain, invite a colleague, enable MFA, set a schedule, set alert recipients | later |
 
 ## 3. Overview (Vue d'ensemble)
@@ -125,7 +125,7 @@ stay in the modules' English (decided 2026-11-10).
 | Team: invite, roles admin / viewer, remove | done |
 | Organization: name, country, time zone, language | later |
 | **Subscription (Abonnement)**: current offer, usage against limits (domains, hosts, scans), change offer, cancel | F |
-| **Billing (Facturation)**: payment method (card, PayPal, Mobile Money: Orange Money, MTN MoMo, Wave, Moov), invoices (PDF), billing details (company, tax ID) | F |
+| **Billing (Facturation)**: payment method (card, PayPal; no Mobile Money), invoices (PDF), billing details (company, tax ID) | F |
 | API keys (Pro and up) | later |
 | Audit log viewer | later (data exists) |
 
@@ -193,7 +193,7 @@ silent failure. Numbers are a proposal (not validated):
 | C | Emerging threats: new templates and CISA KEV, rescan of affected customers, EPSS | nothing |
 | D | ZAP deep web scan ("Approfondi") | done 2026-11-12 (module zap) |
 | E | French PDF reports | approve a PDF library |
-| F | Payment, subscriptions, plan limits | done 2026-11-12 for cards and PayPal with Paddle (merchant of record); Mobile Money later; prices to validate |
+| F | Payment, subscriptions, plan limits | done 2026-11-12 for cards and PayPal with Paddle (merchant of record); Mobile Money dropped; prices to validate |
 | G | Leaks | a breach data provider (paid) |
 | H | API security: declared APIs (OpenAPI, GraphQL), discovery, active API scan with ZAP | done 2026-11-12 (module api; Pro and Sur devis); discovery of undeclared API docs later |
 | I | Authenticated web and API scans with a customer's test account | done 2026-11-12 (header or login form, sealed with ORUS_CREDENTIALS_KEY; Pro and Sur devis) |

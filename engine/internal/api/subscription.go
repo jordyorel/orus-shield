@@ -27,8 +27,6 @@ type planJSON struct {
 	Agents        bool    `json:"agents"`
 	USDMonthly    int     `json:"usd_monthly"`
 	USDYearly     int     `json:"usd_yearly"` // per month, billed yearly
-	XAFMonthly    int     `json:"xaf_monthly"`
-	XAFYearly     int     `json:"xaf_yearly"` // per month, billed yearly
 	OnQuote       bool    `json:"on_quote"`
 }
 
@@ -36,7 +34,7 @@ func toPlanJSON(p plan.Plan) planJSON {
 	freq := map[plan.Frequency]string{plan.Monthly: "monthly", plan.Weekly: "weekly", plan.Daily: "daily"}[p.MaxFrequency]
 	return planJSON{ID: p.ID, Name: p.Name, Domains: p.Domains, HostsPerScan: p.HostsPerScan, Members: p.Members,
 		ActiveModules: p.ActiveModules, MaxFrequency: freq, Alerts: p.Alerts, Reports: p.Reports, Threats: p.Threats, DeepScans: p.DeepScans, DeepPerMonth: p.DeepScansPerMonth, APIScans: p.APIScans, AuthScans: p.AuthScans, Agents: p.Agents,
-		USDMonthly: p.USDMonthly, USDYearly: p.USDYearly, XAFMonthly: p.XAFMonthly, XAFYearly: p.XAFYearly, OnQuote: p.OnQuote}
+		USDMonthly: p.USDMonthly, USDYearly: p.USDYearly, OnQuote: p.OnQuote}
 }
 
 type usageJSON struct {
