@@ -310,6 +310,8 @@ export interface Subscription {
   lapsed: boolean;
   /** deep_scans: run this calendar month (UTC). */
   usage: { domains: number; members: number; deep_scans: number };
+  /** trial_available: the first checkout starts a 14-day trial (card required). */
+  trial_available: boolean;
   plans: Plan[];
 }
 

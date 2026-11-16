@@ -66,7 +66,9 @@ func TestLoadConfigPaddle(t *testing.T) {
 		return func(k string) string { return m[k] }
 	}
 	full := []string{"ORUS_PADDLE_API_KEY", "k", "ORUS_PADDLE_CLIENT_TOKEN", "t", "ORUS_PADDLE_WEBHOOK_SECRET", "s",
-		"ORUS_PADDLE_PRICE_SME_MONTHLY", "p1", "ORUS_PADDLE_PRICE_SME_YEARLY", "p2", "ORUS_PADDLE_PRICE_PRO_MONTHLY", "p3", "ORUS_PADDLE_PRICE_PRO_YEARLY", "p4"}
+		"ORUS_PADDLE_PRICE_SME_MONTHLY", "p1", "ORUS_PADDLE_PRICE_SME_YEARLY", "p2", "ORUS_PADDLE_PRICE_PRO_MONTHLY", "p3", "ORUS_PADDLE_PRICE_PRO_YEARLY", "p4",
+		"ORUS_PADDLE_TRIAL_PRICE_SME_MONTHLY", "t1", "ORUS_PADDLE_TRIAL_PRICE_SME_YEARLY", "t2",
+		"ORUS_PADDLE_TRIAL_PRICE_PRO_MONTHLY", "t3", "ORUS_PADDLE_TRIAL_PRICE_PRO_YEARLY", "t4"}
 	c, err := loadConfig(with(full...))
 	if err != nil || !c.paddle.Enabled() || c.paddle.Environment != "sandbox" || c.paddle.Prices["pro/yearly"] != "p4" {
 		t.Errorf("full = %+v, %v", c.paddle, err)

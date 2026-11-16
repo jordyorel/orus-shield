@@ -400,6 +400,31 @@ export function ConnexionPage() {
 
 const OFFERS: Record<string, string> = { sme: "Essentiel", pro: "Pro" };
 
+// The offer chosen on Tarifs before signing up, kept in this browser until
+// the new admin first reaches the dashboard, which then opens its payment
+// (the 14-day trial starts there, with a card). A convenience only: without
+// it the customer finds the offer in Réglages, Abonnement.
+const OFFER_KEY = "orus.offer";
+
+/** takeOffer returns the offer chosen before signup ("sme", "pro") once. */
+export function takeOffer(): string {
+  try {
+    const o = localStorage.getItem(OFFER_KEY) ?? "";
+    localStorage.removeItem(OFFER_KEY);
+    return o in OFFERS ? o : "";
+  } catch {
+    return "";
+  }
+}
+
+function rememberOffer(o: string) {
+  try {
+    if (o in OFFERS) localStorage.setItem(OFFER_KEY, o);
+  } catch {
+    // Private browsing: the offer stays in Réglages.
+  }
+}
+
 export function InscriptionPage() {
   const { search } = useLocation();
   const { toast } = useUI();
@@ -433,6 +458,7 @@ export function InscriptionPage() {
     if (!terms) return fail("Acceptez les conditions pour continuer.");
     try {
       await send();
+      rememberOffer(search.get("offre") ?? "");
       setErr("");
       setStep("sent");
     } catch (e2) {
@@ -469,7 +495,7 @@ export function InscriptionPage() {
       {step === "form" ? (
         <>
           <h1>Créez votre compte.</h1>
-          <p className="sub">{offer ? `Offre ${offer} choisie. 14 jours d’essai, sans carte bancaire.` : "Gratuit, sans carte bancaire. Votre premier résultat dans 5 minutes."}</p>
+          <p className="sub">{offer ? `Offre ${offer} choisie. Vous paierez à la fin, après 14 jours d’essai.` : "Gratuit, sans carte bancaire. Votre premier résultat dans 5 minutes."}</p>
           <form ref={form} className="aform" noValidate onSubmit={(e) => void submit(e)}>
             <div className="field">
               <label htmlFor="su-email">Adresse email professionnelle</label>

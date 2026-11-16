@@ -5,7 +5,7 @@ import { appPath, AppShell } from "./ui/AppShell";
 import { OrgProvider, useOrg } from "./ui/OrgData";
 import { ActifsPage } from "./ui/pages/Actifs";
 import { AujourdhuiPage } from "./ui/pages/Aujourdhui";
-import { ConnexionPage, InscriptionPage, MfaSetupPage, SetPasswordPage } from "./ui/pages/auth";
+import { ConnexionPage, InscriptionPage, MfaSetupPage, SetPasswordPage, takeOffer } from "./ui/pages/auth";
 import { ProblemesPage } from "./ui/pages/Problemes";
 import { ProfilPage } from "./ui/pages/Profil";
 import { ConditionsPage, ConfidentialitePage, TraitementPage } from "./ui/pages/legal";
@@ -57,7 +57,13 @@ export function App() {
   if (path === "/setup-password") return <Page><SetPasswordPage kind="setup" /></Page>;
   if (path === "/signup/complete") return <Page><SetPasswordPage kind="signup" /></Page>;
   if (path === "/connexion") return state.status === "signed-in" ? <Redirect to="/app" /> : <Page><ConnexionPage /></Page>;
-  if (path === "/inscription") return state.status === "signed-in" ? <Redirect to="/app" /> : <Page><InscriptionPage /></Page>;
+  if (path === "/inscription") {
+    // A signed-in customer who picks an offer on Tarifs ("Essayer 14 jours")
+    // already has an account: take them to the payment of that offer.
+    const offer = new URLSearchParams(window.location.search).get("offre");
+    if (state.status === "signed-in") return <Redirect to={offer === "sme" || offer === "pro" ? `/paiement?offre=${offer}` : "/app"} />;
+    return <Page><InscriptionPage /></Page>;
+  }
   if (path === "/paiement") return <Page><PaiementPage /></Page>;
   if (state.status === "signed-out") return <Redirect to="/connexion" />;
 
@@ -68,6 +74,10 @@ export function App() {
   if (needsMfa(me)) return <Redirect to="/mfa/setup?reason=admin" />;
 
   if (path === "/app") {
+    // An offer chosen on Tarifs before signing up: its payment (and trial)
+    // comes first, for the organization's admin.
+    const offer = me.orgs.some((o) => o.role === "admin") ? takeOffer() : "";
+    if (offer) return <Redirect to={`/paiement?offre=${offer}`} />;
     const first = me.orgs[0];
     return first ? (
       <Redirect to={appPath(first.org_id, "aujourdhui")} />

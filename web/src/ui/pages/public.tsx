@@ -369,6 +369,20 @@ export function PaiementPage() {
   const me = state.status === "signed-in" ? state.me : null;
   const orgId = search.get("org") ?? me?.orgs.find((o) => o.role === "admin")?.org_id ?? "";
   const paid = search.get("statut") === "ok";
+  // trial: the organization's first checkout starts the 14-day trial (card
+  // required, charged at its end); afterwards it pays from the first day.
+  // Unknown (signed out): a new customer, who gets the trial.
+  const [trial, setTrial] = useState(true);
+  useEffect(() => {
+    if (!me || !orgId) return;
+    const ac = new AbortController();
+    api.subscription(orgId, ac.signal).then(
+      (s) => setTrial(s.trial_available),
+      () => {},
+    );
+    return () => ac.abort();
+  }, [me, orgId]);
+  const trialEnd = new Date(Date.now() + 14 * 86400000).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
   /** pay creates the transaction on our side, then opens Paddle's checkout. */
   const pay = async (inline: boolean) => {
     if (!me) {
@@ -384,12 +398,15 @@ export function PaiementPage() {
         clientToken: co.client_token,
         environment: co.environment,
         email: co.email,
-        ...(inline ? { inlineTarget: "paddle-frame" } : {}),
+        ...(inline ? { inlineTarget: "orus-checkout" } : {}),
       });
       if (inline) setOpened(true);
     } catch (e) {
+      console.error("payment did not start", e); // the reason, for the developer console
       setPayErr(
-        e instanceof ApiError && e.status === 503
+        e instanceof ApiError && e.status === 409
+          ? "Cette organisation a déjà un abonnement. Gérez-le dans Réglages, Abonnement."
+          : e instanceof ApiError && e.status === 503
           ? "Le paiement en ligne n’est pas encore ouvert sur ce serveur."
           : e instanceof ApiError && e.status === 403
             ? "Seul un administrateur de l’organisation peut payer l’abonnement."
@@ -490,8 +507,10 @@ export function PaiementPage() {
             <div className="payform" key={method}>
               {method === "card" && (
                 <div className="aform">
-                  {/* Paddle's own card form appears here: card numbers never reach our servers. */}
-                  <div className="paddle-frame" />
+                  {/* Paddle's own card form appears here: card numbers never reach our servers.
+                      Never name it "paddle-frame": that is the class of Paddle's own iframe, which
+                      Paddle.js removes before opening a checkout, taking this container with it. */}
+                  <div className="orus-checkout" />
                   {!opened && (
                     <>
                       <p className="sub" style={{ margin: 0 }}>
@@ -536,10 +555,10 @@ export function PaiementPage() {
             </div>
             <div className="sumline">
               <span>Aujourd’hui</span>
-              <b>{money(0)}</b>
+              <b>{trial ? money(0) : total}</b>
             </div>
             <div className="sumline total">
-              <span>À la fin de l’essai de 14 jours</span>
+              <span>{trial ? `À partir du ${trialEnd}` : "Ensuite"}</span>
               <b>
                 {total}
                 {bill === "an" ? " / an" : " / mois"}
@@ -550,7 +569,11 @@ export function PaiementPage() {
                 <li key={f}>{f}</li>
               ))}
             </ul>
-            <p className="md">Annulable à tout moment pendant l’essai, sans frais.</p>
+            <p className="md">
+              {trial
+                ? `Essai de 14 jours : rien n’est prélevé avant le ${trialEnd}. Annulable à tout moment d’ici là, sans frais.`
+                : "Sans engagement : l’abonnement s’arrête à la fin de la période payée."}
+            </p>
           </aside>
         </div>
         )}

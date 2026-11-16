@@ -53,7 +53,10 @@ type subscriptionJSON struct {
 	InGrace bool       `json:"in_grace"` // period over, grace days running
 	Lapsed  bool       `json:"lapsed"`   // a paid offer or trial ended: back on Gratuit
 	Usage   usageJSON  `json:"usage"`
-	Plans   []planJSON `json:"plans"` // every offer, for comparison
+	// TrialAvailable: the organization's first checkout starts a 14-day
+	// trial (card required, charged at its end).
+	TrialAvailable bool       `json:"trial_available"`
+	Plans          []planJSON `json:"plans"` // every offer, for comparison
 }
 
 // subscription answers GET /orgs/{org}/subscription.
@@ -86,6 +89,10 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request, req orgReq
 	}
 	if sub != nil {
 		out.Status = string(sub.Status)
+	}
+	if out.TrialAvailable, _, err = s.cardTrial(r, req); err != nil {
+		s.internalError(w, r, err)
+		return
 	}
 	out.Plans = allPlans()
 	writeJSON(w, http.StatusOK, out)

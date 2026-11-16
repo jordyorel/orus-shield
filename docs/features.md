@@ -27,7 +27,7 @@ stay in the modules' English (decided 2026-11-10).
 |---|---|---|
 | Add a first domain | Domain field, then the TXT record to publish, "Vérifier" button | done |
 | Guided first scan | Passive scan starts at once (no verification needed), active modules unlock after verification | done (to polish) |
-| Choose an offer / start a trial | 14-day trial of PME, then card or PayPal | F |
+| Choose an offer / start a trial | 14-day trial of Essentiel or Pro, card or PayPal given at the start (Paddle trial prices), charged at its end; one per organization | F |
 | Checklist | Verify domain, invite a colleague, enable MFA, set a schedule, set alert recipients | later |
 
 ## 3. Overview (Vue d'ensemble)

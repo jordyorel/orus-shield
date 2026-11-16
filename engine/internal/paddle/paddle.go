@@ -40,7 +40,8 @@ type Config struct {
 	ClientToken   string // public token for Paddle.js
 	WebhookSecret string // the notification destination's secret key
 	// Prices maps "plan/period" ("sme/monthly", "pro/yearly") to Paddle
-	// price IDs.
+	// price IDs, and "plan/period/trial" to the same offers with a 14-day
+	// trial (Paddle charges at its end; see PriceKey).
 	Prices map[string]string
 	// BaseURL overrides the API's address (tests).
 	BaseURL string
@@ -61,12 +62,21 @@ func (c Config) base() string {
 	return "https://sandbox-api.paddle.com"
 }
 
-// PlanOfPrice returns the plan and period of a Paddle price ID.
+// PriceKey is the key of an offer's price in Prices.
+func PriceKey(plan, period string, trial bool) string {
+	if trial {
+		return plan + "/" + period + "/trial"
+	}
+	return plan + "/" + period
+}
+
+// PlanOfPrice returns the plan and period of a Paddle price ID, with or
+// without trial.
 func (c Config) PlanOfPrice(priceID string) (plan, period string, ok bool) {
 	for k, v := range c.Prices {
 		if v == priceID {
 			plan, period, _ = strings.Cut(k, "/")
-			return plan, period, true
+			return plan, strings.TrimSuffix(period, "/trial"), true
 		}
 	}
 	return "", "", false

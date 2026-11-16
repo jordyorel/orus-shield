@@ -93,9 +93,12 @@ func TestClient(t *testing.T) {
 }
 
 func TestPlanOfPrice(t *testing.T) {
-	c := Config{Prices: map[string]string{"sme/monthly": "pri_a", "pro/yearly": "pri_b"}}
+	c := Config{Prices: map[string]string{"sme/monthly": "pri_a", "pro/yearly": "pri_b", PriceKey("pro", "yearly", true): "pri_c"}}
 	if p, period, ok := c.PlanOfPrice("pri_b"); !ok || p != "pro" || period != "yearly" {
 		t.Errorf("PlanOfPrice = %s %s %v", p, period, ok)
+	}
+	if p, period, ok := c.PlanOfPrice("pri_c"); !ok || p != "pro" || period != "yearly" {
+		t.Errorf("PlanOfPrice(trial) = %s %s %v", p, period, ok)
 	}
 	if _, _, ok := c.PlanOfPrice("pri_x"); ok {
 		t.Error("unknown price matched")

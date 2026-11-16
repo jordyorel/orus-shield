@@ -45,7 +45,9 @@ type config struct {
 //	                          test account can be stored
 //	ORUS_PADDLE_API_KEY, ORUS_PADDLE_CLIENT_TOKEN, ORUS_PADDLE_WEBHOOK_SECRET,
 //	ORUS_PADDLE_PRICE_SME_MONTHLY, ORUS_PADDLE_PRICE_SME_YEARLY,
-//	ORUS_PADDLE_PRICE_PRO_MONTHLY, ORUS_PADDLE_PRICE_PRO_YEARLY
+//	ORUS_PADDLE_PRICE_PRO_MONTHLY, ORUS_PADDLE_PRICE_PRO_YEARLY,
+//	ORUS_PADDLE_TRIAL_PRICE_SME_MONTHLY, ..._SME_YEARLY, ..._PRO_MONTHLY,
+//	..._PRO_YEARLY (the same prices with a 14-day trial)
 //	                          card payments (Paddle Billing): all or none;
 //	                          ORUS_PADDLE_ENVIRONMENT sandbox (default) or production
 //	ORUS_PUBLIC_URL           the dashboard's address, for links in emails;
@@ -125,6 +127,8 @@ func paddleFromEnv(getenv func(string) string) (paddle.Config, error) {
 	names := map[string]string{
 		"sme/monthly": "ORUS_PADDLE_PRICE_SME_MONTHLY", "sme/yearly": "ORUS_PADDLE_PRICE_SME_YEARLY",
 		"pro/monthly": "ORUS_PADDLE_PRICE_PRO_MONTHLY", "pro/yearly": "ORUS_PADDLE_PRICE_PRO_YEARLY",
+		"sme/monthly/trial": "ORUS_PADDLE_TRIAL_PRICE_SME_MONTHLY", "sme/yearly/trial": "ORUS_PADDLE_TRIAL_PRICE_SME_YEARLY",
+		"pro/monthly/trial": "ORUS_PADDLE_TRIAL_PRICE_PRO_MONTHLY", "pro/yearly/trial": "ORUS_PADDLE_TRIAL_PRICE_PRO_YEARLY",
 	}
 	set, missing := 0, []string{}
 	for k, env := range names {

@@ -333,7 +333,13 @@ numbers never reach us; production CSP: script-src cdn.paddle.com, frame-src and
 *.paddle.com). Paddle's webhooks (`POST /api/v1/billing/paddle`) are checked (HMAC-SHA256 of
 "ts:body", 5 minutes tolerance) and applied once per event ID through the `orus_billing` role
 (migration 0022): active and past_due become Active until the period's end (grace days apply),
-a scheduled cancel or canceled becomes Canceled, trialing stays a trial. "Voir les factures"
+a scheduled cancel or canceled becomes Canceled, trialing stays a trial.
+The 14-day trial needs a card (decided 2026-11-13, migration 0023): a new organization starts on
+Gratuit; its first checkout uses the trial prices (`ORUS_PADDLE_TRIAL_PRICE_*`, Paddle charges at
+the trial's end), later ones the normal prices (one trial per organization: never had a Paddle
+customer). A checkout while a Paddle subscription runs is refused (409): it would charge twice;
+changing the offer of a running subscription is not built yet. An offer chosen on Tarifs before
+signup is kept in the browser and opens its payment when the new admin first reaches /app. "Voir les factures"
 opens Paddle's customer portal (`POST /orgs/{org}/billing/portal`). `orusctl org plan` still
 works for contracts.
 

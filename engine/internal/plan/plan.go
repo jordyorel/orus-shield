@@ -110,7 +110,8 @@ const (
 // Valid reports whether s is a known status.
 func (s Status) Valid() bool { return s == Trialing || s == Active || s == Canceled }
 
-// TrialDays is the length of the trial a new organization gets.
+// TrialDays is the length of the trial an organization starts at checkout,
+// with a card (Paddle's trial prices; one per organization).
 const TrialDays = 14
 
 // GraceDays is how long a lapsed paid plan keeps working: a failed renewal

@@ -143,7 +143,9 @@ export function ReglagesPage() {
   const subLine =
     sub.status === "trialing" && until
       ? ` ${price}. Essai gratuit jusqu’au ${until}.`
-      : sub.in_grace && until
+      : sub.status === "canceled" && until && !sub.lapsed
+        ? ` ${price}. Abonnement annulé : il se termine le ${until}, sans nouveau prélèvement.`
+        : sub.in_grace && until
         ? ` ${price}. Paiement attendu avant le ${until}.`
         : until
           ? ` ${price}. Prochaine échéance le ${until}.`

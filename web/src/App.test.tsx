@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Finding, Me, OrgSettings, Overview, Plan, Subscription } from "./api/types";
 import { App } from "./App";
 import { AuthProvider } from "./auth";
@@ -68,7 +68,7 @@ const dmarc: Finding = {
 
 const settings: OrgSettings = { alert_level: "high", email_alerts: true, profile: "standard", disabled_modules: [], frequency: "weekly", weekday: 6, hour: 2, timezone: "UTC", rate_per_sec: 0, deep_consent_at: null };
 
-const subscription: Subscription = { plan: plans[1]!, status: "trialing", until: "2026-11-26T00:00:00Z", in_grace: false, lapsed: false, usage: { domains: 1, members: 1, deep_scans: 0 }, plans };
+const subscription: Subscription = { plan: plans[1]!, status: "trialing", until: "2026-11-26T00:00:00Z", in_grace: false, lapsed: false, usage: { domains: 1, members: 1, deep_scans: 0 }, trial_available: false, plans };
 
 function orgRoutes(extra: Record<string, ReturnType<typeof ok>> = {}, sub: Subscription = subscription) {
   const base = `/orgs/${ORG}`;
@@ -162,10 +162,44 @@ describe("public site", () => {
     expect(screen.queryByLabelText("Numéro de carte")).toBeNull();
   });
 
+  it("shows the trial in the summary only when the organization still has it", async () => {
+    mockApi({ "GET /auth/me": ok(me), "GET /plans": ok({ items: plans }), [`GET /orgs/${ORG}/subscription`]: ok({ ...subscription, trial_available: true }) });
+    const view = renderAt(`/paiement?offre=sme&org=${ORG}`);
+    expect(await screen.findByText(/rien n’est prélevé avant le/)).toBeTruthy();
+    view.unmount();
+    mockApi({ "GET /auth/me": ok(me), "GET /plans": ok({ items: plans }), [`GET /orgs/${ORG}/subscription`]: ok(subscription) });
+    renderAt(`/paiement?offre=sme&org=${ORG}`);
+    expect(await screen.findByText(/Sans engagement : l’abonnement s’arrête/)).toBeTruthy();
+    expect(screen.queryByText(/rien n’est prélevé/)).toBeNull();
+  });
+
+  it("opens the payment of the offer chosen before signing up", async () => {
+    // This test environment has no localStorage: a small one in memory.
+    const kept = new Map<string, string>([["orus.offer", "pro"]]);
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => kept.get(k) ?? null,
+      setItem: (k: string, v: string) => void kept.set(k, v),
+      removeItem: (k: string) => void kept.delete(k),
+    });
+    mockApi({ "GET /auth/me": ok(me), "GET /plans": ok({ items: plans }) });
+    renderAt("/app");
+    await waitFor(() => expect(window.location.pathname + window.location.search).toBe("/paiement?offre=pro"));
+    expect(kept.has("orus.offer")).toBe(false); // once only
+    vi.unstubAllGlobals();
+    act(() => navigate("/"));
+  });
+
   it("confirms the payment when Paddle sends the customer back", async () => {
     mockApi({ "GET /auth/me": ok(me), "GET /plans": ok({ items: plans }) });
     renderAt("/paiement?statut=ok");
     expect(await screen.findByText("Paiement reçu, merci.")).toBeTruthy();
+  });
+
+  it("takes a signed-in customer who picks an offer to its payment", async () => {
+    mockApi({ "GET /auth/me": ok(me), "GET /plans": ok({ items: plans }) });
+    renderAt("/inscription?offre=pro");
+    await waitFor(() => expect(window.location.pathname + window.location.search).toBe("/paiement?offre=pro"));
+    act(() => navigate("/"));
   });
 
   it("logs in with a 6-digit code", async () => {
@@ -258,6 +292,14 @@ describe("dashboard", () => {
     expect((calls.find((c) => c.key === `PUT /orgs/${ORG}/settings`)?.body as OrgSettings).alert_level).toBe("critical");
     expect(screen.getByText(/Offre Essentiel/)).toBeTruthy();
     expect(screen.getByText(/Essai gratuit jusqu’au/)).toBeTruthy();
+  });
+
+  it("shows a canceled subscription's end, never a next charge", async () => {
+    const canceled: Subscription = { ...subscription, status: "canceled" };
+    orgRoutes({ [`GET /orgs/${ORG}/members`]: ok({ items: [] }) }, canceled);
+    renderAt(`/orgs/${ORG}/reglages`);
+    expect(await screen.findByText(/Abonnement annulé : il se termine le/)).toBeTruthy();
+    expect(screen.queryByText(/Prochaine échéance/)).toBeNull();
   });
 
   it("asks for consent before the deep profile", async () => {

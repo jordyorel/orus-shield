@@ -103,7 +103,7 @@ export const api = {
   endSession: (id: string) => request<void>("DELETE", `/auth/sessions/${encodeURIComponent(id)}`),
   authActivity: (signal?: AbortSignal) => request<List<AuthActivity>>("GET", "/auth/activity", undefined, signal),
   checkout: (orgId: string, plan: "sme" | "pro", period: "monthly" | "yearly") =>
-    request<{ transaction_id: string; client_token: string; environment: string; email: string }>("POST", `${org(orgId)}/checkout`, { plan, period }),
+    request<{ transaction_id: string; client_token: string; environment: string; email: string; trial: boolean }>("POST", `${org(orgId)}/checkout`, { plan, period }),
   billingPortal: (orgId: string) => request<{ url: string }>("POST", `${org(orgId)}/billing/portal`),
   agents: (orgId: string, signal?: AbortSignal) => request<List<Agent>>("GET", `${org(orgId)}/agents`, undefined, signal),
   createAgent: (orgId: string, name: string, ranges: string[]) =>

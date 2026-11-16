@@ -21,6 +21,29 @@ type checkoutJSON struct {
 	ClientToken   string `json:"client_token"` // public, for Paddle.js
 	Environment   string `json:"environment"`  // sandbox, production
 	Email         string `json:"email"`        // prefilled in the checkout
+	// Trial: the price has a 14-day trial; Paddle charges at its end.
+	Trial bool `json:"trial"`
+}
+
+// cardTrial tells whether the organization may start the 14-day trial at
+// checkout (one per organization: never had a Paddle customer), and
+// whether it already pays Paddle for a subscription still running (a second
+// checkout would charge it twice).
+func (s *Server) cardTrial(r *http.Request, req orgRequest) (available, live bool, err error) {
+	acct, err := req.org.BillingAccount(r.Context())
+	if err != nil {
+		return false, false, err
+	}
+	if acct == nil {
+		return true, false, nil
+	}
+	sub, err := req.org.Subscription(r.Context())
+	if err != nil {
+		return false, false, err
+	}
+	eff := plan.Resolve(sub, s.cfg.Now())
+	live = acct.Provider == "paddle" && sub != nil && sub.Status != plan.Canceled && !eff.Lapsed && eff.Plan.ID != plan.Discovery
+	return false, live, nil
 }
 
 // checkout answers POST /orgs/{org}/checkout (admins): the Paddle
@@ -34,9 +57,24 @@ func (s *Server) checkout(w http.ResponseWriter, r *http.Request, req orgRequest
 	if !decode(w, r, &body) {
 		return
 	}
-	price, ok := s.cfg.Paddle.Prices[body.Plan+"/"+body.Period]
-	if !ok || (body.Plan != string(plan.SME) && body.Plan != string(plan.Pro)) {
+	if (body.Plan != string(plan.SME) && body.Plan != string(plan.Pro)) || (body.Period != "monthly" && body.Period != "yearly") {
 		writeError(w, http.StatusBadRequest, "plan must be sme or pro, period monthly or yearly")
+		return
+	}
+	trial, live, err := s.cardTrial(r, req)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	if live {
+		// Changing the offer of a running subscription is not a new
+		// checkout: it would start a second subscription.
+		writeError(w, http.StatusConflict, "this organization already has a subscription; cancel it first")
+		return
+	}
+	price, ok := s.cfg.Paddle.Prices[paddle.PriceKey(body.Plan, body.Period, trial)]
+	if !ok {
+		writeError(w, http.StatusServiceUnavailable, "online payment is not configured on this server")
 		return
 	}
 	id, err := paddle.New(s.cfg.Paddle).CreateTransaction(r.Context(), price, req.org.ID(), req.sess.Email)
@@ -46,7 +84,7 @@ func (s *Server) checkout(w http.ResponseWriter, r *http.Request, req orgRequest
 		return
 	}
 	writeJSON(w, http.StatusOK, checkoutJSON{TransactionID: id, ClientToken: s.cfg.Paddle.ClientToken,
-		Environment: s.cfg.Paddle.Environment, Email: req.sess.Email})
+		Environment: s.cfg.Paddle.Environment, Email: req.sess.Email, Trial: trial})
 }
 
 // billingPortal answers POST /orgs/{org}/billing/portal (admins): the
@@ -153,10 +191,6 @@ func (s *Server) providerUpdate(ev paddle.Event, sub paddle.Subscription) (store
 		// past_due: a renewal failed; Paddle retries, and the grace days
 		// (plan.GraceDays) run after the period's end.
 		ps.Status, ps.PeriodEnd = plan.Active, periodEnd()
-		if sc := sub.ScheduledChange; sc != nil && sc.Action == "cancel" {
-			end := sc.EffectiveAt
-			ps.Status, ps.PeriodEnd = plan.Canceled, &end
-		}
 	case "trialing":
 		ps.Status = plan.Trialing
 		if ps.TrialEndsAt = periodEnd(); ps.TrialEndsAt == nil {
@@ -170,6 +204,13 @@ func (s *Server) providerUpdate(ev paddle.Event, sub paddle.Subscription) (store
 		ps.Status, ps.PeriodEnd = plan.Canceled, &end
 	default:
 		return store.ProviderUpdate{}, "unknown status " + sub.Status
+	}
+	// A scheduled cancel (customer canceled, paid period or trial still
+	// running): Paddle will not charge again, so the offer ends then, with
+	// no grace days. A trial canceled this way ends at the trial's end.
+	if sc := sub.ScheduledChange; sc != nil && sc.Action == "cancel" && ps.Status != plan.Canceled {
+		end := sc.EffectiveAt
+		ps.Status, ps.PeriodEnd, ps.TrialEndsAt = plan.Canceled, &end, nil
 	}
 	return store.ProviderUpdate{EventID: ev.ID, EventType: ev.Type, OrgID: sub.CustomData.OrgID, Sub: ps,
 		Provider: "paddle", Ref: sub.ID, Customer: sub.CustomerID}, ""
