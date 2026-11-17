@@ -22,6 +22,13 @@ type fakeStore struct {
 	sent      []string
 	retried   map[string]time.Time
 	abandoned map[string]string
+	// unwanted: trial reminders no longer make sense (trial started,
+	// unsubscribed).
+	unwanted bool
+}
+
+func (f *fakeStore) TrialNudgeWanted(context.Context, string, string, time.Time) (bool, error) {
+	return !f.unwanted, nil
 }
 
 func (f *fakeStore) ClaimNotifications(_ context.Context, _ time.Time, _ time.Duration, limit int) ([]store.Notification, error) {
@@ -163,5 +170,45 @@ func TestDeliversEmergingThreats(t *testing.T) {
 		if !strings.Contains(msg.Text, want) {
 			t.Errorf("body misses %q:\n%s", want, msg.Text)
 		}
+	}
+}
+
+func nudge(t *testing.T, id string) store.Notification {
+	t.Helper()
+	payload, err := json.Marshal(store.TrialNudge{OrgID: "org-1", OrgName: "Acme", Domain: "acme.example", Day: 3,
+		Critical: 1, High: 1, Open: 4, Top: "No DMARC record", Unsubscribe: "tok-123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store.Notification{ID: id, OrgID: "org-1", Kind: store.NotifyTrialNudge, Recipient: "admin@acme.example",
+		Payload: payload, CreatedAt: now.Add(-time.Minute), Attempts: 1}
+}
+
+func TestDeliversTrialReminders(t *testing.T) {
+	st := &fakeStore{due: []store.Notification{nudge(t, "n1")}, retried: map[string]time.Time{}, abandoned: map[string]string{}}
+	m := &fakeMail{}
+	if sent, err := newNotifier(st, m).RunOnce(context.Background()); err != nil || sent != 1 {
+		t.Fatalf("sent %d, err %v", sent, err)
+	}
+	msg := m.sent[0]
+	if msg.Unsubscribe != "https://app.example/desinscription#token=tok-123" {
+		t.Errorf("unsubscribe = %q", msg.Unsubscribe)
+	}
+	for _, want := range []string{"Il y a 3 jours", "4 problèmes à corriger, dont 2 urgents", "Le plus urgent : No DMARC record.",
+		"https://app.example/orgs/org-1/offre", "Ne plus recevoir ces rappels : https://app.example/desinscription#token=tok-123"} {
+		if !strings.Contains(msg.Text, want) {
+			t.Errorf("body misses %q:\n%s", want, msg.Text)
+		}
+	}
+
+	// The organization started its trial, or the admin unsubscribed:
+	// dropped, never sent.
+	st = &fakeStore{due: []store.Notification{nudge(t, "n2")}, retried: map[string]time.Time{}, abandoned: map[string]string{}, unwanted: true}
+	m = &fakeMail{}
+	if sent, err := newNotifier(st, m).RunOnce(context.Background()); err != nil || sent != 0 || len(m.sent) != 0 {
+		t.Fatalf("unwanted reminder: sent %d, err %v", sent, err)
+	}
+	if st.abandoned["n2"] != "no longer relevant" {
+		t.Errorf("unwanted reminder: %q, want dropped", st.abandoned["n2"])
 	}
 }

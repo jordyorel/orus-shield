@@ -20,6 +20,29 @@ func planCode(t *testing.T, r response) {
 	}
 }
 
+func auditCode(t *testing.T, r response) {
+	t.Helper()
+	var body struct{ Code string }
+	_ = json.Unmarshal(r.body, &body)
+	if r.status != http.StatusForbidden || body.Code != codeAuditUsed {
+		t.Errorf("status %d %s, want 403 audit_used", r.status, r.body)
+	}
+}
+
+func TestAllowedModulesOnGratuit(t *testing.T) {
+	e := newEnv(t)
+	e.srv.cfg.Modules = append(e.srv.cfg.Modules, "ports")
+	e.srv.cfg.Catalog = append(e.srv.cfg.Catalog, module.Info{ID: "ports", Name: "Ports", Kind: module.KindActive})
+	free, _ := plan.Get(plan.Discovery)
+	pro, _ := plan.Get(plan.Pro)
+	if got := e.srv.allowedModules(free); slices.Contains(got, "ports") || len(got) == 0 {
+		t.Errorf("Gratuit runs %v, want the passive modules only", got)
+	}
+	if got := e.srv.allowedModules(pro); !slices.Contains(got, "ports") {
+		t.Errorf("Pro runs %v, want ports too", got)
+	}
+}
+
 func TestPlanLimits(t *testing.T) {
 	e := newEnv(t)
 	// The catalog gets an active module, for the passive-only offer.
@@ -28,27 +51,22 @@ func TestPlanLimits(t *testing.T) {
 	a := e.tenant("A", "example.com")
 	base := "/api/v1/orgs/" + a.orgID
 	e.setPlan(a.orgID, plan.Subscription{Plan: plan.Discovery, Status: plan.Active})
-	e.verifyTarget(a.session, a.orgID, a.target.ID) // queues the first scan (email, tls)
+	e.verifyTarget(a.session, a.orgID, a.target.ID)
 
-	// Gratuit: one domain (it has one), passive checks, monthly, no report.
+	// Gratuit: one domain (it has one), a single audit (the fixture's scan
+	// was it), no schedule, no report.
 	planCode(t, e.do("POST", base+"/targets", a.session, map[string]any{"domain": "second.example"}))
-	planCode(t, e.do("POST", base+"/targets/"+a.target.ID+"/scans", a.session, map[string]any{"modules": []string{"email", "ports"}}))
-	if r := e.do("POST", base+"/targets/"+a.target.ID+"/scans", a.session, map[string]any{"modules": []string{"email"}}); r.status != http.StatusAccepted {
-		t.Errorf("passive scan = %d %s", r.status, r.body)
+	scans := base + "/targets/" + a.target.ID + "/scans"
+	auditCode(t, e.do("POST", scans, a.session, nil))
+	auditCode(t, e.do("POST", scans, a.session, map[string]any{"modules": []string{"email"}}))
+	fix := base + "/targets/" + a.target.ID + "/findings/" + a.finding.ID + "/status"
+	auditCode(t, e.do("PUT", fix, a.session, map[string]any{"status": "fixed"}))
+	if r := e.do("PUT", fix, a.session, map[string]any{"status": "accepted_risk"}); r.status != http.StatusNoContent {
+		t.Errorf("accepted risk on Gratuit = %d %s", r.status, r.body)
 	}
-	// No module list (the first scan after verification): the passive ones.
-	var sc scanJSON
-	if r := e.do("POST", base+"/targets/"+a.target.ID+"/scans", a.session, nil); r.status != http.StatusAccepted {
-		t.Errorf("default scan on Gratuit = %d %s", r.status, r.body)
-	} else if r.json(t, &sc); slices.Contains(sc.Modules, "ports") || len(sc.Modules) == 0 {
-		t.Errorf("default scan on Gratuit runs %v, want the passive modules only", sc.Modules)
-	}
-	weekly := map[string]any{"frequency": "weekly", "weekday": 1, "hour": 2, "timezone": "Africa/Brazzaville", "modules": []string{"email"}}
-	planCode(t, e.do("PATCH", base+"/targets/"+a.target.ID, a.session, map[string]any{"schedule": weekly}))
-	weekly["frequency"] = "monthly"
-	if r := e.do("PATCH", base+"/targets/"+a.target.ID, a.session, map[string]any{"schedule": weekly}); r.status != http.StatusOK {
-		t.Errorf("monthly schedule = %d %s", r.status, r.body)
-	}
+	monthly := map[string]any{"frequency": "monthly", "weekday": 1, "hour": 2, "timezone": "Africa/Brazzaville", "modules": []string{"email"}}
+	planCode(t, e.do("PATCH", base+"/targets/"+a.target.ID, a.session, map[string]any{"schedule": monthly}))
+	weekly := monthly
 	planCode(t, e.do("GET", base+"/report", a.viewer, nil))
 	// Two members already (admin and viewer): one is the limit.
 	planCode(t, e.do("POST", base+"/members", a.session, map[string]any{"email": "new@example.com", "role": "viewer"}))

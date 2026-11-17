@@ -14,6 +14,30 @@ import (
 // The dashboard shows the message and points to Paramètres > Abonnement.
 const codePlanLimit = "plan_limit"
 
+// codeAuditUsed marks a scan, or a fix to verify, refused because the
+// organization's offer is a single audit and it was used. The dashboard
+// answers with the trial offer.
+const codeAuditUsed = "audit_used"
+
+// checkMonitoring refuses what needs a scan after the single audit of an
+// offer without monitoring (Gratuit): it answers 403 audit_used itself.
+func (s *Server) checkMonitoring(w http.ResponseWriter, r *http.Request, req orgRequest, p plan.Plan, what string) bool {
+	if p.Monitoring {
+		return true
+	}
+	used, err := req.org.AuditUsed(r.Context())
+	if err != nil {
+		s.internalError(w, r, err)
+		return false
+	}
+	if used {
+		writeErrorCode(w, http.StatusForbidden, codeAuditUsed,
+			fmt.Sprintf("the %s offer includes a single audit, already done: choose an offer to %s", p.Name, what))
+		return false
+	}
+	return true
+}
+
 // planOf returns the plan in force; it answers 500 itself on failure.
 func (s *Server) planOf(w http.ResponseWriter, r *http.Request, req orgRequest) (plan.Plan, bool) {
 	eff, err := req.org.Plan(r.Context(), s.cfg.Now())

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/jordyorel/orus-shield/engine/internal/plan"
 )
 
 // ActorScheduler is who requested a scheduled scan, in scans and in the
@@ -27,6 +29,9 @@ const ActorScheduler = "scheduler"
 // Neither does an unverified one (never verified, or revoked): nothing is
 // scanned for a customer before ownership is proven, not even passively.
 // Its slot passes, and the schedule resumes once it is verified again.
+// Neither does a target whose organization's offer has no monitoring
+// (Gratuit, or a paid offer that lapsed): its slot passes too, and the
+// schedule resumes with an offer.
 // Each scheduled scan has its scan.requested audit entry, like any other.
 func (s *Store) EnqueueDueScans(ctx context.Context, now time.Time, limit int) (int, error) {
 	tx, err := s.pool.Begin(ctx)
@@ -68,6 +73,14 @@ func (s *Store) EnqueueDueScans(ctx context.Context, now time.Time, limit int) (
 		}
 
 		if !t.Verified() {
+			continue
+		}
+		sub, err := scanSubscription(tx.QueryRow(ctx,
+			"SELECT "+subscriptionColumns+" FROM subscriptions WHERE org_id = $1", t.OrgID))
+		if err != nil {
+			return 0, fmt.Errorf("enqueue due scans: target %s: %w", t.ID, err)
+		}
+		if !plan.Resolve(sub, now).Plan.Monitoring {
 			continue
 		}
 		var busy bool

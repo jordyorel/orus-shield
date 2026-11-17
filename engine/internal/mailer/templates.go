@@ -344,11 +344,16 @@ type FirstScanFigures struct {
 	Score                       *int // 0 to 100; nil when no check was evaluated
 	Critical, High, Medium, Low int  // open findings by severity
 	Hostnames                   int  // names found under the domain
+	IPs                         int  // servers' addresses found
+	// Free: the scan was the free offer's single audit; the email then
+	// says what it did not check and links to the trial (OfferLink).
+	Free bool
 }
 
-// FirstScan sums up a domain's first scan for its admins: a welcome sent
-// once per domain, on every offer, whatever was found.
-func FirstScan(to, org, domain string, f FirstScanFigures, todayLink string) Message {
+// FirstScan sums up a domain's first scan for its admins: sent once per
+// domain, on every offer, whatever was found. After the free audit it also
+// says what the audit did not check, and offers the trial.
+func FirstScan(to, org, domain string, f FirstScanFigures, todayLink, offerLink string) Message {
 	domain = oneLine(domain, 253)
 	org = oneLine(org, 80)
 	score := "pas encore calculé"
@@ -368,6 +373,28 @@ func FirstScan(to, org, domain string, f FirstScanFigures, todayLink string) Mes
 	if len(parts) > 0 {
 		problems = strings.Join(parts, ", ")
 	}
+	next := `Ce premier scan est volontairement léger. Les vérifications plus
+poussées, comme la recherche de vulnérabilités connues, suivent avec les
+scans planifiés, selon votre offre.`
+	if f.Free {
+		servers := "de vos serveurs"
+		if f.IPs > 0 {
+			servers = fmt.Sprintf("de vos %d serveur%s", f.IPs, plural(f.IPs))
+		}
+		next = fmt.Sprintf(`Votre audit gratuit s'arrête là. Il n'a pas vérifié :
+
+- les ports ouverts %s ;
+- les vulnérabilités connues de vos sites web ;
+- et rien ne sera revérifié : ni vos corrections, ni les nouveaux
+  problèmes qui apparaîtront.
+
+Avec l'essai de l'offre Essentiel, pendant 14 jours : un scan complet
+chaque semaine, la vérification de vos corrections, les alertes par
+email et les rapports PDF, sur 3 domaines. Aucun prélèvement avant la fin
+de l'essai, annulable en un clic :
+
+%s`, servers, offerLink)
+	}
 	return Message{
 		To:      to,
 		Subject: fmt.Sprintf("Orus Shield : le premier scan de %s est terminé", domain),
@@ -380,17 +407,76 @@ En résumé :
 - Problèmes à corriger : %s
 - Noms trouvés sous le domaine : %d
 
-Ce premier scan est volontairement léger. Les vérifications plus
-poussées, comme la recherche de vulnérabilités connues, suivent avec les
-scans planifiés, selon votre offre.
-
 Votre plan d'action, du plus urgent au moins urgent :
+
+%s
 
 %s
 
 Vous recevez cet email parce que vous êtes administrateur de « %s ».
 %s
-`, domain, org, score, problems, f.Hostnames, todayLink, org, signature),
+`, domain, org, score, problems, f.Hostnames, todayLink, next, org, signature),
+	}
+}
+
+// TrialNudge is one of the reminders sent 3 and 10 days after the free
+// audit. It only states what the audit found then: the domain was not
+// scanned since, so it never claims a problem is still there.
+type TrialNudge struct {
+	Day            int // days after the audit
+	Critical, High int
+	Open           int    // open findings at the audit, info aside
+	Top            string // the most severe one's title, may be empty
+}
+
+// TrialReminder is a trial reminder (commercial email: it carries an
+// unsubscribe link, also as its List-Unsubscribe header).
+func TrialReminder(to, org, domain string, n TrialNudge, offerLink, unsubscribeLink string) Message {
+	domain = oneLine(domain, 253)
+	org = oneLine(org, 80)
+	found := "Votre audit n'avait relevé aucun problème."
+	if n.Open > 0 {
+		found = fmt.Sprintf("Votre audit avait relevé %d problème%s à corriger", n.Open, plural(n.Open))
+		if urgent := n.Critical + n.High; urgent > 0 {
+			found += fmt.Sprintf(", dont %d urgent%s", urgent, plural(urgent))
+		}
+		found += "."
+		if top := oneLine(n.Top, 200); top != "" {
+			found += "\nLe plus urgent : " + top + "."
+		}
+	}
+	subject := fmt.Sprintf("Orus Shield : où en est la sécurité de %s ?", domain)
+	intro := fmt.Sprintf("Il y a %d jours, nous avons audité %s.", n.Day, domain)
+	if n.Day >= 10 {
+		subject = fmt.Sprintf("Orus Shield : %s n'est plus surveillé", domain)
+		intro = fmt.Sprintf("Depuis votre audit gratuit d'il y a %d jours, personne ne surveille %s.", n.Day, domain)
+	}
+	return Message{
+		To:          to,
+		Subject:     subject,
+		Unsubscribe: unsubscribeLink,
+		Text: fmt.Sprintf(`Bonjour,
+
+%s
+%s
+
+Depuis, rien n'a été revérifié : ni ce que vous avez peut-être corrigé,
+ni les nouveaux problèmes. Avec l'essai de l'offre Essentiel, pendant
+14 jours :
+
+- un scan complet chaque semaine, ports et vulnérabilités connues compris ;
+- la vérification de chaque correction, et votre score qui remonte ;
+- une alerte par email dès qu'un problème grave apparaît ;
+- les rapports PDF pour votre direction, sur 3 domaines.
+
+Aucun prélèvement avant la fin de l'essai, annulable en un clic :
+
+%s
+
+Vous recevez cet email parce que vous êtes administrateur de « %s ».
+Ne plus recevoir ces rappels : %s
+%s
+`, intro, found, offerLink, org, unsubscribeLink, signature),
 	}
 }
 
@@ -398,4 +484,16 @@ Vous recevez cet email parce que vous êtes administrateur de « %s ».
 // actions of the day.
 func TodayLink(publicURL, orgID string) string {
 	return strings.TrimRight(publicURL, "/") + "/orgs/" + url.PathEscape(orgID) + "/aujourdhui"
+}
+
+// OfferLink is the dashboard's page presenting the trial after the free
+// audit.
+func OfferLink(publicURL, orgID string) string {
+	return strings.TrimRight(publicURL, "/") + "/orgs/" + url.PathEscape(orgID) + "/offre"
+}
+
+// UnsubscribeLink is the page that confirms unsubscribing from reminders;
+// the token travels in the fragment, never sent to a server by the link.
+func UnsubscribeLink(publicURL, token string) string {
+	return strings.TrimRight(publicURL, "/") + "/desinscription#token=" + url.QueryEscape(token)
 }

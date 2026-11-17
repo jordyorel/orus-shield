@@ -16,24 +16,26 @@ type planJSON struct {
 	HostsPerScan  int     `json:"hosts_per_scan"`
 	Members       int     `json:"members"`
 	ActiveModules bool    `json:"active_modules"`
-	MaxFrequency  string  `json:"max_frequency"` // monthly, weekly, daily
-	Alerts        bool    `json:"alerts"`
-	Reports       bool    `json:"reports"`
-	Threats       bool    `json:"threats"`
-	DeepScans     bool    `json:"deep_scans"`
-	DeepPerMonth  int     `json:"deep_scans_per_month"` // 0: unlimited
-	APIScans      bool    `json:"api_scans"`
-	AuthScans     bool    `json:"auth_scans"`
-	Agents        bool    `json:"agents"`
-	USDMonthly    int     `json:"usd_monthly"`
-	USDYearly     int     `json:"usd_yearly"` // per month, billed yearly
-	OnQuote       bool    `json:"on_quote"`
+	// Monitoring: scans after the first one; without it, a single audit.
+	Monitoring   bool   `json:"monitoring"`
+	MaxFrequency string `json:"max_frequency"` // monthly, weekly, daily; "": no schedule
+	Alerts       bool   `json:"alerts"`
+	Reports      bool   `json:"reports"`
+	Threats      bool   `json:"threats"`
+	DeepScans    bool   `json:"deep_scans"`
+	DeepPerMonth int    `json:"deep_scans_per_month"` // 0: unlimited
+	APIScans     bool   `json:"api_scans"`
+	AuthScans    bool   `json:"auth_scans"`
+	Agents       bool   `json:"agents"`
+	USDMonthly   int    `json:"usd_monthly"`
+	USDYearly    int    `json:"usd_yearly"` // per month, billed yearly
+	OnQuote      bool   `json:"on_quote"`
 }
 
 func toPlanJSON(p plan.Plan) planJSON {
 	freq := map[plan.Frequency]string{plan.Monthly: "monthly", plan.Weekly: "weekly", plan.Daily: "daily"}[p.MaxFrequency]
 	return planJSON{ID: p.ID, Name: p.Name, Domains: p.Domains, HostsPerScan: p.HostsPerScan, Members: p.Members,
-		ActiveModules: p.ActiveModules, MaxFrequency: freq, Alerts: p.Alerts, Reports: p.Reports, Threats: p.Threats, DeepScans: p.DeepScans, DeepPerMonth: p.DeepScansPerMonth, APIScans: p.APIScans, AuthScans: p.AuthScans, Agents: p.Agents,
+		ActiveModules: p.ActiveModules, Monitoring: p.Monitoring, MaxFrequency: freq, Alerts: p.Alerts, Reports: p.Reports, Threats: p.Threats, DeepScans: p.DeepScans, DeepPerMonth: p.DeepScansPerMonth, APIScans: p.APIScans, AuthScans: p.AuthScans, Agents: p.Agents,
 		USDMonthly: p.USDMonthly, USDYearly: p.USDYearly, OnQuote: p.OnQuote}
 }
 

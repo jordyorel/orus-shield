@@ -31,6 +31,9 @@ type Message struct {
 	To      string // an address, "user@example.com"
 	Subject string
 	Text    string // plain text body, UTF-8
+	// Unsubscribe is the unsubscribe page of a commercial email, sent as
+	// its List-Unsubscribe header (mail clients show an unsubscribe button).
+	Unsubscribe string
 }
 
 // Sender sends messages. The API holds one; tests use a fake.
@@ -162,6 +165,9 @@ func build(from, to *mail.Address, m Message, now time.Time) ([]byte, error) {
 	if m.Subject == "" || m.Text == "" {
 		return nil, fmt.Errorf("%w: subject and text required", ErrInvalid)
 	}
+	if strings.ContainsAny(m.Unsubscribe, "\r\n<>") {
+		return nil, fmt.Errorf("%w: invalid unsubscribe link", ErrInvalid)
+	}
 	id := make([]byte, 16)
 	if _, err := rand.Read(id); err != nil {
 		return nil, err
@@ -180,6 +186,9 @@ func build(from, to *mail.Address, m Message, now time.Time) ([]byte, error) {
 	header("Content-Transfer-Encoding", "quoted-printable")
 	// Tells mail servers this is automatic: no out-of-office replies.
 	header("Auto-Submitted", "auto-generated")
+	if m.Unsubscribe != "" {
+		header("List-Unsubscribe", "<"+m.Unsubscribe+">")
+	}
 	b.WriteString("\r\n")
 
 	qp := quotedprintable.NewWriter(&crlfWriter{&b})

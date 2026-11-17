@@ -206,7 +206,7 @@ func TestTemplatesNeutralizeOrganizationNames(t *testing.T) {
 func TestFirstScan(t *testing.T) {
 	score := 72
 	m := FirstScan("a@example.com", "OrusLabs", "orushield.xyz",
-		FirstScanFigures{Score: &score, Critical: 1, Medium: 3, Hostnames: 6}, TodayLink("https://app.example.com/", "org-1"))
+		FirstScanFigures{Score: &score, Critical: 1, Medium: 3, Hostnames: 6}, TodayLink("https://app.example.com/", "org-1"), "offer")
 	for _, want := range []string{"72/100", "1 critique, 3 moyens", "sous le domaine : 6", "https://app.example.com/orgs/org-1/aujourdhui", "« OrusLabs »"} {
 		if !strings.Contains(m.Text, want) {
 			t.Errorf("text lacks %q:\n%s", want, m.Text)
@@ -216,8 +216,27 @@ func TestFirstScan(t *testing.T) {
 		t.Errorf("message = %+v", m)
 	}
 	// Nothing found, no score: said plainly.
-	m = FirstScan("a@example.com", "O", "example.com", FirstScanFigures{}, "l")
-	if !strings.Contains(m.Text, "pas encore calculé") || !strings.Contains(m.Text, "aucun pour le moment") {
+	m = FirstScan("a@example.com", "O", "example.com", FirstScanFigures{}, "l", "offer")
+	if !strings.Contains(m.Text, "pas encore calculé") || !strings.Contains(m.Text, "aucun pour le moment") || strings.Contains(m.Text, "essai") {
 		t.Errorf("empty summary:\n%s", m.Text)
+	}
+	// After the free audit: what it did not check, and the trial.
+	m = FirstScan("a@example.com", "O", "example.com", FirstScanFigures{IPs: 2, Free: true}, "l",
+		OfferLink("https://app.example.com", "org-1"))
+	for _, want := range []string{"ports ouverts de vos 2 serveurs", "14 jours", "https://app.example.com/orgs/org-1/offre"} {
+		if !strings.Contains(m.Text, want) {
+			t.Errorf("free audit summary lacks %q:\n%s", want, m.Text)
+		}
+	}
+}
+
+func TestListUnsubscribeHeader(t *testing.T) {
+	from, to := &mail.Address{Address: "no-reply@example.com"}, &mail.Address{Address: "a@example.com"}
+	raw, err := build(from, to, Message{Subject: "s", Text: "t", Unsubscribe: "https://app.example.com/desinscription#token=x"}, time.Now())
+	if err != nil || !strings.Contains(string(raw), "List-Unsubscribe: <https://app.example.com/desinscription#token=x>\r\n") {
+		t.Errorf("header missing: %v\n%s", err, raw)
+	}
+	if _, err := build(from, to, Message{Subject: "s", Text: "t", Unsubscribe: "x>\r\nBcc: y"}, time.Now()); err == nil {
+		t.Error("header injection through the unsubscribe link accepted")
 	}
 }

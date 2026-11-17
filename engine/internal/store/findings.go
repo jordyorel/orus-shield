@@ -205,7 +205,7 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 		return fmt.Errorf("finish scan %s: %w", r.ScanID, err)
 	}
 	// The first scan of a domain also sends its summary (every offer).
-	summaries, err := queueFirstScanSummary(ctx, tx, orgID, targetID, r.ScanID, domain, score)
+	summaries, err := queueFirstScanSummary(ctx, tx, orgID, targetID, r.ScanID, domain, at, score)
 	if err != nil {
 		return fmt.Errorf("finish scan %s: %w", r.ScanID, err)
 	}

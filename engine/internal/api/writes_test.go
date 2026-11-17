@@ -141,11 +141,13 @@ func TestFirstScanAtVerification(t *testing.T) {
 		t.Errorf("second verification queued more: %v", q)
 	}
 
-	// Gratuit: the passive ones only.
+	// Gratuit whose single audit is used (the fixture's scan): verifying
+	// queues nothing more. (Its first scan is passive: TestAllowedModulesOnGratuit
+	// and lightModules share the rule.)
 	e.setPlan(a.orgID, plan.Subscription{Plan: plan.Discovery, Status: plan.Active})
 	verify(a.target.ID)
-	if q := queued(a.target.ID); len(q) != 1 || q[0] != "email,tls" {
-		t.Errorf("first scan on Gratuit = %v, want email,tls", q)
+	if q := queued(a.target.ID); len(q) != 0 {
+		t.Errorf("Gratuit after its audit queued %v", q)
 	}
 }
 

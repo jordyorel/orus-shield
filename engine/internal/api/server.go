@@ -92,6 +92,8 @@ type Server struct {
 	agents *store.Agents
 	// billing writes subscriptions from payment webhooks (role orus_billing).
 	billing *store.Billing
+	// unsub records opt-outs from trial reminders (role orus_auth).
+	unsub *store.Auth
 }
 
 // New returns the API server on st. It keeps only st's authentication
@@ -113,7 +115,7 @@ func New(st *store.Store, cfg Config, log *slog.Logger) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("api: %w", err)
 	}
-	srv := &Server{acct: acct, org: st.Org, cfg: cfg, log: log, agents: st.Agents(), billing: st.Billing()}
+	srv := &Server{acct: acct, org: st.Org, cfg: cfg, log: log, agents: st.Agents(), billing: st.Billing(), unsub: st.Auth()}
 	if len(cfg.CredentialsKey) > 0 {
 		if srv.creds, err = seal.NewKey(cfg.CredentialsKey); err != nil {
 			return nil, fmt.Errorf("api: credentials key: %w", err)
@@ -159,6 +161,8 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/mfa/disable", s.withSession(s.mfaDisable))
 	// The offers, for the public pricing page: no session needed.
 	mux.HandleFunc("GET /api/v1/plans", s.listPlans)
+	// The unsubscribe link of trial reminders: the token is the proof.
+	mux.HandleFunc("POST /api/v1/unsubscribe", s.unsubscribe)
 	s.orgRoutes(mux)
 	s.teamRoutes(mux)
 	s.agentRoutes(mux)

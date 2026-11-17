@@ -123,6 +123,16 @@ func (s *Server) queueFirstScan(r *http.Request, req orgRequest, t store.Target)
 	if len(modules) == 0 {
 		return
 	}
+	// The free offer's single audit is this first scan; a domain verified
+	// again later (after a revocation) does not get another one.
+	if !p.Plan.Monitoring {
+		if used, err := req.org.AuditUsed(ctx); err != nil || used {
+			if err != nil {
+				s.log.Warn("queue first scan: audit used", "err", err)
+			}
+			return
+		}
+	}
 	if _, err := req.org.EnqueueScan(ctx, t.ID, slices.Sorted(slices.Values(modules)), actor(req)); err != nil {
 		s.log.Warn("queue first scan", "err", err)
 	}

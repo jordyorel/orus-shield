@@ -45,7 +45,11 @@ type Plan struct {
 	// ActiveModules: port scan, known vulnerabilities (verified domains).
 	// Without it, only passive checks run.
 	ActiveModules bool
-	// MaxFrequency is the most frequent schedule allowed.
+	// Monitoring: scans after the organization's first one (scheduled,
+	// manual, and the verification of a finding marked fixed). Without it,
+	// the offer is a single audit: one scan, whose results stay readable.
+	Monitoring bool
+	// MaxFrequency is the most frequent schedule allowed; 0: no schedule.
 	MaxFrequency Frequency
 	Alerts       bool // email alerts on new critical and high findings
 	Reports      bool // PDF reports
@@ -72,15 +76,16 @@ type Plan struct {
 
 // Plans lists the offers, cheapest first.
 var Plans = []Plan{
-	{ID: Discovery, Name: "Gratuit", Domains: 1, HostsPerScan: 5, Members: 1,
-		MaxFrequency: Monthly},
-	{ID: SME, Name: "Essentiel", Domains: 3, HostsPerScan: 25, Members: 3, ActiveModules: true,
+	// Gratuit is a single audit of one domain (decided 2026-11-17): the
+	// first scan is offered, everything after it needs an offer.
+	{ID: Discovery, Name: "Gratuit", Domains: 1, HostsPerScan: 5, Members: 1},
+	{ID: SME, Name: "Essentiel", Domains: 3, HostsPerScan: 25, Members: 3, ActiveModules: true, Monitoring: true,
 		MaxFrequency: Weekly, Alerts: true, Reports: true, Threats: true,
 		USDMonthly: 35, USDYearly: 29},
-	{ID: Pro, Name: "Pro", Domains: 15, HostsPerScan: 25, Members: 10, ActiveModules: true,
+	{ID: Pro, Name: "Pro", Domains: 15, HostsPerScan: 25, Members: 10, ActiveModules: true, Monitoring: true,
 		MaxFrequency: Daily, Alerts: true, Reports: true, Threats: true, DeepScans: true, DeepScansPerMonth: 4, APIScans: true, AuthScans: true,
 		USDMonthly: 99, USDYearly: 79},
-	{ID: Enterprise, Name: "Sur devis", HostsPerScan: 25, ActiveModules: true,
+	{ID: Enterprise, Name: "Sur devis", HostsPerScan: 25, ActiveModules: true, Monitoring: true,
 		MaxFrequency: Daily, Alerts: true, Reports: true, Threats: true, DeepScans: true, APIScans: true, AuthScans: true, Agents: true, OnQuote: true},
 }
 

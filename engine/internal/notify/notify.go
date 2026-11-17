@@ -1,6 +1,7 @@
 // Package notify delivers the email notifications that scans leave in the
 // outbox (store table notifications): alerts about new critical and high
-// findings, and about emerging threats (package threats).
+// findings and about emerging threats (package threats), first scan
+// summaries, and the trial reminders after the free audit.
 //
 // It runs in the worker process. Each pass claims due notifications with a
 // lease, sends them, and records the outcome: sent, retried later with a
@@ -26,6 +27,8 @@ type Store interface {
 	MarkNotificationSent(ctx context.Context, id string, at time.Time) error
 	RetryNotification(ctx context.Context, id, reason string, retryAt time.Time) error
 	AbandonNotification(ctx context.Context, id, reason string, at time.Time) error
+	// TrialNudgeWanted: a trial reminder still makes sense (store).
+	TrialNudgeWanted(ctx context.Context, orgID, recipient string, now time.Time) (bool, error)
 }
 
 const (
@@ -90,6 +93,20 @@ func (n *Notifier) RunOnce(ctx context.Context) (int, error) {
 				return sent, err
 			}
 			continue
+		}
+		// A reminder written days ago is checked now: an organization that
+		// started its trial, or a recipient who unsubscribed, gets nothing.
+		if nt.Kind == store.NotifyTrialNudge {
+			wanted, err := n.store.TrialNudgeWanted(ctx, nt.OrgID, nt.Recipient, now)
+			if err != nil {
+				return sent, err
+			}
+			if !wanted {
+				if err := n.store.AbandonNotification(ctx, nt.ID, "no longer relevant", now); err != nil {
+					return sent, err
+				}
+				continue
+			}
 		}
 		m, err := n.message(nt)
 		if err != nil {
@@ -157,8 +174,18 @@ func (n *Notifier) message(nt store.Notification) (mailer.Message, error) {
 		if err := json.Unmarshal(nt.Payload, &a); err != nil {
 			return mailer.Message{}, fmt.Errorf("read payload: %w", err)
 		}
-		figures := mailer.FirstScanFigures{Score: a.Score, Critical: a.Critical, High: a.High, Medium: a.Medium, Low: a.Low, Hostnames: a.Hostnames}
-		return mailer.FirstScan(nt.Recipient, a.OrgName, a.Domain, figures, mailer.TodayLink(n.publicURL, a.OrgID)), nil
+		figures := mailer.FirstScanFigures{Score: a.Score, Critical: a.Critical, High: a.High, Medium: a.Medium, Low: a.Low,
+			Hostnames: a.Hostnames, IPs: a.IPs, Free: a.Free}
+		return mailer.FirstScan(nt.Recipient, a.OrgName, a.Domain, figures,
+			mailer.TodayLink(n.publicURL, a.OrgID), mailer.OfferLink(n.publicURL, a.OrgID)), nil
+	case store.NotifyTrialNudge:
+		var a store.TrialNudge
+		if err := json.Unmarshal(nt.Payload, &a); err != nil {
+			return mailer.Message{}, fmt.Errorf("read payload: %w", err)
+		}
+		return mailer.TrialReminder(nt.Recipient, a.OrgName, a.Domain,
+			mailer.TrialNudge{Day: a.Day, Critical: a.Critical, High: a.High, Open: a.Open, Top: a.Top},
+			mailer.OfferLink(n.publicURL, a.OrgID), mailer.UnsubscribeLink(n.publicURL, a.Unsubscribe)), nil
 	}
 	return mailer.Message{}, fmt.Errorf("unknown notification kind %q", nt.Kind)
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jordyorel/orus-shield/engine/internal/plan"
 	"github.com/jordyorel/orus-shield/engine/internal/schedule"
 )
 
@@ -161,5 +162,37 @@ func TestEnqueueDueScansLimit(t *testing.T) {
 	}
 	if n, err := s.EnqueueDueScans(context.Background(), now, 2); err != nil || n != 1 {
 		t.Fatalf("second batch = %d, %v; want the last 1", n, err)
+	}
+}
+
+func TestSingleAuditOffer(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	org := defaultOrg(t, s)
+	if err := s.SetSubscription(ctx, org.ID(), plan.Subscription{Plan: plan.Discovery, Status: plan.Active}, "manual", "test"); err != nil {
+		t.Fatal(err)
+	}
+	target := newTarget(t, s, "free.example")
+	markVerified(t, s, target.ID)
+
+	// No scan yet: the audit is available.
+	if used, err := org.AuditUsed(ctx); err != nil || used {
+		t.Fatalf("AuditUsed before any scan = %v, %v", used, err)
+	}
+	if _, err := org.EnqueueScan(ctx, target.ID, []string{"email"}, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if used, err := org.AuditUsed(ctx); err != nil || !used {
+		t.Fatalf("AuditUsed with a queued scan = %v, %v", used, err)
+	}
+
+	// A schedule left from a lapsed offer never runs on Gratuit.
+	now := time.Date(2026, 11, 15, 1, 30, 0, 0, time.UTC)
+	setSchedule(t, org, target.ID, TargetSettings{Schedule: weeklySchedule(now.Add(-time.Minute))})
+	if _, err := s.pool.Exec(ctx, "UPDATE scans SET status = 'done' WHERE target_id = $1", target.ID); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := s.EnqueueDueScans(ctx, now, 100); err != nil || n != 0 {
+		t.Errorf("EnqueueDueScans on Gratuit = %d, %v; want 0", n, err)
 	}
 }

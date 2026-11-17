@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
+	"github.com/jordyorel/orus-shield/engine/internal/plan"
 )
 
 // NotifyFirstScan is the kind of notification sent when a domain's first
@@ -31,6 +33,11 @@ type FirstScanSummary struct {
 	Low      int `json:"low"`
 	// Hostnames counts the names found under the domain (discovery).
 	Hostnames int `json:"hostnames"`
+	// IPs counts the servers' addresses found.
+	IPs int `json:"ips"`
+	// Free: this scan was the single audit of the free offer; the email
+	// then says what an offer adds, and links to the trial.
+	Free bool `json:"free"`
 }
 
 // queueFirstScanSummary writes one first_scan notification per activated
@@ -39,7 +46,10 @@ type FirstScanSummary struct {
 // saved, so the figures are this scan's). Internal networks get none: their
 // agent's enrolment already told the admin. Every offer gets it; the email
 // switch of Réglages applies.
-func queueFirstScanSummary(ctx context.Context, tx pgx.Tx, orgID, targetID, scanID, domain string, score *int) (int, error) {
+//
+// On the free offer, the scan was its single audit: the trial reminders are
+// queued too (queueTrialNudges).
+func queueFirstScanSummary(ctx context.Context, tx pgx.Tx, orgID, targetID, scanID, domain string, at time.Time, score *int) (int, error) {
 	var first, internal bool
 	err := tx.QueryRow(ctx, `
 		SELECT NOT EXISTS (SELECT 1 FROM scans WHERE target_id = $1 AND status = 'done' AND id <> $2),
@@ -85,9 +95,21 @@ func queueFirstScanSummary(ctx context.Context, tx pgx.Tx, orgID, targetID, scan
 	}
 	err = tx.QueryRow(ctx, `
 		SELECT (SELECT count(*) FROM assets WHERE target_id = $1 AND kind = 'hostname' AND gone_at IS NULL),
-			(SELECT name FROM organizations WHERE id = $2)`, targetID, orgID).Scan(&p.Hostnames, &p.OrgName)
+			(SELECT count(*) FROM assets WHERE target_id = $1 AND kind = 'ip' AND gone_at IS NULL),
+			(SELECT name FROM organizations WHERE id = $2)`, targetID, orgID).Scan(&p.Hostnames, &p.IPs, &p.OrgName)
 	if err != nil {
 		return 0, fmt.Errorf("queue first scan summary: %w", err)
+	}
+	sub, err := scanSubscription(tx.QueryRow(ctx,
+		"SELECT "+subscriptionColumns+" FROM subscriptions WHERE org_id = $1", orgID))
+	if err != nil {
+		return 0, fmt.Errorf("queue first scan summary: %w", err)
+	}
+	p.Free = !plan.Resolve(sub, at).Plan.Monitoring
+	if p.Free {
+		if err := queueTrialNudges(ctx, tx, orgID, targetID, scanID, at, p); err != nil {
+			return 0, fmt.Errorf("queue first scan summary: %w", err)
+		}
 	}
 	data, err := json.Marshal(p)
 	if err != nil {

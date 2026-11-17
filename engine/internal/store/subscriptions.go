@@ -117,3 +117,21 @@ func (o *Org) CountTargets(ctx context.Context) (int, error) {
 	}
 	return n, tx.Commit(ctx)
 }
+
+// AuditUsed reports whether the organization has had a scan of one of its
+// domains (queued, running or done; a failed one does not count): on an
+// offer without monitoring (Gratuit), that scan was its single audit.
+func (o *Org) AuditUsed(ctx context.Context) (bool, error) {
+	tx, err := o.begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("audit used: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	var used bool
+	if err := tx.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM scans s JOIN targets t ON t.id = s.target_id
+			WHERE s.org_id = $1 AND NOT t.internal AND s.status <> 'failed')`, o.orgID).Scan(&used); err != nil {
+		return false, fmt.Errorf("audit used: %w", err)
+	}
+	return used, tx.Commit(ctx)
+}

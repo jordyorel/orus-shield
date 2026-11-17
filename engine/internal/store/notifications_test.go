@@ -3,12 +3,14 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"maps"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
+	"github.com/jordyorel/orus-shield/engine/internal/plan"
 )
 
 // member adds a user to the lifecycle's organization; activated users
@@ -240,5 +242,79 @@ func TestFirstScanSummaryFollowsEmailSwitch(t *testing.T) {
 	l.mustScan(t1, []string{"email", "tls"}, nil)
 	if got := l.firstScanSummaries(); len(got) != 0 {
 		t.Errorf("email switched off, summaries queued: %+v", got)
+	}
+}
+
+func TestTrialNudgesAfterFreeAudit(t *testing.T) {
+	l := newLifecycle(t)
+	ctx := context.Background()
+	l.member("admin@example.com", RoleAdmin, true)
+	if err := l.s.SetSubscription(ctx, l.org.ID(), plan.Subscription{Plan: plan.Discovery, Status: plan.Active}, "manual", "test"); err != nil {
+		t.Fatal(err)
+	}
+	high := withSeverity(makeFinding("email", "dmarc-missing", "example.com"), finding.SeverityHigh)
+	l.mustScan(t1, []string{"email", "tls"}, nil, high)
+
+	if p := l.firstScanSummaries()["admin@example.com"]; !p.Free {
+		t.Errorf("summary after the free audit = %+v, want Free", p)
+	}
+	rows, err := l.s.pool.Query(ctx, "SELECT payload, created_at, next_attempt_at FROM notifications WHERE kind = $1 ORDER BY created_at", NotifyTrialNudge)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var nudges []TrialNudge
+	for rows.Next() {
+		var raw []byte
+		var created, next time.Time
+		if err := rows.Scan(&raw, &created, &next); err != nil {
+			t.Fatal(err)
+		}
+		var n TrialNudge
+		if err := json.Unmarshal(raw, &n); err != nil {
+			t.Fatal(err)
+		}
+		if want := t1.AddDate(0, 0, n.Day); !created.Equal(want) || !next.Equal(want) {
+			t.Errorf("day %d due at %v / %v, want %v", n.Day, created, next, want)
+		}
+		nudges = append(nudges, n)
+	}
+	rows.Close()
+	if len(nudges) != 2 || nudges[0].Day != 3 || nudges[1].Day != 10 || nudges[0].High != 1 || nudges[0].Open != 1 ||
+		nudges[0].Top != high.Title || nudges[0].Unsubscribe == "" {
+		t.Fatalf("nudges = %+v", nudges)
+	}
+
+	now := t1.AddDate(0, 0, 3)
+	if ok, err := l.s.TrialNudgeWanted(ctx, l.org.ID(), "admin@example.com", now); err != nil || !ok {
+		t.Errorf("wanted on Gratuit = %v, %v", ok, err)
+	}
+	// Unsubscribed (twice: idempotent): no more reminders.
+	for range 2 {
+		if err := l.s.Auth().Unsubscribe(ctx, nudges[0].Unsubscribe); err != nil {
+			t.Fatalf("Unsubscribe: %v", err)
+		}
+	}
+	if ok, _ := l.s.TrialNudgeWanted(ctx, l.org.ID(), "Admin@Example.com", now); ok {
+		t.Error("wanted after unsubscribing")
+	}
+	if err := l.s.Auth().Unsubscribe(ctx, "not-a-token"); !errors.Is(err, ErrUnknownToken) {
+		t.Errorf("unknown token = %v", err)
+	}
+	// Another admin, still subscribed, but the trial started: none either.
+	end := now.AddDate(0, 0, 14)
+	if err := l.s.SetSubscription(ctx, l.org.ID(), plan.Subscription{Plan: plan.SME, Status: plan.Trialing, TrialEndsAt: &end}, "manual", "test"); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := l.s.TrialNudgeWanted(ctx, l.org.ID(), "other@example.com", now); ok {
+		t.Error("wanted during the trial")
+	}
+
+	// A paid organization's first scan: a summary, no reminders.
+	l2 := newLifecycle(t)
+	l2.member("admin@example.com", RoleAdmin, true)
+	l2.mustScan(t1, []string{"email"}, nil)
+	var n int
+	if err := l2.s.pool.QueryRow(ctx, "SELECT count(*) FROM notifications WHERE kind = $1", NotifyTrialNudge).Scan(&n); err != nil || n != 0 {
+		t.Errorf("paid organization's reminders = %d, %v", n, err)
 	}
 }

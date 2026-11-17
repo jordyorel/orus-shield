@@ -43,8 +43,9 @@ func TestResolve(t *testing.T) {
 func TestLimits(t *testing.T) {
 	free, _ := Get(Discovery)
 	sme, _ := Get(SME)
-	if free.Allows(Weekly) || !free.Allows(Monthly) {
-		t.Error("the free offer allows monthly scans only")
+	// Gratuit is a single audit: no schedule, no scan after the first one.
+	if free.Allows(Monthly) || free.Monitoring {
+		t.Error("the free offer allows no schedule and no monitoring")
 	}
 	if !sme.Allows(Weekly) || sme.Allows(Daily) {
 		t.Error("Essentiel allows weekly scans, not daily")
@@ -53,7 +54,7 @@ func TestLimits(t *testing.T) {
 		t.Error("Within: n fits a limit, 0 is unlimited")
 	}
 	for _, p := range Plans {
-		if p.Name == "" || p.MaxFrequency == 0 {
+		if p.Name == "" || (p.ID != Discovery && (p.MaxFrequency == 0 || !p.Monitoring)) {
 			t.Errorf("plan %s is incomplete", p.ID)
 		}
 	}

@@ -328,7 +328,7 @@ func (s *Server) startScan(w http.ResponseWriter, r *http.Request, req orgReques
 		}
 	}
 	p, ok := s.planOf(w, r, req)
-	if !ok {
+	if !ok || !s.checkMonitoring(w, r, req, p, "scan again") {
 		return
 	}
 	modules := body.Modules
@@ -366,6 +366,12 @@ func (s *Server) setFindingStatus(w http.ResponseWriter, r *http.Request, req or
 	ctx := r.Context()
 	id := r.PathValue("finding")
 	var moduleID string
+	// A fix is always verified by a scan (rule 8): an offer whose single
+	// audit is used cannot have it verified, so it cannot mark it fixed.
+	p, ok := s.planOf(w, r, req)
+	if !ok || (body.Status == finding.StatusFixed && !s.checkMonitoring(w, r, req, p, "verify a fix")) {
+		return
+	}
 	if body.Status == finding.StatusFixed {
 		fs, err := req.org.ListFindings(ctx, t.ID)
 		if err != nil {
@@ -391,7 +397,7 @@ func (s *Server) setFindingStatus(w http.ResponseWriter, r *http.Request, req or
 	if moduleID != "" && slices.Contains(s.cfg.Modules, moduleID) {
 		// Best effort: the status is recorded either way, and an offer
 		// without the module (active ones on the free offer) skips it.
-		if p, err := req.org.Plan(ctx, s.cfg.Now()); err == nil && (p.Plan.ActiveModules || len(s.activeModules([]string{moduleID})) == 0) {
+		if p.ActiveModules || len(s.activeModules([]string{moduleID})) == 0 {
 			if _, err := req.org.EnqueueScan(ctx, t.ID, []string{moduleID}, actor(req)); err != nil {
 				s.log.Warn("queue verification scan", "err", err)
 			}

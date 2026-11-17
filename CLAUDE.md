@@ -265,6 +265,20 @@ scan. `POST /targets/{target}/scans` without modules runs every module the offer
 only on Gratuit). The dashboard checks the TXT record again by itself every 30 s for 10 minutes
 after a failed check.
 
+Gratuit is a single audit (decided 2026-11-17, `plan.Monitoring` false, no schedule): the first
+scan of the organization is offered and its results stay readable; any later scan (manual,
+scheduled, the verification of a finding marked fixed) needs an offer. The API answers
+`403 {"code": "audit_used"}` (`Org.AuditUsed`: a scan queued, running or done, failed ones aside)
+and the scheduler skips organizations without monitoring (a lapsed trial too). The dashboard turns
+these into the trial offer: the Premiers pas closing screen leads to `/orgs/{org}/offre` (the
+audit's own figures, what it did not check, Essentiel recommended and Pro, links to `/paiement`),
+Aujourd'hui shows a Gratuit band, and marking fixed, rescanning or choosing a schedule open an
+upsell sheet. The first scan email of a free audit adds what it did not check and the trial link;
+FinishScan also queues two `trial_nudge` reminders per activated admin, due 3 and 10 days later
+(their created_at is their due day), dropped at delivery if the organization started a trial or
+paid, or the address unsubscribed (migration 0025: `unsubscribe_tokens` hashed, `marketing_optouts`;
+`POST /api/v1/unsubscribe` from the page `/desinscription#token=`, also sent as List-Unsubscribe).
+
 Known vulnerabilities: `deploy/nuclei/install.sh` installs the pinned Nuclei and templates
 in `.tools/nuclei` (git-ignored) and prints `ORUS_NUCLEI_BIN` and `ORUS_NUCLEI_TEMPLATES`
 for `.env` (worker only). The `vulns` module probes 443 and 80 of each name through the gate,
