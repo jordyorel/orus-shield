@@ -442,6 +442,12 @@ body.pay main{max-width:1120px;padding:0 18px 48px}
 .record{display:grid;gap:10px;background:var(--soft);border-radius:16px;padding:14px;margin-top:14px}
 .record small{display:block;font-size:12px;color:var(--ink2)}
 .record b{font-family:ui-monospace,Menlo,monospace;font-size:13px;font-weight:500;overflow-wrap:anywhere}
+.mfakey{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center;background:var(--soft);border-radius:20px;padding:14px;margin-top:14px}
+.qr{display:block;width:156px;height:156px;border-radius:14px;box-shadow:0 0 0 1px var(--line),0 14px 30px -18px rgba(20,33,61,.55)}
+.mfakey-txt{display:grid;gap:8px;min-width:0}
+.mfakey-txt small{font-size:12px;color:var(--ink2)}
+.mfakey-txt b{font-family:ui-monospace,Menlo,monospace;font-size:13px;font-weight:500;letter-spacing:.04em;overflow-wrap:anywhere;user-select:all}
+@media (max-width:420px){.mfakey{grid-template-columns:1fr;justify-items:center;text-align:center}}
 .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
 .scanbar{height:4px;border-radius:2px;background:var(--soft);overflow:hidden;margin-top:18px}
 .scanbar b{display:block;height:100%;width:40%;border-radius:2px;background:var(--azur);animation:slide 1.1s ease-in-out infinite}

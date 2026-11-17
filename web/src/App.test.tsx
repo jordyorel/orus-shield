@@ -132,6 +132,21 @@ describe("public site", () => {
     fireEvent.paste(first, { clipboardData: { getData: () => "123456" } });
   };
 
+  it("shows the authenticator key as a QR code, with the key beside it", async () => {
+    const uri = "otpauth://totp/Orus%20Shield:jordy%40example.cg?secret=2N72MPVIUIADZTAL46RZJOLASC2CFP37&issuer=Orus%20Shield";
+    mockApi({
+      "GET /auth/me": ok({ ...me, mfa_enabled: false, mfa_session: false }),
+      "POST /auth/mfa/setup": ok({ secret: "2N72MPVIUIADZTAL46RZJOLASC2CFP37", otpauth_uri: uri }),
+    });
+    renderAt("/mfa/setup?reason=admin");
+    fireEvent.change(await screen.findByLabelText(/Mot de passe de/), { target: { value: "pw" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continuer" }));
+    const qr = await screen.findByRole("img", { name: /Code QR/ });
+    expect(qr.querySelector("path")?.getAttribute("d")).toMatch(/^M\d/);
+    expect(screen.getByText("2N72MPVIUIADZTAL46RZJOLASC2CFP37")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /ouvrir l’application/ }).getAttribute("href")).toBe(uri);
+  });
+
   it("shows the legal pages, marked as drafts", async () => {
     for (const [path, title] of [
       ["/conditions", "Conditions d’utilisation"],

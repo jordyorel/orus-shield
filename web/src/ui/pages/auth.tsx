@@ -9,6 +9,7 @@ import { fallback, msg } from "../../messages";
 import { Link, navigate, useLocation } from "../../router";
 import { Arrow, Envelope, Eye, Logo } from "../icons";
 import { EMAIL_RE, pwScore } from "../model";
+import { encodeQR, qrPath } from "../qr";
 import { shake, useBodyClass, useUI } from "../ui";
 import { HeroRadar } from "./public";
 
@@ -634,6 +635,19 @@ function otpauthLink(uri: string): string | undefined {
   return uri.startsWith("otpauth://") ? uri : undefined;
 }
 
+/** QrCode draws text as a QR code: dark modules on a white tile with its
+ * quiet zone, white in both themes because scanners need dark on light. */
+function QrCode({ text }: { text: string }) {
+  const m = encodeQR(text);
+  const side = m.length + 8; // 4 modules of quiet zone on each side
+  return (
+    <svg className="qr" viewBox={`0 0 ${side} ${side}`} shapeRendering="crispEdges" role="img" aria-label="Code QR à scanner avec votre application d’authentification">
+      <rect width={side} height={side} fill="#FFFFFF" />
+      <path d={qrPath(m, 4)} fill="#14213D" />
+    </svg>
+  );
+}
+
 /** MfaSetupPage enrols the TOTP second factor (mandatory for admins). */
 export function MfaSetupPage() {
   const { refresh, state } = useAuth();
@@ -692,19 +706,18 @@ export function MfaSetupPage() {
     body = (
       <>
         <h1>Ajoutez Orus Shield à votre application.</h1>
-        <p className="sub">Sur téléphone, touchez le lien ; sinon saisissez la clé dans l’application, puis le code qu’elle affiche.</p>
-        <div className="record">
-          <div>
-            <small>Clé à saisir</small>
+        <p className="sub">Scannez le code avec votre application (Google Authenticator, Authy, 1Password...), puis saisissez le code à 6 chiffres qu’elle affiche.</p>
+        <div className="mfakey">
+          {link && <QrCode text={link} />}
+          <div className="mfakey-txt">
+            <small>{link ? "Pas d’appareil photo ? Saisissez cette clé" : "Clé à saisir"}</small>
             <b>{step.secret}</b>
-          </div>
-          {link && (
-            <div>
+            {link && (
               <a className="link" href={link}>
-                Ouvrir dans l’application d’authentification
+                Sur ce téléphone : ouvrir l’application
               </a>
-            </div>
-          )}
+            )}
+          </div>
         </div>
         <form
           ref={form}
