@@ -309,6 +309,70 @@ describe("dashboard", () => {
     expect(screen.getByText(/Essai gratuit jusqu’au/)).toBeTruthy();
   });
 
+  describe("Premiers pas, before the first scan", () => {
+    const base = `/orgs/${ORG}`;
+    const empty = { [`GET ${base}/findings`]: ok({ items: [] }), [`GET ${base}/assets`]: ok({ items: [] }), [`GET ${base}/activity?days=7&limit=10`]: ok({ items: [] }) };
+    const target = (verified: boolean) => ({ id: "t2", domain: "oruslabs.cg", verified, verified_at: null, verify_checked_at: null, rate_per_sec: 0, exclusions: {}, created_at: "", schedule: null });
+
+    it("guides a new organization to its domain instead of an empty picture", async () => {
+      orgRoutes({ ...empty, [`GET ${base}/targets`]: ok({ items: [] }) });
+      renderAt(`${base}/aujourdhui`);
+      expect(await screen.findByText("Premiers pas")).toBeTruthy();
+      expect(screen.getByText(/Bienvenue/)).toBeTruthy();
+      expect(screen.getByLabelText("Nom de domaine")).toBeTruthy();
+      expect(screen.getByRole("img", { name: "1 étape faite sur 4" })).toBeTruthy();
+      expect(screen.queryByText("À faire aujourd’hui")).toBeNull();
+      expect(document.querySelector("#radar")).toBeNull();
+    });
+
+    it("opens the TXT record of a domain waiting for verification", async () => {
+      orgRoutes({
+        ...empty,
+        [`GET ${base}/targets`]: ok({ items: [target(false)] }),
+        [`POST ${base}/targets/t2/verification`]: ok({ domain: "oruslabs.cg", record_name: "_orus-verify.oruslabs.cg", record_type: "TXT", record_value: "orus-verify=abc", expires_at: null, verified: false }),
+      });
+      renderAt(`${base}/aujourdhui`);
+      expect(await screen.findByText("orus-verify=abc")).toBeTruthy();
+      expect(screen.getByText(/Plus qu’une étape/)).toBeTruthy();
+      expect(screen.getByText("Il démarre dès que le domaine est vérifié.")).toBeTruthy();
+    });
+
+    it("checks the record again by itself until it appears, and names the Host field", async () => {
+      let tries = 0;
+      const calls = orgRoutes({
+        ...empty,
+        [`GET ${base}/targets`]: ok({ items: [target(false)] }),
+        [`POST ${base}/targets/t2/verification`]: ok({ domain: "oruslabs.cg", record_name: "_orus-verify.oruslabs.cg", record_type: "TXT", record_value: "orus-verify=abc", expires_at: null, verified: false }),
+        [`POST ${base}/targets/t2/verify`]: () => (++tries < 2 ? { status: 422, json: { error: "not found yet" } } : { status: 200, json: target(true) }),
+      });
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        renderAt(`${base}/aujourdhui`);
+        await screen.findByText("orus-verify=abc");
+        expect(screen.getByText("_orus-verify", { selector: "b" })).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "Vérifier maintenant" }));
+        expect(await screen.findByText(/réessayons automatiquement/)).toBeTruthy();
+        await vi.advanceTimersByTimeAsync(30_000);
+        expect(await screen.findByText("oruslabs.cg est vérifié")).toBeTruthy();
+        expect(calls.filter((c) => c.key.endsWith("/verify"))).toHaveLength(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("waits for the first scan once the domain is verified", async () => {
+      orgRoutes({
+        ...empty,
+        [`GET ${base}/targets`]: ok({ items: [target(true)] }),
+        [`GET ${base}/scans?limit=20`]: ok({ items: [{ id: "s1", target_id: "t2", domain: "oruslabs.cg", modules: [], requested_by: "u1", status: "running", attempts: 1, created_at: "", started_at: "", finished_at: null }] }),
+      });
+      renderAt(`${base}/aujourdhui`);
+      expect(await screen.findByText("Votre premier scan est lancé.")).toBeTruthy();
+      expect(screen.getByText(/En cours/)).toBeTruthy();
+      expect(screen.queryByLabelText("Nom de domaine")).toBeNull();
+    });
+  });
+
   it("shows a canceled subscription's end, never a next charge", async () => {
     const canceled: Subscription = { ...subscription, status: "canceled" };
     orgRoutes({ [`GET /orgs/${ORG}/members`]: ok({ items: [] }) }, canceled);

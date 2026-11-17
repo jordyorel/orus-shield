@@ -7,12 +7,26 @@ import { useOrg } from "../OrgData";
 import { AssetSheet, SevTag } from "../sheets";
 import { useUI } from "../ui";
 
+const RETRY_MS = 30_000;
+const RETRY_MAX = 20; // 10 minutes
+
+/** hostPart is the record's name without its domain, what most DNS
+ * providers' "Host" field expects (they append the domain themselves). */
+export function hostPart(name: string, domain: string): string {
+  const suffix = "." + domain;
+  return name.endsWith(suffix) ? name.slice(0, -suffix.length) : name;
+}
+
 type Add =
   | { step: 0; domain: string; err: string }
   | { step: 1 | 2; domain: string; err: string; target: Target; rec: Instructions }
   | { step: 3; domain: string; err: string };
 
-function AddPanel() {
+/** AddPanel adds a domain, shows its TXT record and verifies it; the API
+ * then queues its first, light scan (nothing is scanned before). resume: open a domain still waiting
+ * for verification at its record straight away (the Premiers pas card of
+ * Aujourd'hui). */
+export function AddPanel({ resume = false }: { resume?: boolean }) {
   const { org, data, reload, isAdmin } = useOrg();
   const { toast } = useUI();
   // A domain added earlier and not verified yet resumes at its record.
@@ -24,6 +38,12 @@ function AddPanel() {
     const rec = await api.verificationInstructions(org.org_id, target.id);
     setAd({ step: 1, domain: target.domain, err: "", target, rec });
   };
+  const pendingId = resume && isAdmin ? pending?.id : undefined;
+  useEffect(() => {
+    const t = data?.targets.find((x) => x.id === pendingId);
+    if (t) void showRecord(t).catch(() => undefined); // the panel stays at its first step
+    // Only when the pending domain changes, not on every reload.
+  }, [pendingId]);
 
   const next = async () => {
     const v = ad.domain.trim().toLowerCase();
@@ -53,27 +73,38 @@ function AddPanel() {
     }
   };
 
-  const verify = async () => {
+  // After a failed check (record not visible yet), the panel checks again
+  // by itself every RETRY_MS, RETRY_MAX times: DNS changes take minutes to
+  // appear, and the customer should not have to click in a loop.
+  const [retries, setRetries] = useState(0);
+  const verify = async (auto = false) => {
     if (ad.step !== 1) return;
     const { target, rec } = ad;
-    setAd({ ...ad, step: 2 });
+    if (!auto) {
+      setAd({ ...ad, step: 2 });
+      setRetries(0);
+    }
     try {
+      // The API reads the record itself, then queues the first scan.
       await api.verifyTarget(org.org_id, target.id);
-      try {
-        await api.startScan(org.org_id, target.id);
-      } catch {
-        // Verified anyway: the scan can be started from the asset.
-      }
       setAd({ step: 3, domain: target.domain, err: "" });
       void reload();
     } catch (e) {
-      const err =
-        e instanceof ApiError && e.status === 422
-          ? "L’enregistrement n’est pas encore visible. Les changements DNS peuvent prendre quelques minutes."
-          : "Vérification impossible pour le moment.";
+      const missing = e instanceof ApiError && e.status === 422;
+      const err = missing
+        ? "L’enregistrement n’est pas encore visible. Les changements DNS peuvent prendre quelques minutes."
+        : "Vérification impossible pour le moment.";
       setAd({ step: 1, domain: target.domain, err, target, rec });
+      setRetries((n) => (missing ? n + 1 : RETRY_MAX + 1));
     }
   };
+  const waiting = ad.step === 1 && ad.err !== "" && retries > 0 && retries <= RETRY_MAX;
+  useEffect(() => {
+    if (!waiting) return;
+    const t = setTimeout(() => void verify(true), RETRY_MS);
+    return () => clearTimeout(t);
+    // verify reads the current panel; a new attempt is planned after each result.
+  }, [waiting, retries]);
 
   const copy = (v: string) => {
     try {
@@ -90,7 +121,7 @@ function AddPanel() {
     return (
       <>
         <h2>Ajouter un domaine</h2>
-        <p className="sub">Vous prouvez qu’il vous appartient, puis le premier scan démarre.</p>
+        <p className="sub">Vous prouvez qu’il vous appartient, puis un premier scan léger démarre.</p>
         <div className="addrow">
           <label className="vh" htmlFor="add-in">
             Nom de domaine
@@ -144,9 +175,14 @@ function AddPanel() {
             <b>{ad.rec.record_value}</b>
           </div>
         </div>
+        <p className="sub">
+          Chez la plupart des hébergeurs, le champ Nom (ou Host) attend seulement <b>{hostPart(ad.rec.record_name, ad.domain)}</b> : ils
+          ajoutent eux-mêmes .{ad.domain}.
+        </p>
         <p className="err" role="alert">
           {ad.err}
         </p>
+        {waiting && <p className="sub">Nous réessayons automatiquement toutes les 30 secondes.</p>}
         <div className="actions">
           <button className="btn" type="button" onClick={() => void verify()}>
             Vérifier maintenant

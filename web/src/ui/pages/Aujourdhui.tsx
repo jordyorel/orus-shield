@@ -1,10 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Activity } from "../../api/types";
+import { Link } from "../../router";
+import { appPath } from "../AppShell";
 import { Tick } from "../icons";
 import { COLOR, DIST, byPriority, feedDay, worst, type AssetView, type Issue } from "../model";
 import { useOrg } from "../OrgData";
 import { AssetSheet, FindingSheet, useFix } from "../sheets";
 import { useUI } from "../ui";
+import { AddPanel } from "./Actifs";
 
 /** countTo animates a number from one value to another (the mockup's countTo). */
 function useCount(to: number): number {
@@ -210,6 +213,103 @@ function FeedLine({ a, now }: { a: Activity; now: Date }) {
   );
 }
 
+type StepState = "done" | "cur" | "todo";
+
+/** firstScan says where a new organization's first scan stands, from its
+ * domains' scans: running (queued or running), failed (every one failed),
+ * or none yet. */
+function firstScan(data: { targets: { id: string; internal?: boolean }[]; scans: { target_id: string; status: string }[] }) {
+  const ids = new Set(data.targets.filter((t) => !t.internal).map((t) => t.id));
+  const scans = data.scans.filter((s) => ids.has(s.target_id));
+  const scanning = scans.some((s) => s.status === "queued" || s.status === "running");
+  const failed = !scanning && scans.length > 0 && scans.every((s) => s.status === "failed");
+  return { scanning, failed };
+}
+
+/** Onboarding is the Premiers pas card: what a new organization does before
+ * its first results, ticked from real data (domains, verification, scans).
+ * It replaces the actions of the day and the radar until a scan has
+ * finished: before that, they would show an empty, misleading picture.
+ * Nothing is scanned before verification; the API then queues a light
+ * first scan. */
+function Onboarding() {
+  const { org, data, isAdmin, reload } = useOrg();
+  const { scanning, failed } = data ? firstScan(data) : { scanning: false, failed: false };
+  // A scan running: reload now and then, so the screen fills by itself.
+  useEffect(() => {
+    if (!scanning) return;
+    const t = setInterval(() => void reload(), 15000);
+    return () => clearInterval(t);
+  }, [scanning, reload]);
+  if (!data) return null;
+  const domains = data.targets.filter((t) => !t.internal);
+  const added = domains.length > 0;
+  const verified = domains.some((t) => t.verified);
+  const state = (done: boolean, before: boolean): StepState => (done ? "done" : before ? "cur" : "todo");
+  const steps: { title: string; hint: string; s: StepState }[] = [
+    { title: "Compte créé et protégé", hint: "Mot de passe et double authentification.", s: "done" },
+    { title: "Ajoutez votre domaine", hint: "Celui de votre site ou de vos emails : nous trouvons ses sous-domaines et ses serveurs.", s: state(added, true) },
+    { title: "Prouvez qu’il est à vous", hint: "Un enregistrement TXT à ajouter dans sa zone DNS. Nous n’analysons que ce qui vous appartient.", s: state(verified, added) },
+    {
+      title: "Premier scan",
+      hint: scanning
+        ? "En cours, volontairement léger : cet écran se remplit dès qu’il est terminé, et vous recevez un résumé par email."
+        : failed
+          ? "Le scan n’a pas abouti. Relancez-le depuis Actifs."
+          : "Il démarre dès que le domaine est vérifié.",
+      s: state(false, verified),
+    },
+  ];
+  const done = steps.filter((x) => x.s === "done").length;
+  return (
+    <div className="section onboard">
+      <div className="rhead">
+        <h2>Premiers pas</h2>
+        <span className="dots big3" role="img" aria-label={`${done} étape${done > 1 ? "s" : ""} faite${done > 1 ? "s" : ""} sur ${steps.length}`}>
+          {steps.map((x) => (
+            <i key={x.title} className={x.s === "done" ? "on" : ""} />
+          ))}
+        </span>
+      </div>
+      <ol className="todo steps">
+        {steps.map((x) => (
+          <li key={x.title} className={x.s} aria-current={x.s === "cur" ? "step" : undefined}>
+            <span className="check" aria-hidden="true">
+              {x.s === "done" ? <Tick size={20} width={3} /> : null}
+            </span>
+            <div>
+              <p className="t">{x.title}</p>
+              <p className="m">{x.hint}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+      {!verified &&
+        (isAdmin ? (
+          <div className="rpanel addpanel">
+            <AddPanel resume />
+          </div>
+        ) : (
+          <p className="hint">Un administrateur de l’organisation ajoute et vérifie le domaine.</p>
+        ))}
+      {failed && (
+        <p className="hint">
+          <Link className="link" to={appPath(org.org_id, "actifs")}>
+            Ouvrir Actifs
+          </Link>
+        </p>
+      )}
+      <p className="hint">
+        Ensuite : qui reçoit les alertes, et votre équipe, dans{" "}
+        <Link className="link" to={appPath(org.org_id, "reglages")}>
+          Réglages
+        </Link>
+        .
+      </p>
+    </div>
+  );
+}
+
 export function AujourdhuiPage() {
   const { me, data, issues, assets } = useOrg();
   const { showSheet } = useUI();
@@ -241,6 +341,28 @@ export function AujourdhuiPage() {
           : `${left} actions vous séparent d’un périmètre plus sûr.`;
   const first = me.name.split(/\s+/)[0];
   const score = data.overview.score;
+  // Nothing scanned yet: the Premiers pas card instead of an empty picture.
+  if (!data.scans.some((s) => s.status === "done") && data.assets.length === 0) {
+    const domains = data.targets.filter((t) => !t.internal);
+    const { scanning, failed } = firstScan(data);
+    return (
+      <>
+        <p className="hello">{first ? `Bonjour ${first}` : "Bonjour"}</p>
+        <h1 className="lead">
+          {!domains.length
+            ? "Bienvenue. Voyons ce que vous exposez sur internet."
+            : scanning
+              ? "Votre premier scan est lancé."
+              : failed
+                ? "Votre premier scan n’a pas abouti."
+                : domains.some((t) => t.verified)
+                  ? "Votre domaine est vérifié."
+                  : "Plus qu’une étape avant votre premier scan."}
+        </h1>
+        <Onboarding />
+      </>
+    );
+  }
 
   return (
     <>

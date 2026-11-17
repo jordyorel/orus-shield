@@ -53,6 +53,15 @@ main{padding:8px 18px 110px;max-width:1080px;width:100%;margin:0 auto}
 .check{width:34px;height:34px;margin:5px;border-radius:50%;border:1.8px solid var(--ring);background:transparent;display:grid;place-items:center;transition:background .25s,border-color .25s,transform .25s}
 .check svg{opacity:0;transform:scale(.4);transition:all .3s cubic-bezier(.3,1.6,.5,1)}
 .done .check{background:var(--lagon);border-color:var(--lagon);transform:scale(1.06)}
+.steps{list-style:none;padding:0;margin:14px 0 0}
+.steps .check{display:grid;place-items:center;color:#fff}
+.steps li.cur .check{border-color:var(--azur);box-shadow:0 0 0 4px color-mix(in srgb,var(--azur) 18%,transparent)}
+.steps li.cur .t{color:var(--azur-ink)}
+.steps li.todo{opacity:.6}
+.steps li.done{opacity:1}
+.steps li.done .t{text-decoration:none;color:var(--ink2)}
+.onboard .addpanel{margin-top:16px}
+.onboard>.hint{margin-top:14px}
 .done .check svg{opacity:1;transform:none}
 .todo .t{font-weight:600}
 .done .t{text-decoration:line-through}
