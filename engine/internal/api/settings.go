@@ -83,6 +83,51 @@ func (s *Server) scheduledModules(st store.OrgSettings, p plan.Plan) []string {
 	return out
 }
 
+// lightModules are the modules of a domain's first scan, queued when it is
+// verified, kept light: the quick profile's modules (no known-vulnerability
+// pass, no API scan), never a deep-only one, minus those switched off in
+// Réglages, and the active ones only on an offer with them (ports, in its
+// standard mode).
+func (s *Server) lightModules(st store.OrgSettings, p plan.Plan) []string {
+	var out []string
+	for _, id := range s.cfg.Modules {
+		if slices.Contains(st.DisabledModules, id) || slices.Contains(quickSkips, id) || slices.Contains(deepOnly, id) {
+			continue
+		}
+		if !p.ActiveModules && len(s.activeModules([]string{id})) > 0 {
+			continue
+		}
+		out = append(out, id)
+	}
+	return out
+}
+
+// queueFirstScan queues the light first scan of a newly verified domain
+// (see lightModules), best effort: the domain is verified either way, and
+// the customer can start a scan from Actifs. Nothing is scanned before the
+// verification, not even passively: an unverified domain may belong to
+// someone else, and a report on it would be reconnaissance for a stranger.
+func (s *Server) queueFirstScan(r *http.Request, req orgRequest, t store.Target) {
+	ctx := r.Context()
+	st, err := req.org.Settings(ctx)
+	if err != nil {
+		s.log.Warn("queue first scan: read settings", "err", err)
+		return
+	}
+	p, err := req.org.Plan(ctx, s.cfg.Now())
+	if err != nil {
+		s.log.Warn("queue first scan: read offer", "err", err)
+		return
+	}
+	modules := s.lightModules(st, p.Plan)
+	if len(modules) == 0 {
+		return
+	}
+	if _, err := req.org.EnqueueScan(ctx, t.ID, slices.Sorted(slices.Values(modules)), actor(req)); err != nil {
+		s.log.Warn("queue first scan", "err", err)
+	}
+}
+
 // targetSettingsFrom turns the organization's settings into one target's
 // settings: its schedule (none without a frequency) and its rate.
 func (s *Server) targetSettingsFrom(st store.OrgSettings, p plan.Plan, now time.Time) (store.TargetSettings, error) {

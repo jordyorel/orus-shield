@@ -204,6 +204,11 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 	if err != nil {
 		return fmt.Errorf("finish scan %s: %w", r.ScanID, err)
 	}
+	// The first scan of a domain also sends its summary (every offer).
+	summaries, err := queueFirstScanSummary(ctx, tx, orgID, targetID, r.ScanID, domain, score)
+	if err != nil {
+		return fmt.Errorf("finish scan %s: %w", r.ScanID, err)
+	}
 
 	// Empty lists, not null, so the audit JSON has one shape.
 	succeeded := append([]string{}, r.Succeeded...)
@@ -214,7 +219,7 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 			"scan_id": r.ScanID, "attempt": r.Attempt,
 			"succeeded": succeeded, "failed": failed,
 			"findings": len(r.Findings), "new": created, "fixed": fixed, "reopened": reopened,
-			"unobserved": unobserved, "alerts": len(alerts), "notified": notified,
+			"unobserved": unobserved, "alerts": len(alerts), "notified": notified, "summaries": summaries,
 			"assets": assets.reported, "assets_new": assets.created, "assets_back": assets.back, "assets_gone": assets.gone,
 			"assets_unobserved": assets.unobserved,
 			"score":             score,

@@ -274,6 +274,7 @@ func (s *Server) verifyTarget(w http.ResponseWriter, r *http.Request, req orgReq
 		writeError(w, http.StatusBadRequest, "not for an internal network: it is verified by its agent")
 		return
 	}
+	wasVerified := t.Verified()
 	err := ownership.New(req.org, s.cfg.DNS).Verify(r.Context(), t.ID, actor(req))
 	switch {
 	case errors.Is(err, ownership.ErrNoToken):
@@ -291,6 +292,11 @@ func (s *Server) verifyTarget(w http.ResponseWriter, r *http.Request, req orgReq
 		s.internalError(w, r, err)
 		return
 	}
+	// Newly verified: its first scan, light. The heavier modules wait for
+	// the schedule or a manual scan.
+	if !wasVerified && t.Verified() {
+		s.queueFirstScan(r, req, t)
+	}
 	writeJSON(w, http.StatusOK, toTargetJSON(t))
 }
 
@@ -298,26 +304,38 @@ type startScanRequest struct {
 	Modules []string `json:"modules,omitempty"`
 }
 
-// startScan queues a scan. Active modules on an unverified target are
-// accepted here and refused by the worker (rule 1 is enforced where the
-// probes are sent, at scan time); the response says so.
+// startScan queues a scan of a verified target: nothing is scanned for a
+// customer before ownership is proven, not even passively (an unverified
+// domain may be someone else's). The worker still enforces rule 1 where
+// the probes are sent, at scan time (verification can lapse meanwhile).
+//
+// Without a module list it scans with every module the offer allows: on the
+// free offer, the passive ones. An explicit list naming an active module is
+// still refused there, so the customer learns why it did not run.
 func (s *Server) startScan(w http.ResponseWriter, r *http.Request, req orgRequest, t store.Target) {
 	var body startScanRequest
 	if r.ContentLength != 0 && !decode(w, r, &body) {
 		return
 	}
-	modules := body.Modules
-	if len(modules) == 0 {
-		modules = s.cfg.Modules
+	if !t.Verified() {
+		writeError(w, http.StatusConflict, "verify the domain first: nothing is scanned before ownership is proven")
+		return
 	}
-	for _, m := range modules {
+	for _, m := range body.Modules {
 		if !slices.Contains(s.cfg.Modules, m) {
 			writeError(w, http.StatusBadRequest, "unknown module "+m)
 			return
 		}
 	}
 	p, ok := s.planOf(w, r, req)
-	if !ok || !s.checkModules(w, p, modules) {
+	if !ok {
+		return
+	}
+	modules := body.Modules
+	if len(modules) == 0 {
+		modules = s.allowedModules(p)
+	}
+	if !s.checkModules(w, p, modules) {
 		return
 	}
 	sc, err := req.org.EnqueueScan(r.Context(), t.ID, slices.Compact(slices.Sorted(slices.Values(modules))), actor(req))

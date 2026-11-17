@@ -338,3 +338,64 @@ Vous recevez cet email parce que vous êtes administrateur de « %s ».
 func ScansLink(publicURL, orgID string) string {
 	return strings.TrimRight(publicURL, "/") + "/orgs/" + url.PathEscape(orgID) + "/scans"
 }
+
+// FirstScanFigures are the figures of a first scan's summary.
+type FirstScanFigures struct {
+	Score                       *int // 0 to 100; nil when no check was evaluated
+	Critical, High, Medium, Low int  // open findings by severity
+	Hostnames                   int  // names found under the domain
+}
+
+// FirstScan sums up a domain's first scan for its admins: a welcome sent
+// once per domain, on every offer, whatever was found.
+func FirstScan(to, org, domain string, f FirstScanFigures, todayLink string) Message {
+	domain = oneLine(domain, 253)
+	org = oneLine(org, 80)
+	score := "pas encore calculé"
+	if f.Score != nil {
+		score = fmt.Sprintf("%d/100", *f.Score)
+	}
+	var parts []string
+	for _, c := range []struct {
+		n    int
+		word string
+	}{{f.Critical, "critique"}, {f.High, "élevé"}, {f.Medium, "moyen"}, {f.Low, "faible"}} {
+		if c.n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s%s", c.n, c.word, plural(c.n)))
+		}
+	}
+	problems := "aucun pour le moment"
+	if len(parts) > 0 {
+		problems = strings.Join(parts, ", ")
+	}
+	return Message{
+		To:      to,
+		Subject: fmt.Sprintf("Orus Shield : le premier scan de %s est terminé", domain),
+		Text: fmt.Sprintf(`Bonjour,
+
+Le premier scan de %s (organisation « %s ») est terminé.
+En résumé :
+
+- Score de sécurité : %s
+- Problèmes à corriger : %s
+- Noms trouvés sous le domaine : %d
+
+Ce premier scan est volontairement léger. Les vérifications plus
+poussées, comme la recherche de vulnérabilités connues, suivent avec les
+scans planifiés, selon votre offre.
+
+Votre plan d'action, du plus urgent au moins urgent :
+
+%s
+
+Vous recevez cet email parce que vous êtes administrateur de « %s ».
+%s
+`, domain, org, score, problems, f.Hostnames, todayLink, org, signature),
+	}
+}
+
+// TodayLink is the dashboard's Aujourd'hui page of an organization: the
+// actions of the day.
+func TodayLink(publicURL, orgID string) string {
+	return strings.TrimRight(publicURL, "/") + "/orgs/" + url.PathEscape(orgID) + "/aujourdhui"
+}

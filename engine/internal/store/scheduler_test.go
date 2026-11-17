@@ -69,17 +69,31 @@ func TestScheduleIsStoredAndCleared(t *testing.T) {
 	}
 }
 
+// markVerified marks a target verified, as if its TXT record had been read.
+func markVerified(t *testing.T, s *Store, targetID string) {
+	t.Helper()
+	if _, err := s.pool.Exec(context.Background(),
+		`UPDATE targets SET verify_token = 'tok', verified_at = now() WHERE id = $1`, targetID); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestEnqueueDueScans(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	org := defaultOrg(t, s)
 	due := newTarget(t, s, "due.example")
 	later := newTarget(t, s, "later.example")
+	unverified := newTarget(t, s, "unverified.example")
 	newTarget(t, s, "manual.example") // no schedule: never queued
+	markVerified(t, s, due.ID)
+	markVerified(t, s, later.ID)
 
 	now := time.Date(2026, 11, 15, 1, 30, 0, 0, time.UTC) // Sunday 02:30 in Paris
 	setSchedule(t, org, due.ID, TargetSettings{Schedule: weeklySchedule(now.Add(-30 * time.Minute))})
 	setSchedule(t, org, later.ID, TargetSettings{Schedule: weeklySchedule(now.Add(time.Hour))})
+	// Due, but never verified: nothing is scanned, its slot passes.
+	setSchedule(t, org, unverified.ID, TargetSettings{Schedule: weeklySchedule(now.Add(-30 * time.Minute))})
 
 	n, err := s.EnqueueDueScans(ctx, now, 100)
 	if err != nil || n != 1 {
@@ -91,6 +105,12 @@ func TestEnqueueDueScans(t *testing.T) {
 	}
 	if len(scansOf(t, org, later.ID)) != 0 {
 		t.Error("a target not yet due was queued")
+	}
+	if len(scansOf(t, org, unverified.ID)) != 0 {
+		t.Error("an unverified target was queued")
+	}
+	if u, err := org.GetTarget(ctx, unverified.ID); err != nil || !u.Schedule.NextScanAt.After(now) {
+		t.Errorf("unverified target's next scan = %+v, %v; want moved on", u.Schedule, err)
 	}
 	if got := actions(t, s, "due.example"); !slices.Contains(got, ActorScheduler+" "+ActionScanRequested) {
 		t.Errorf("audit = %v, want a scan.requested entry by the scheduler", got)
@@ -132,7 +152,9 @@ func TestEnqueueDueScansLimit(t *testing.T) {
 	org := defaultOrg(t, s)
 	now := time.Date(2026, 11, 15, 1, 30, 0, 0, time.UTC)
 	for _, d := range []string{"a.example", "b.example", "c.example"} {
-		setSchedule(t, org, newTarget(t, s, d).ID, TargetSettings{Schedule: weeklySchedule(now.Add(-time.Minute))})
+		tg := newTarget(t, s, d)
+		markVerified(t, s, tg.ID)
+		setSchedule(t, org, tg.ID, TargetSettings{Schedule: weeklySchedule(now.Add(-time.Minute))})
 	}
 	if n, err := s.EnqueueDueScans(context.Background(), now, 2); err != nil || n != 2 {
 		t.Fatalf("first batch = %d, %v; want 2", n, err)

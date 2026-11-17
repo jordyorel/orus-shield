@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/jordyorel/orus-shield/engine/internal/finding"
+	"github.com/jordyorel/orus-shield/engine/internal/module"
+	"github.com/jordyorel/orus-shield/engine/internal/plan"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 )
 
@@ -80,6 +82,71 @@ func TestCreateTarget(t *testing.T) {
 	if len(audit.Items) != 1 || audit.Items[0].Action != actionTargetCreated || audit.Items[0].Actor != "user:admin@example.com" {
 		t.Errorf("audit = %+v", audit.Items)
 	}
+	// Nothing is scanned before verification, not even passively.
+	var scans list[scanJSON]
+	e.do("GET", "/api/v1/orgs/"+a.orgID+"/targets/"+tg.ID+"/scans", a.session, nil).json(t, &scans)
+	if len(scans.Items) != 0 {
+		t.Errorf("scans before verification = %+v", scans.Items)
+	}
+}
+
+func TestFirstScanAtVerification(t *testing.T) {
+	e := newEnv(t)
+	// A catalog with every kind of module: passive, active, heavy, deep only.
+	for _, m := range []module.Info{
+		{ID: "ports", Kind: module.KindActive}, {ID: "vulns", Kind: module.KindActive},
+		{ID: "zap", Kind: module.KindActive, DeepOnly: true},
+	} {
+		e.srv.cfg.Modules = append(e.srv.cfg.Modules, m.ID)
+		e.srv.cfg.Catalog = append(e.srv.cfg.Catalog, m)
+	}
+	a := e.tenant("A", "example.com")
+	base := "/api/v1/orgs/" + a.orgID
+	queued := func(targetID string) []string {
+		var l list[scanJSON]
+		e.do("GET", base+"/targets/"+targetID+"/scans", a.session, nil).json(t, &l)
+		var out []string
+		for _, sc := range l.Items {
+			if sc.Status == "queued" {
+				out = append(out, strings.Join(sc.Modules, ","))
+			}
+		}
+		return out
+	}
+	add := func(domain string) string {
+		var tg targetJSON
+		r := e.do("POST", base+"/targets", a.session, createTargetRequest{Domain: domain})
+		if r.status != http.StatusCreated {
+			t.Fatalf("create %s = %d %s", domain, r.status, r.body)
+		}
+		r.json(t, &tg)
+		return tg.ID
+	}
+	verify := func(targetID string) { e.verifyTarget(a.session, a.orgID, targetID) }
+
+	// Pro: added, nothing; verified, the light modules with ports (not
+	// vulns, not zap); verified again, nothing more.
+	end := e.now.AddDate(0, 1, 0)
+	e.setPlan(a.orgID, plan.Subscription{Plan: plan.Pro, Status: plan.Active, PeriodEnd: &end})
+	id := add("shop.example.com")
+	if q := queued(id); len(q) != 0 {
+		t.Fatalf("queued before verification: %v", q)
+	}
+	verify(id)
+	if q := queued(id); len(q) != 1 || q[0] != "email,ports,tls" {
+		t.Errorf("first scan on Pro = %v, want email,ports,tls", q)
+	}
+	verify(id)
+	if q := queued(id); len(q) != 1 {
+		t.Errorf("second verification queued more: %v", q)
+	}
+
+	// Gratuit: the passive ones only.
+	e.setPlan(a.orgID, plan.Subscription{Plan: plan.Discovery, Status: plan.Active})
+	verify(a.target.ID)
+	if q := queued(a.target.ID); len(q) != 1 || q[0] != "email,tls" {
+		t.Errorf("first scan on Gratuit = %v, want email,tls", q)
+	}
 }
 
 func TestVerificationFlow(t *testing.T) {
@@ -111,10 +178,29 @@ func TestVerificationFlow(t *testing.T) {
 	}
 }
 
+// verifyTarget proves ownership of a target through the API, with the fake
+// DNS serving its record.
+func (e *env) verifyTarget(session, orgID, targetID string) {
+	e.t.Helper()
+	base := "/api/v1/orgs/" + orgID + "/targets/" + targetID
+	var in instructionsJSON
+	e.do("POST", base+"/verification", session, nil).json(e.t, &in)
+	e.dns.set(in.RecordName, in.RecordValue)
+	if r := e.do("POST", base+"/verify", session, nil); r.status != http.StatusOK {
+		e.t.Fatalf("verify = %d %s", r.status, r.body)
+	}
+}
+
 func TestStartScan(t *testing.T) {
 	e := newEnv(t)
 	a := e.tenant("A", "example.com")
 	path := "/api/v1/orgs/" + a.orgID + "/targets/" + a.target.ID + "/scans"
+
+	// Unverified: refused, not even a passive scan.
+	if r := e.do("POST", path, a.session, nil); r.status != http.StatusConflict {
+		t.Fatalf("scan of an unverified domain = %d %s, want 409", r.status, r.body)
+	}
+	e.verifyTarget(a.session, a.orgID, a.target.ID) // queues the light first scan
 
 	r := e.do("POST", path, a.session, nil) // no body: every module
 	if r.status != http.StatusAccepted {

@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 	"testing"
 	"time"
 
@@ -27,12 +28,20 @@ func TestPlanLimits(t *testing.T) {
 	a := e.tenant("A", "example.com")
 	base := "/api/v1/orgs/" + a.orgID
 	e.setPlan(a.orgID, plan.Subscription{Plan: plan.Discovery, Status: plan.Active})
+	e.verifyTarget(a.session, a.orgID, a.target.ID) // queues the first scan (email, tls)
 
 	// Gratuit: one domain (it has one), passive checks, monthly, no report.
 	planCode(t, e.do("POST", base+"/targets", a.session, map[string]any{"domain": "second.example"}))
 	planCode(t, e.do("POST", base+"/targets/"+a.target.ID+"/scans", a.session, map[string]any{"modules": []string{"email", "ports"}}))
 	if r := e.do("POST", base+"/targets/"+a.target.ID+"/scans", a.session, map[string]any{"modules": []string{"email"}}); r.status != http.StatusAccepted {
 		t.Errorf("passive scan = %d %s", r.status, r.body)
+	}
+	// No module list (the first scan after verification): the passive ones.
+	var sc scanJSON
+	if r := e.do("POST", base+"/targets/"+a.target.ID+"/scans", a.session, nil); r.status != http.StatusAccepted {
+		t.Errorf("default scan on Gratuit = %d %s", r.status, r.body)
+	} else if r.json(t, &sc); slices.Contains(sc.Modules, "ports") || len(sc.Modules) == 0 {
+		t.Errorf("default scan on Gratuit runs %v, want the passive modules only", sc.Modules)
 	}
 	weekly := map[string]any{"frequency": "weekly", "weekday": 1, "hour": 2, "timezone": "Africa/Brazzaville", "modules": []string{"email"}}
 	planCode(t, e.do("PATCH", base+"/targets/"+a.target.ID, a.session, map[string]any{"schedule": weekly}))

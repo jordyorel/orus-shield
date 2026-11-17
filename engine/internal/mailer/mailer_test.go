@@ -202,3 +202,22 @@ func TestTemplatesNeutralizeOrganizationNames(t *testing.T) {
 		t.Errorf("access email:\n%s", got.Text)
 	}
 }
+
+func TestFirstScan(t *testing.T) {
+	score := 72
+	m := FirstScan("a@example.com", "OrusLabs", "orushield.xyz",
+		FirstScanFigures{Score: &score, Critical: 1, Medium: 3, Hostnames: 6}, TodayLink("https://app.example.com/", "org-1"))
+	for _, want := range []string{"72/100", "1 critique, 3 moyens", "sous le domaine : 6", "https://app.example.com/orgs/org-1/aujourdhui", "« OrusLabs »"} {
+		if !strings.Contains(m.Text, want) {
+			t.Errorf("text lacks %q:\n%s", want, m.Text)
+		}
+	}
+	if m.Subject != "Orus Shield : le premier scan de orushield.xyz est terminé" || m.To != "a@example.com" {
+		t.Errorf("message = %+v", m)
+	}
+	// Nothing found, no score: said plainly.
+	m = FirstScan("a@example.com", "O", "example.com", FirstScanFigures{}, "l")
+	if !strings.Contains(m.Text, "pas encore calculé") || !strings.Contains(m.Text, "aucun pour le moment") {
+		t.Errorf("empty summary:\n%s", m.Text)
+	}
+}

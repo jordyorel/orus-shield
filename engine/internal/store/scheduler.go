@@ -24,6 +24,9 @@ const ActorScheduler = "scheduler"
 //
 // A target that still has a queued or running scan gets no new one: a slow
 // scan must not pile up behind itself. Its next_scan_at moves on anyway.
+// Neither does an unverified one (never verified, or revoked): nothing is
+// scanned for a customer before ownership is proven, not even passively.
+// Its slot passes, and the schedule resumes once it is verified again.
 // Each scheduled scan has its scan.requested audit entry, like any other.
 func (s *Store) EnqueueDueScans(ctx context.Context, now time.Time, limit int) (int, error) {
 	tx, err := s.pool.Begin(ctx)
@@ -64,6 +67,9 @@ func (s *Store) EnqueueDueScans(ctx context.Context, now time.Time, limit int) (
 			return 0, fmt.Errorf("enqueue due scans: target %s: %w", t.ID, err)
 		}
 
+		if !t.Verified() {
+			continue
+		}
 		var busy bool
 		if err := tx.QueryRow(ctx, `
 			SELECT EXISTS (SELECT 1 FROM scans WHERE target_id = $1 AND status IN ('queued', 'running'))`,

@@ -152,6 +152,13 @@ func (n *Notifier) message(nt store.Notification) (mailer.Message, error) {
 			items = append(items, mailer.ThreatItem{CVE: t.CVE, Name: t.Name, Severity: t.Severity, KEV: t.KEV, EPSS: t.EPSS, Products: t.Products})
 		}
 		return mailer.EmergingThreats(nt.Recipient, a.OrgName, a.Domain, items, a.Total, mailer.ScansLink(n.publicURL, a.OrgID)), nil
+	case store.NotifyFirstScan:
+		var a store.FirstScanSummary
+		if err := json.Unmarshal(nt.Payload, &a); err != nil {
+			return mailer.Message{}, fmt.Errorf("read payload: %w", err)
+		}
+		figures := mailer.FirstScanFigures{Score: a.Score, Critical: a.Critical, High: a.High, Medium: a.Medium, Low: a.Low, Hostnames: a.Hostnames}
+		return mailer.FirstScan(nt.Recipient, a.OrgName, a.Domain, figures, mailer.TodayLink(n.publicURL, a.OrgID)), nil
 	}
 	return mailer.Message{}, fmt.Errorf("unknown notification kind %q", nt.Kind)
 }

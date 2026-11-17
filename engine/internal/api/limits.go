@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/plan"
@@ -35,6 +36,22 @@ func (s *Server) activeModules(ids []string) []string {
 			if m.ID == id && m.Kind == module.KindActive {
 				out = append(out, id)
 			}
+		}
+	}
+	return out
+}
+
+// allowedModules lists the modules a scan without an explicit list runs:
+// all of them, minus the active ones on an offer without active modules.
+func (s *Server) allowedModules(p plan.Plan) []string {
+	if p.ActiveModules {
+		return s.cfg.Modules
+	}
+	active := s.activeModules(s.cfg.Modules)
+	var out []string
+	for _, id := range s.cfg.Modules {
+		if !slices.Contains(active, id) {
+			out = append(out, id)
 		}
 	}
 	return out

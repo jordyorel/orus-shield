@@ -252,6 +252,18 @@ Alerts: a scan that opens or reopens critical or high findings queues one email 
 admin in the `notifications` outbox (migration 0012), in FinishScan's transaction; the worker
 process delivers it (package `notify`: lease, retries at 1 min, 5 min, 30 min, 2 h, dropped
 after a day). The worker needs the same `ORUS_SMTP_*` and `ORUS_PUBLIC_URL` as the API.
+A domain's first finished scan also queues one `first_scan` summary per activated admin (score,
+open findings by severity, names found; every offer, email switch applies; migration 0024).
+
+First scans are light (decided 2026-11-17): nothing is scanned for a customer before a domain is
+verified, not even passively (an unverified domain may be someone else's: a report on it would be
+free reconnaissance). The API refuses a scan of an unverified domain (409) and the scheduler skips
+it (its slot passes); only `orusctl`, the operator's tool, still may. Verifying it queues one light
+scan: the quick profile's modules (no vulns, api or zap; switched-off modules left out), with ports
+(standard) only on an offer with active modules. Heavier modules wait for the schedule or a manual
+scan. `POST /targets/{target}/scans` without modules runs every module the offer allows (passive
+only on Gratuit). The dashboard checks the TXT record again by itself every 30 s for 10 minutes
+after a failed check.
 
 Known vulnerabilities: `deploy/nuclei/install.sh` installs the pinned Nuclei and templates
 in `.tools/nuclei` (git-ignored) and prints `ORUS_NUCLEI_BIN` and `ORUS_NUCLEI_TEMPLATES`

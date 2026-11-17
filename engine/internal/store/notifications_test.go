@@ -34,11 +34,11 @@ func (l *lifecycle) member(email, role string, activated bool) {
 	}
 }
 
-// pending returns the queued notifications, by recipient.
+// pending returns the queued new_findings notifications, by recipient.
 func (l *lifecycle) pending() map[string]NewFindingsAlert {
 	l.t.Helper()
 	rows, err := l.s.pool.Query(context.Background(),
-		"SELECT recipient, payload FROM notifications WHERE sent_at IS NULL AND failed_at IS NULL")
+		"SELECT recipient, payload FROM notifications WHERE sent_at IS NULL AND failed_at IS NULL AND kind = $1", NotifyNewFindings)
 	if err != nil {
 		l.t.Fatal(err)
 	}
@@ -134,6 +134,10 @@ func TestNotificationDelivery(t *testing.T) {
 	l.member("a@example.com", RoleAdmin, true)
 	l.member("b@example.com", RoleAdmin, true)
 	l.mustScan(t1, []string{"email"}, nil, withSeverity(makeFinding("email", "dmarc-missing", "example.com"), finding.SeverityHigh))
+	// The first scan's summaries are tested in TestFirstScanSummary.
+	if _, err := l.s.pool.Exec(ctx, "DELETE FROM notifications WHERE kind = $1", NotifyFirstScan); err != nil {
+		t.Fatal(err)
+	}
 
 	// A second ahead: the database stamps next_attempt_at with its own
 	// clock, which may run a few milliseconds ahead of ours (Docker VM).
@@ -166,5 +170,75 @@ func TestNotificationDelivery(t *testing.T) {
 	}
 	if err := l.s.MarkNotificationSent(ctx, "not-a-uuid", now); err == nil {
 		t.Error("bad id: nil error")
+	}
+}
+
+// firstScanSummaries returns the queued first_scan notifications, by
+// recipient.
+func (l *lifecycle) firstScanSummaries() map[string]FirstScanSummary {
+	l.t.Helper()
+	rows, err := l.s.pool.Query(context.Background(),
+		"SELECT recipient, payload FROM notifications WHERE kind = $1", NotifyFirstScan)
+	if err != nil {
+		l.t.Fatal(err)
+	}
+	defer rows.Close()
+	out := map[string]FirstScanSummary{}
+	for rows.Next() {
+		var to string
+		var raw []byte
+		if err := rows.Scan(&to, &raw); err != nil {
+			l.t.Fatal(err)
+		}
+		var p FirstScanSummary
+		if err := json.Unmarshal(raw, &p); err != nil {
+			l.t.Fatal(err)
+		}
+		out[to] = p
+	}
+	return out
+}
+
+func TestFirstScanSummary(t *testing.T) {
+	l := newLifecycle(t)
+	l.member("admin@example.com", RoleAdmin, true)
+	l.member("pending-admin@example.com", RoleAdmin, false) // never activated: no email
+	l.member("viewer@example.com", RoleViewer, true)
+
+	crit := withSeverity(makeFinding("tls", "tls-cert-expired", "example.com"), finding.SeverityCritical)
+	medium := withSeverity(makeFinding("email", "spf-softfail", "example.com"), finding.SeverityMedium)
+	low := withSeverity(makeFinding("email", "dmarc-missing", "example.com"), finding.SeverityLow)
+
+	// The first scan to finish sends one summary per activated admin, with
+	// the open findings by severity, whatever the alert level.
+	l.mustScan(t1, []string{"email", "tls"}, nil, crit, medium, low)
+	got := l.firstScanSummaries()
+	if len(got) != 1 {
+		t.Fatalf("summaries to %v, want admin@example.com only", slices.Collect(maps.Keys(got)))
+	}
+	p := got["admin@example.com"]
+	if p.Critical != 1 || p.High != 0 || p.Medium != 1 || p.Low != 1 || p.Domain != "example.com" ||
+		p.OrgName != "Default" || p.OrgID != l.org.ID() || p.ScanID == "" {
+		t.Errorf("summary = %+v", p)
+	}
+
+	// Later scans send none, even with new findings.
+	l.clearNotifications()
+	l.mustScan(t2, []string{"email", "tls"}, nil, crit, medium, low, withSeverity(makeFinding("email", "spf-missing", "example.com"), finding.SeverityHigh))
+	if got := l.firstScanSummaries(); len(got) != 0 {
+		t.Errorf("second scan queued summaries: %+v", got)
+	}
+}
+
+func TestFirstScanSummaryFollowsEmailSwitch(t *testing.T) {
+	l := newLifecycle(t)
+	l.member("admin@example.com", RoleAdmin, true)
+	if _, err := l.s.pool.Exec(context.Background(),
+		"INSERT INTO org_settings (org_id, email_alerts) VALUES ($1, false)", l.org.ID()); err != nil {
+		t.Fatal(err)
+	}
+	l.mustScan(t1, []string{"email", "tls"}, nil)
+	if got := l.firstScanSummaries(); len(got) != 0 {
+		t.Errorf("email switched off, summaries queued: %+v", got)
 	}
 }
