@@ -20,9 +20,9 @@ const me: Me = {
 };
 
 const plans: Plan[] = [
-  { id: "discovery", name: "Gratuit", domains: 1, hosts_per_scan: 5, members: 1, active_modules: false, max_frequency: "monthly", alerts: false, reports: false, threats: false, deep_scans: false, deep_scans_per_month: 0, api_scans: false, auth_scans: false, agents: false, usd_monthly: 0, usd_yearly: 0, on_quote: false },
-  { id: "sme", name: "Essentiel", domains: 3, hosts_per_scan: 25, members: 3, active_modules: true, max_frequency: "weekly", alerts: true, reports: true, threats: true, deep_scans: false, deep_scans_per_month: 0, api_scans: false, auth_scans: false, agents: false, usd_monthly: 35, usd_yearly: 29, on_quote: false },
-  { id: "pro", name: "Pro", domains: 15, hosts_per_scan: 25, members: 10, active_modules: true, max_frequency: "daily", alerts: true, reports: true, threats: true, deep_scans: true, deep_scans_per_month: 4, api_scans: true, auth_scans: true, agents: false, usd_monthly: 99, usd_yearly: 79, on_quote: false },
+  { id: "discovery", name: "Gratuit", domains: 1, hosts_per_scan: 5, members: 1, active_modules: false, monitoring: false, max_frequency: "", alerts: false, reports: false, threats: false, deep_scans: false, deep_scans_per_month: 0, api_scans: false, auth_scans: false, agents: false, usd_monthly: 0, usd_yearly: 0, on_quote: false },
+  { id: "sme", name: "Essentiel", domains: 3, hosts_per_scan: 25, members: 3, active_modules: true, monitoring: true, max_frequency: "weekly", alerts: true, reports: true, threats: true, deep_scans: false, deep_scans_per_month: 0, api_scans: false, auth_scans: false, agents: false, usd_monthly: 35, usd_yearly: 29, on_quote: false },
+  { id: "pro", name: "Pro", domains: 15, hosts_per_scan: 25, members: 10, active_modules: true, monitoring: true, max_frequency: "daily", alerts: true, reports: true, threats: true, deep_scans: true, deep_scans_per_month: 4, api_scans: true, auth_scans: true, agents: false, usd_monthly: 99, usd_yearly: 79, on_quote: false },
 ];
 
 const overview: Overview = {
@@ -255,6 +255,62 @@ describe("dashboard", () => {
     await waitFor(() => expect(screen.getByText("Marqué comme corrigé : +9 points")).toBeTruthy());
   });
 
+  describe("after the free audit", () => {
+    const free: Subscription = { ...subscription, plan: plans[0]!, status: "active", until: null, trial_available: true };
+
+    it("offers the trial instead of marking a problem fixed, and says Gratuit is a single audit", async () => {
+      const calls = orgRoutes({}, free);
+      renderAt(`/orgs/${ORG}/aujourdhui`);
+      expect(await screen.findByText(/Offre Gratuit : audit unique/)).toBeTruthy();
+      fireEvent.click(await screen.findByRole("button", { name: "Marquer « No DMARC record » comme fait" }));
+      expect(await screen.findByText("Faisons vérifier votre correction")).toBeTruthy();
+      expect(calls.some((c) => c.key.startsWith("PUT"))).toBe(false);
+    });
+
+    it("shows the offer page with the audit's own figures and the trial", async () => {
+      orgRoutes({}, free);
+      renderAt(`/orgs/${ORG}/offre`);
+      expect(await screen.findByText("Votre audit est prêt. Voici la suite.")).toBeTruthy();
+      expect(screen.getByText("No DMARC record", { selector: "b" })).toBeTruthy();
+      const trial = screen.getAllByRole("link", { name: "Essayer 14 jours" })[0]!;
+      expect(trial.getAttribute("href")).toBe(`/paiement?offre=sme&org=${ORG}`);
+    });
+
+    it("leads from the first scan's closing screen to the offer", async () => {
+      const kept = new Map<string, string>([[`orus.onboard.${ORG}`, "shown"]]);
+      vi.stubGlobal("localStorage", {
+        getItem: (k: string) => kept.get(k) ?? null,
+        setItem: (k: string, v: string) => void kept.set(k, v),
+        removeItem: (k: string) => void kept.delete(k),
+      });
+      orgRoutes({}, free);
+      renderAt(`/orgs/${ORG}/aujourdhui`);
+      fireEvent.click(await screen.findByRole("button", { name: "Voir mes résultats" }));
+      expect(await screen.findByText("Votre audit est prêt. Voici la suite.")).toBeTruthy();
+      expect(window.location.pathname).toBe(`/orgs/${ORG}/offre`);
+    });
+
+    it("turns a refused fix (audit used) into the offer", async () => {
+      // The offer in the browser is stale (paid), the API knows better.
+      const calls = orgRoutes({ [`PUT /orgs/${ORG}/targets/t1/findings/f1/status`]: fail(403, "single audit", "audit_used") });
+      renderAt(`/orgs/${ORG}/problemes`);
+      const check = await screen.findByRole("button", { name: "Marquer « No DMARC record » comme corrigé" });
+      await act(async () => {
+        fireEvent.click(check);
+      });
+      expect(await screen.findByText("Faisons vérifier votre correction")).toBeTruthy();
+      expect(calls.some((c) => c.key.startsWith("PUT"))).toBe(true);
+    });
+  });
+
+  it("unsubscribes from reminders with the link's token, after a click", async () => {
+    const calls = mockApi({ "GET /auth/me": fail(401, "no session"), "POST /unsubscribe": () => ({ status: 204 }) });
+    renderAt("/desinscription#token=tok-1");
+    fireEvent.click(await screen.findByRole("button", { name: "Me désinscrire" }));
+    expect(await screen.findByText("C’est fait.")).toBeTruthy();
+    expect(calls.find((c) => c.key === "POST /unsubscribe")?.body).toEqual({ token: "tok-1" });
+  });
+
   it("ticks an action of the day at once, keeps it in place, and undoes it if refused", async () => {
     let answer: (v: Response) => void = () => {};
     orgRoutes();
@@ -358,6 +414,23 @@ describe("dashboard", () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    it("ends with a closing screen for a customer who saw the card, then the results", async () => {
+      // This test environment has no localStorage: a small one in memory.
+      const kept = new Map<string, string>([[`orus.onboard.${ORG}`, "shown"]]);
+      vi.stubGlobal("localStorage", {
+        getItem: (k: string) => kept.get(k) ?? null,
+        setItem: (k: string, v: string) => void kept.set(k, v),
+        removeItem: (k: string) => void kept.delete(k),
+      });
+      orgRoutes({});
+      renderAt(`${base}/aujourdhui`);
+      expect(await screen.findByText("Votre premier scan est terminé.")).toBeTruthy();
+      expect(screen.getByRole("img", { name: "4 étapes faites sur 4" })).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Voir mes résultats" }));
+      expect(await screen.findByText("À faire aujourd’hui")).toBeTruthy();
+      expect(kept.get(`orus.onboard.${ORG}`)).toBe("closed");
     });
 
     it("waits for the first scan once the domain is verified", async () => {

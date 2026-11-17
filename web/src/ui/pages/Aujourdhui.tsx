@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Activity } from "../../api/types";
-import { Link } from "../../router";
+import { Link, navigate } from "../../router";
 import { appPath } from "../AppShell";
 import { Tick } from "../icons";
 import { COLOR, DIST, byPriority, feedDay, worst, type AssetView, type Issue } from "../model";
@@ -215,6 +215,13 @@ function FeedLine({ a, now }: { a: Activity; now: Date }) {
 
 type StepState = "done" | "cur" | "todo";
 
+/** summaryOf words the first scan's figures for the closing screen. */
+function summaryOf(score: number | null, open: number): string {
+  const sc = score === null ? "" : `Score de sécurité : ${score}/100. `;
+  const pb = open === 0 ? "Aucun problème à corriger pour le moment." : `${open} problème${open > 1 ? "s" : ""} à corriger, du plus urgent au moins urgent.`;
+  return sc + pb;
+}
+
 /** firstScan says where a new organization's first scan stands, from its
  * domains' scans: running (queued or running), failed (every one failed),
  * or none yet. */
@@ -232,8 +239,30 @@ function firstScan(data: { targets: { id: string; internal?: boolean }[]; scans:
  * finished: before that, they would show an empty, misleading picture.
  * Nothing is scanned before verification; the API then queues a light
  * first scan. */
-function Onboarding() {
-  const { org, data, isAdmin, reload } = useOrg();
+/** The Premiers pas card's state in this browser, per organization: "shown"
+ * once it has been displayed, "closed" once the customer has moved on to the
+ * results. Only a customer who saw the card gets its closing screen; a
+ * missing or blocked storage simply skips it. */
+const onboardKey = (orgId: string) => `orus.onboard.${orgId}`;
+function readOnboard(orgId: string): string {
+  try {
+    return window.localStorage.getItem(onboardKey(orgId)) ?? "";
+  } catch {
+    return "";
+  }
+}
+function writeOnboard(orgId: string, v: "shown" | "closed") {
+  try {
+    window.localStorage.setItem(onboardKey(orgId), v);
+  } catch {
+    // Private window or blocked storage: the closing screen is skipped.
+  }
+}
+
+/** finished: the first scan is done; the card shows every step ticked, the
+ * first figures and the way to the results (onDone). */
+function Onboarding({ finished = false, onDone }: { finished?: boolean; onDone?: () => void }) {
+  const { org, data, isAdmin, reload, issues } = useOrg();
   const { scanning, failed } = data ? firstScan(data) : { scanning: false, failed: false };
   // A scan running: reload now and then, so the screen fills by itself.
   useEffect(() => {
@@ -252,12 +281,14 @@ function Onboarding() {
     { title: "Prouvez qu’il est à vous", hint: "Un enregistrement TXT à ajouter dans sa zone DNS. Nous n’analysons que ce qui vous appartient.", s: state(verified, added) },
     {
       title: "Premier scan",
-      hint: scanning
-        ? "En cours, volontairement léger : cet écran se remplit dès qu’il est terminé, et vous recevez un résumé par email."
-        : failed
-          ? "Le scan n’a pas abouti. Relancez-le depuis Actifs."
-          : "Il démarre dès que le domaine est vérifié.",
-      s: state(false, verified),
+      hint: finished
+        ? "Terminé. Le résumé vous attend aussi par email."
+        : scanning
+          ? "En cours, volontairement léger : cet écran se remplit dès qu’il est terminé, et vous recevez un résumé par email."
+          : failed
+            ? "Le scan n’a pas abouti. Relancez-le depuis Actifs."
+            : "Il démarre dès que le domaine est vérifié.",
+      s: state(finished, verified),
     },
   ];
   const done = steps.filter((x) => x.s === "done").length;
@@ -284,7 +315,20 @@ function Onboarding() {
           </li>
         ))}
       </ol>
-      {!verified &&
+      {finished && (
+        <>
+          <p className="sub">
+            {summaryOf(data.overview.score, issues.filter((i) => !i.fixed).length)}
+          </p>
+          <div className="actions">
+            <button className="btn" type="button" onClick={onDone}>
+              Voir mes résultats
+            </button>
+          </div>
+        </>
+      )}
+      {!finished &&
+        !verified &&
         (isAdmin ? (
           <div className="rpanel addpanel">
             <AddPanel resume />
@@ -300,7 +344,7 @@ function Onboarding() {
         </p>
       )}
       <p className="hint">
-        Ensuite : qui reçoit les alertes, et votre équipe, dans{" "}
+        {finished ? "Et maintenant" : "Ensuite"} : qui reçoit les alertes, et votre équipe, dans{" "}
         <Link className="link" to={appPath(org.org_id, "reglages")}>
           Réglages
         </Link>
@@ -310,10 +354,42 @@ function Onboarding() {
   );
 }
 
+/** FreeBand reminds a free organization that its audit was a single one,
+ * and offers the trial. */
+function FreeBand() {
+  const { org, data } = useOrg();
+  if (!data) return null;
+  const done = data.scans
+    .filter((s) => s.status === "done" && s.finished_at)
+    .map((s) => s.finished_at as string)
+    .sort()[0];
+  const when = done ? ` du ${new Date(done).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}` : "";
+  const trial = data.subscription.trial_available;
+  return (
+    <div className="rpanel freeband" role="note">
+      <p>
+        <b>Offre Gratuit : audit unique{when}.</b> Plus rien n’est revérifié. {trial ? "Activez l’essai de 14 jours" : "Choisissez une offre"} pour un scan chaque
+        semaine et la vérification de vos corrections.
+      </p>
+      <Link className="btn" to={appPath(org.org_id, "offre")}>
+        {trial ? "Essayer 14 jours" : "Voir les offres"}
+      </Link>
+    </div>
+  );
+}
+
 export function AujourdhuiPage() {
-  const { me, data, issues, assets } = useOrg();
+  const { me, org, data, issues, assets } = useOrg();
   const { showSheet } = useUI();
   const fix = useFix();
+  const [onboard, setOnboard] = useState(() => readOnboard(org.org_id));
+  const beforeFirstScan = !!data && !data.scans.some((s) => s.status === "done") && data.assets.length === 0;
+  useEffect(() => {
+    if (beforeFirstScan && onboard === "") {
+      writeOnboard(org.org_id, "shown");
+      setOnboard("shown");
+    }
+  }, [beforeFirstScan, onboard, org.org_id]);
   // The three actions of the day are chosen once, when the screen opens
   // (the open problems that protect the most): ticking one keeps it in
   // place with its green check, as in the mockup.
@@ -341,8 +417,27 @@ export function AujourdhuiPage() {
           : `${left} actions vous séparent d’un périmètre plus sûr.`;
   const first = me.name.split(/\s+/)[0];
   const score = data.overview.score;
+  // The first scan just finished under the customer's eyes: the card's
+  // closing screen, until they move on to the results.
+  if (!beforeFirstScan && onboard === "shown") {
+    return (
+      <>
+        <p className="hello">{first ? `Bonjour ${first}` : "Bonjour"}</p>
+        <h1 className="lead">Votre premier scan est terminé.</h1>
+        <Onboarding
+          finished
+          onDone={() => {
+            writeOnboard(org.org_id, "closed");
+            setOnboard("closed");
+            // After the free audit, its results lead to the trial offer first.
+            if (!data.subscription.plan.monitoring) navigate(appPath(org.org_id, "offre"));
+          }}
+        />
+      </>
+    );
+  }
   // Nothing scanned yet: the Premiers pas card instead of an empty picture.
-  if (!data.scans.some((s) => s.status === "done") && data.assets.length === 0) {
+  if (beforeFirstScan) {
     const domains = data.targets.filter((t) => !t.internal);
     const { scanning, failed } = firstScan(data);
     return (
@@ -366,6 +461,7 @@ export function AujourdhuiPage() {
 
   return (
     <>
+      {!data.subscription.plan.monitoring && <FreeBand />}
       <div className="today">
         <div>
           <p className="hello">{first ? `Bonjour ${first}` : "Bonjour"}</p>

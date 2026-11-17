@@ -282,7 +282,10 @@ export interface Plan {
   hosts_per_scan: number;
   members: number;
   active_modules: boolean;
-  max_frequency: Frequency;
+  /** Scans after the first one; without it the offer is a single audit (Gratuit). */
+  monitoring: boolean;
+  /** "": no schedule (the single audit). */
+  max_frequency: Frequency | "";
   alerts: boolean;
   reports: boolean;
   threats: boolean;

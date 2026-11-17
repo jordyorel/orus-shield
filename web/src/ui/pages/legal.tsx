@@ -90,7 +90,9 @@ export function ConditionsPage() {
       </Article>
       <Article title="5. Offres, essai et paiement">
         <p>
-          Les offres et leurs limites sont décrites sur la page <Link to="/tarifs">Tarifs</Link>. Les offres Essentiel et Pro commencent par un essai gratuit
+          Les offres et leurs limites sont décrites sur la page <Link to="/tarifs">Tarifs</Link>. L’offre Gratuit est un audit unique d’un domaine : un
+          scan, dont les résultats restent consultables ; les scans suivants, dont la vérification des corrections, demandent une offre payante. Les offres
+          Essentiel et Pro commencent par un essai gratuit
           de 14 jours, une fois par organisation : le moyen de paiement est demandé au début de l’essai, et le premier prélèvement a lieu à sa fin, sauf
           annulation avant. Les abonnements payants sont vendus et encaissés par Paddle (Paddle.com Market Limited), notre revendeur officiel : la commande, le paiement
           par carte ou PayPal, les taxes et les factures relèvent de Paddle, selon ses propres conditions. Orus Shield ne voit ni ne conserve votre numéro de

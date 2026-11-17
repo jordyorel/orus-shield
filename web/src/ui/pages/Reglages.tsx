@@ -4,7 +4,7 @@ import type { DeclaredAPI, Member, OrgSettings, Plan, Role, Target, TestAccount 
 import { formatExclusions, parseExclusions } from "../../exclusions";
 import { Link } from "../../router";
 import { MODS, ModIcon, Soon } from "../icons";
-import { CloseButton, SevTag } from "../sheets";
+import { CloseButton, SevTag, UpsellSheet } from "../sheets";
 import { DAYS, byPriority, sinceText } from "../model";
 import { useOrg } from "../OrgData";
 import { useUI } from "../ui";
@@ -42,7 +42,7 @@ export function limitRows(plans: Plan[]): [string, ...string[]][] {
     ["Domaines", ...col((p) => n(p.domains, ""))],
     ["Actifs surveillés", ...col((p) => n(p.hosts_per_scan, "par domaine"))],
     ["Membres de l’équipe", ...col((p) => n(p.members, ""))],
-    ["Fréquence des scans", ...col((p) => freq[p.max_frequency])],
+    ["Fréquence des scans", ...col((p) => (p.max_frequency ? freq[p.max_frequency] : "Audit unique"))],
     ["Ports vérifiés", ...col((p) => (p.active_modules ? "50 ports courants" : "Aucun"))],
     ["Vulnérabilités connues", ...col((p) => (p.active_modules ? "Oui" : "Non"))],
     ["Analyse des API", ...col((p) => (p.api_scans ? "Oui" : "Non"))],
@@ -81,6 +81,11 @@ export function ReglagesPage() {
   const save = (next: OrgSettings, delay = 0) => {
     if (!isAdmin) {
       toast("Réservé aux administrateurs");
+      return;
+    }
+    // After the free audit no schedule runs: the trial offer instead.
+    if (!plan.monitoring && next.frequency && (next.frequency !== s.frequency || next.weekday !== s.weekday || next.hour !== s.hour)) {
+      showSheet(<UpsellSheet what="scan" />);
       return;
     }
     const prev = s;

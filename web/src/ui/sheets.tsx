@@ -7,6 +7,7 @@ import { api, ApiError } from "../api/client";
 import type { Scan } from "../api/types";
 import { Close, NavIcon, Tick } from "./icons";
 import { CATS, RANK, SEV, STATE_LABEL, catState, evaluatedCats, worst, type Issue, type SevOrOk } from "./model";
+import { Link } from "../router";
 import { useOrg } from "./OrgData";
 import { useUI } from "./ui";
 
@@ -16,6 +17,53 @@ export function SevTag({ s, label }: { s: SevOrOk; label?: string | undefined })
       <i />
       {label ?? SEV[s][0]}
     </span>
+  );
+}
+
+/** isAuditUsed: the API refused because the free offer's single audit is
+ * used (code audit_used). */
+export function isAuditUsed(e: unknown): boolean {
+  return e instanceof ApiError && e.code === "audit_used";
+}
+
+const UPSELL: Record<"fix" | "scan", [string, string]> = {
+  fix: [
+    "Faisons vérifier votre correction",
+    "Votre audit gratuit est terminé. Pour qu’un nouveau scan confirme votre correction et que votre score remonte, activez l’essai de l’offre Essentiel.",
+  ],
+  scan: [
+    "Relancez le scan avec l’essai",
+    "Votre audit gratuit est terminé. Pour scanner à nouveau, chaque semaine, ports et vulnérabilités connues compris, activez l’essai de l’offre Essentiel.",
+  ],
+};
+
+/** UpsellSheet answers an action the free offer's single audit does not
+ * include (verify a fix, scan again) with the trial offer. */
+export function UpsellSheet({ what }: { what: "fix" | "scan" }) {
+  const { org, data } = useOrg();
+  const { closeAll } = useUI();
+  const [title, text] = UPSELL[what];
+  const trial = data?.subscription.trial_available ?? true;
+  return (
+    <>
+      <div className="shead">
+        <span />
+        <CloseButton />
+      </div>
+      <h2 id="sheet-title">{title}</h2>
+      <p className="sub">{text}</p>
+      <ul className="upsell">
+        <li>Un scan complet chaque semaine</li>
+        <li>La vérification de chaque correction</li>
+        <li>Les alertes par email et les rapports PDF</li>
+      </ul>
+      {trial && <p className="sub">14 jours d’essai : aucun prélèvement avant la fin, annulable en un clic.</p>}
+      <div className="actions">
+        <Link className="btn" to={`/orgs/${encodeURIComponent(org.org_id)}/offre`} onClick={closeAll}>
+          {trial ? "Essayer 14 jours" : "Choisir une offre"}
+        </Link>
+      </div>
+    </>
   );
 }
 
@@ -44,19 +92,25 @@ export async function waitScan(orgId: string, scanId: string, limitMs = 180_000)
 
 /** useFix marks a problem fixed or reopens it, with the mockup's toasts. */
 export function useFix() {
-  const { setStatus, isAdmin } = useOrg();
-  const { toast } = useUI();
+  const { setStatus, isAdmin, data } = useOrg();
+  const { toast, showSheet } = useUI();
   return async (i: Issue) => {
     if (!isAdmin) {
       toast("Réservé aux administrateurs");
       return;
     }
     const fixing = !i.fixed;
+    // A fix is verified by a scan: after the free audit, that needs an offer.
+    if (fixing && data && !data.subscription.plan.monitoring) {
+      showSheet(<UpsellSheet what="fix" />);
+      return;
+    }
     toast(fixing ? `Marqué comme corrigé : +${i.gain} points` : "Rouvert");
     try {
       await setStatus(i, fixing ? "fixed" : "open");
     } catch (e) {
-      toast(e instanceof ApiError && e.status === 403 ? "Réservé aux administrateurs" : "Impossible pour le moment, réessayez");
+      if (isAuditUsed(e)) showSheet(<UpsellSheet what="fix" />);
+      else toast(e instanceof ApiError && e.status === 403 ? "Réservé aux administrateurs" : "Impossible pour le moment, réessayez");
     }
   };
 }
@@ -114,7 +168,8 @@ export function FindingSheet({ id, targetId }: { id: string; targetId: string })
         toast(now && now.status === "open" ? "Toujours présent au dernier contrôle" : "Confirmé : le problème a disparu");
       }
     } catch (e) {
-      toast(e instanceof ApiError && e.code === "plan_limit" ? "Ce contrôle n’est pas inclus dans votre offre" : "Impossible de vérifier pour le moment");
+      if (isAuditUsed(e)) showSheet(<UpsellSheet what="scan" />);
+      else toast(e instanceof ApiError && e.code === "plan_limit" ? "Ce contrôle n’est pas inclus dans votre offre" : "Impossible de vérifier pour le moment");
     } finally {
       setChecking(false);
     }
@@ -259,8 +314,9 @@ export function AssetSheet({ n }: { n: string }) {
         const fresh = done?.new_findings ?? 0;
         toast(fresh ? `Scan terminé : ${fresh} nouveau${fresh > 1 ? "x" : ""} problème${fresh > 1 ? "s" : ""}` : "Scan terminé : rien de nouveau");
       }
-    } catch {
-      toast("Impossible de lancer le scan pour le moment");
+    } catch (e) {
+      if (isAuditUsed(e)) showSheet(<UpsellSheet what="scan" />);
+      else toast("Impossible de lancer le scan pour le moment");
     } finally {
       setScanning(false);
     }

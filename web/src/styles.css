@@ -61,6 +61,13 @@ main{padding:8px 18px 110px;max-width:1080px;width:100%;margin:0 auto}
 .steps li.done{opacity:1}
 .steps li.done .t{text-decoration:none;color:var(--ink2)}
 .onboard .addpanel{margin-top:16px}
+.freeband{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between;margin:4px 0 18px;padding:16px 20px}
+.freeband p{flex:1 1 320px;margin:0}
+.offer{margin-top:22px}
+.offer-note{text-align:center;margin-top:14px}
+.upsell{list-style:none;padding:0;margin:12px 0;display:grid;gap:9px}
+.upsell li{padding-left:22px;position:relative}
+.upsell li::before{content:"";position:absolute;left:2px;top:7px;width:10px;height:6px;border-left:2px solid var(--lagon);border-bottom:2px solid var(--lagon);transform:rotate(-45deg)}
 .onboard>.hint{margin-top:14px}
 .done .check svg{opacity:1;transform:none}
 .todo .t{font-weight:600}

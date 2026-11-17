@@ -29,7 +29,7 @@ function AuthAside({ kind }: { kind: "in" | "up" }) {
   const lines: [string, string][] =
     kind === "up"
       ? [
-          ["Gratuit pour commencer", "Un domaine, sans carte bancaire."],
+          ["Un audit gratuit pour commencer", "Un domaine, sans carte bancaire."],
           ["Votre premier résultat en 5 minutes", "Contrôles passifs dès l’inscription."],
           ["Payez quand vous voulez", "Carte ou PayPal, sans engagement."],
         ]
@@ -496,7 +496,7 @@ export function InscriptionPage() {
       {step === "form" ? (
         <>
           <h1>Créez votre compte.</h1>
-          <p className="sub">{offer ? `Offre ${offer} choisie. Vous paierez à la fin, après 14 jours d’essai.` : "Gratuit, sans carte bancaire. Votre premier résultat dans 5 minutes."}</p>
+          <p className="sub">{offer ? `Offre ${offer} choisie. Vous paierez à la fin, après 14 jours d’essai.` : "Audit gratuit de votre domaine, sans carte bancaire. Votre premier résultat dans 5 minutes."}</p>
           <form ref={form} className="aform" noValidate onSubmit={(e) => void submit(e)}>
             <div className="field">
               <label htmlFor="su-email">Adresse email professionnelle</label>
@@ -763,6 +763,49 @@ export function MfaSetupPage() {
   return (
     <AuthLayout aside="in" anim={step.kind} top={<span />}>
       {body}
+    </AuthLayout>
+  );
+}
+
+/** UnsubscribePage is the unsubscribe link of the trial reminders
+ * (/desinscription#token=). It asks for a click: mail scanners that open
+ * links must not unsubscribe anyone. */
+export function UnsubscribePage() {
+  const [token] = useState(tokenFromFragment);
+  const [state, setState] = useState<"ask" | "busy" | "done" | "bad" | "error">(token ? "ask" : "bad");
+  const go = async () => {
+    setState("busy");
+    try {
+      await api.unsubscribe(token);
+      setState("done");
+    } catch (e) {
+      setState(e instanceof ApiError && e.status === 404 ? "bad" : "error");
+    }
+  };
+  return (
+    <AuthLayout aside="in" anim={state} top={null}>
+      {state === "done" ? (
+        <>
+          <h1>C’est fait.</h1>
+          <p className="sub">Vous ne recevrez plus nos rappels sur l’essai. Les alertes de sécurité de votre compte ne changent pas.</p>
+        </>
+      ) : state === "bad" ? (
+        <>
+          <h1>Ce lien ne fonctionne pas.</h1>
+          <p className="sub">Il est incomplet ou n’existe pas. Utilisez le lien de votre dernier email.</p>
+        </>
+      ) : (
+        <>
+          <h1>Ne plus recevoir nos rappels ?</h1>
+          <p className="sub">Nous arrêterons les rappels sur l’essai gratuit. Les alertes de sécurité de votre compte ne changent pas.</p>
+          <p className="err" role="alert">
+            {state === "error" ? "Impossible pour le moment. Réessayez dans un instant." : ""}
+          </p>
+          <button className="btn wide" type="button" disabled={state === "busy"} onClick={() => void go()}>
+            Me désinscrire
+          </button>
+        </>
+      )}
     </AuthLayout>
   );
 }

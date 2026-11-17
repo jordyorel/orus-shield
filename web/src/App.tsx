@@ -5,7 +5,8 @@ import { appPath, AppShell } from "./ui/AppShell";
 import { OrgProvider, useOrg } from "./ui/OrgData";
 import { ActifsPage } from "./ui/pages/Actifs";
 import { AujourdhuiPage } from "./ui/pages/Aujourdhui";
-import { ConnexionPage, InscriptionPage, MfaSetupPage, SetPasswordPage, takeOffer } from "./ui/pages/auth";
+import { ConnexionPage, InscriptionPage, MfaSetupPage, SetPasswordPage, takeOffer, UnsubscribePage } from "./ui/pages/auth";
+import { OffrePage } from "./ui/pages/Offre";
 import { ProblemesPage } from "./ui/pages/Problemes";
 import { ProfilPage } from "./ui/pages/Profil";
 import { ConditionsPage, ConfidentialitePage, TraitementPage } from "./ui/pages/legal";
@@ -21,6 +22,8 @@ const VIEWS: Record<string, () => ReactNode> = {
   rapports: () => <RapportsPage />,
   reglages: () => <ReglagesPage />,
   profil: () => <ProfilPage />,
+  // Not a tab: the trial offer after the free audit.
+  offre: () => <OffrePage />,
 };
 
 /** Paths of the previous dashboard, still reachable from old emails and bookmarks. */
@@ -65,6 +68,7 @@ export function App() {
     return <Page><InscriptionPage /></Page>;
   }
   if (path === "/paiement") return <Page><PaiementPage /></Page>;
+  if (path === "/desinscription") return <Page><UnsubscribePage /></Page>;
   if (state.status === "signed-out") return <Redirect to="/connexion" />;
 
   const me = state.me;

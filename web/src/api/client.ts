@@ -94,6 +94,8 @@ export const api = {
   scan: (orgId: string, scanId: string, signal?: AbortSignal) =>
     request<Scan>("GET", `${org(orgId)}/scans/${encodeURIComponent(scanId)}`, undefined, signal),
   plans: (signal?: AbortSignal) => request<List<Plan>>("GET", "/plans", undefined, signal),
+  /** unsubscribe stops the trial reminders sent to the address of a link's token. */
+  unsubscribe: (token: string) => request<void>("POST", "/unsubscribe", { token }),
   subscription: (orgId: string, signal?: AbortSignal) => request<Subscription>("GET", `${org(orgId)}/subscription`, undefined, signal),
   settings: (orgId: string, signal?: AbortSignal) => request<OrgSettings>("GET", `${org(orgId)}/settings`, undefined, signal),
   saveSettings: (orgId: string, s: OrgSettings) => request<OrgSettings>("PUT", `${org(orgId)}/settings`, s),

@@ -100,9 +100,9 @@ export function price(p: Plan | undefined, bill: Bill): string {
 /** features describes an offer in the cards of Tarifs and Paiement. */
 export function features(p: Plan | undefined): string[] {
   if (!p) return [];
-  const freq = { monthly: "Un scan par mois", weekly: "Scan chaque semaine", daily: "Scan chaque jour" }[p.max_frequency];
+  const freq = p.max_frequency ? { monthly: "Un scan par mois", weekly: "Scan chaque semaine", daily: "Scan chaque jour" }[p.max_frequency] : "";
   const doms = `${p.domains} domaine${p.domains > 1 ? "s" : ""}`;
-  if (!p.active_modules) return [doms, "Contrôles passifs", freq];
+  if (!p.monitoring) return [`Un audit de ${doms}`, "Contrôles passifs", "Score et plan d’action"];
   return [
     `${doms} vérifié${p.domains > 1 ? "s" : ""}, ${p.hosts_per_scan} actifs par domaine`,
     `${freq}, 50 ports courants`,
@@ -138,7 +138,7 @@ export function AccueilPage() {
                 </button>
               </div>
               <p className="err" role="alert" />
-              <p className="sub">Gratuit, sans carte. Contrôles passifs seulement : rien n’est envoyé vers vos serveurs.</p>
+              <p className="sub">Audit gratuit, sans carte. Contrôles passifs seulement : rien n’est envoyé vers vos serveurs.</p>
             </div>
             <div className="herovis">
               <HeroRadar />
@@ -220,7 +220,7 @@ export function AccueilPage() {
 
           <section className="band cta">
             <h2>Essentiel à partir de {price(ess, "mois")} par mois</h2>
-            <p className="sub">Une offre gratuite pour commencer. Paiement par carte ou PayPal.</p>
+            <p className="sub">Un audit gratuit pour commencer. Paiement par carte ou PayPal.</p>
             <div className="actions" style={{ justifyContent: "center" }}>
               <Link className="btn" to="/tarifs">
                 Voir les tarifs
@@ -243,7 +243,7 @@ export function TarifsPage() {
   const [bill, setBill] = useState<Bill>("mois");
   const by = (id: Plan["id"]) => plans.find((p) => p.id === id);
   const cards: [Plan | undefined, string, string, string, boolean, string][] = [
-    [by("discovery"), "Gratuit", "Pour voir où vous en êtes.", "Commencer", false, ""],
+    [by("discovery"), "Gratuit", "Un audit pour voir où vous en êtes.", "Auditer mon domaine", false, ""],
     [by("sme"), "Essentiel", "Pour une petite entreprise.", "Essayer 14 jours", true, "sme"],
     [by("pro"), "Pro", "Pour ceux qui ont un informaticien.", "Essayer 14 jours", false, "pro"],
   ];
@@ -277,7 +277,7 @@ export function TarifsPage() {
               <p className="md">{d}</p>
               <p className="price">
                 <b>{n === "Gratuit" ? money(0) : price(p, bill)}</b>
-                <span>{n === "Gratuit" ? "pour toujours" : bill === "an" ? "par mois, payé à l’année" : "par mois"}</span>
+                <span>{n === "Gratuit" ? "un audit, sans carte" : bill === "an" ? "par mois, payé à l’année" : "par mois"}</span>
               </p>
               <ul>
                 {features(p).map((f) => (
