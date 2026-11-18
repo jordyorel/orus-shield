@@ -416,6 +416,21 @@ our code through gateproxy (ZAP's per-user requests drop the proxy credential) a
 passed to ZAP as a Cookie header; headers go through ZAP_AUTH_HEADER* from an `--env-file`
 (mode 0600, never in the plan). Logout pages are excluded; an expired session is not renewed.
 
+Public API (2026-11-18, Pro and Sur devis, plan.PublicAPI): an organization's admin creates API keys
+in Réglages > API (`/orgs/{org}/apikeys`, migration 0031; `ui/pages/ApiKeys.tsx`: the keys as a list,
+"+ Créer une clé" in a side sheet, the new key once in a callout, a quick start in curl, Python and
+JavaScript): a name, a scope ("read" or "write") and an optional expiry. The key (`orus_…`) is shown once; only its SHA-256 and its first characters are
+stored. Tools call the dashboard's own routes with `Authorization: Bearer orus_…` (`withOrgOrKey`): any
+key reads the organization's read routes; a "write" key may also start a scan and change a finding's
+status; everything else (members, billing, settings, test accounts, agents, the audit log, the keys
+themselves) needs a signed-in admin and answers 401 to a key. A key reaches only its organization (404
+elsewhere), stops working when the offer no longer includes the API (403 plan_limit), is limited to
+120 requests per minute (in the API process), and appears in the audit log as `api_key:<name>`. The
+API looks keys up through `orus_auth` (it records the last use, at most once a minute); organizations
+manage them through `orus_app` with row-level security. Browsers' CSRF protection does not apply to
+these requests (no Sec-Fetch-Site), and a page cannot use a key it does not know. Next: OpenAPI
+documentation, signed outgoing webhooks, Slack and Teams.
+
 Internal agents (step J, Sur devis, plan.Agents): an admin creates an agent in Actifs >
 Réseaux internes with a name and private ranges (RFC 1918 or IPv6 ULA, at most a /20; migration
 0021). It gets its internal network (a target with `internal`, verified by the enrolment: the

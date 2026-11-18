@@ -21,7 +21,7 @@ export const NAV: [string, string][] = [
 export const appPath = (orgId: string, view: string) => `/orgs/${encodeURIComponent(orgId)}/${view}`;
 
 /** The sections of Réglages (?s=), "scans" being the default. */
-export type SettingsSection = "scans" | "domaines" | "alertes" | "equipe" | "abonnement" | "apparence";
+export type SettingsSection = "scans" | "domaines" | "alertes" | "equipe" | "api" | "abonnement" | "apparence";
 
 /** settingsPath is the address of one section of Réglages. */
 export function settingsPath(orgId: string, s: SettingsSection): string {

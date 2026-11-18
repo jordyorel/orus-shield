@@ -104,6 +104,10 @@ type Server struct {
 	// orus_public); quickSlots bounds the tests running at once.
 	public     *store.Public
 	quickSlots chan struct{}
+	// keys checks the API keys of the public API (role orus_auth);
+	// keyLimit bounds each key's requests.
+	keys     *store.Auth
+	keyLimit keyLimiter
 }
 
 // New returns the API server on st. It keeps only st's authentication
@@ -129,7 +133,7 @@ func New(st *store.Store, cfg Config, log *slog.Logger) (*Server, error) {
 		cfg.QuickTest = quickRunner(cfg.DNS)
 	}
 	srv := &Server{acct: acct, org: st.Org, cfg: cfg, log: log, agents: st.Agents(), billing: st.Billing(), unsub: st.Auth(),
-		public: st.Public(), quickSlots: make(chan struct{}, quickSlots)}
+		public: st.Public(), quickSlots: make(chan struct{}, quickSlots), keys: st.Auth()}
 	if len(cfg.CredentialsKey) > 0 {
 		if srv.creds, err = seal.NewKey(cfg.CredentialsKey); err != nil {
 			return nil, fmt.Errorf("api: credentials key: %w", err)

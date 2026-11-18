@@ -101,6 +101,14 @@ export const Fold = () => (
   </svg>
 );
 
+/** KeyIcon: an API key. */
+export const KeyIcon = ({ size = 20 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="8" cy="15" r="4" />
+    <path d="M10.85 12.15 19 4M15 8l3 3M17 6l2 2" />
+  </svg>
+);
+
 export const Lock = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
     <rect x="5" y="11" width="14" height="9" rx="2" />

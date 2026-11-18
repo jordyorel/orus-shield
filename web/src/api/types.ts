@@ -307,6 +307,8 @@ export interface Plan {
   deep_scans_per_month: number;
   /** Declared APIs are scanned (step H). */
   api_scans: boolean;
+  /** public_api: API keys for the organization's own tools (Réglages > API). */
+  public_api: boolean;
   /** Scans can log in with a test account (step I). */
   auth_scans: boolean;
   /** Internal networks scanned by agents (step J). */
@@ -461,4 +463,18 @@ export interface QuickResult {
   checks: QuickCheck[];
   problems: QuickProblem[];
   unreached: string[];
+}
+
+/** apiKeyJSON: a key as the organization sees it, never the key itself. */
+export interface APIKey {
+  id: string;
+  name: string;
+  /** prefix: the key's first characters, to tell keys apart. */
+  prefix: string;
+  scope: "read" | "write";
+  created_by: string;
+  created_at: string;
+  expires_at: string | null;
+  last_used_at: string | null;
+  revoked_at: string | null;
 }

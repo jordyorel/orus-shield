@@ -23,9 +23,9 @@ const me: Me = {
 };
 
 const plans: Plan[] = [
-  { id: "discovery", name: "Gratuit", domains: 1, hosts_per_scan: 5, members: 1, active_modules: false, monitoring: false, max_frequency: "", alerts: false, reports: false, threats: false, deep_scans: false, deep_scans_per_month: 0, api_scans: false, auth_scans: false, agents: false, usd_monthly: 0, usd_yearly: 0, on_quote: false },
-  { id: "sme", name: "Essentiel", domains: 3, hosts_per_scan: 25, members: 3, active_modules: true, monitoring: true, max_frequency: "weekly", alerts: true, reports: true, threats: true, deep_scans: false, deep_scans_per_month: 0, api_scans: false, auth_scans: false, agents: false, usd_monthly: 35, usd_yearly: 29, on_quote: false },
-  { id: "pro", name: "Pro", domains: 15, hosts_per_scan: 25, members: 10, active_modules: true, monitoring: true, max_frequency: "daily", alerts: true, reports: true, threats: true, deep_scans: true, deep_scans_per_month: 4, api_scans: true, auth_scans: true, agents: false, usd_monthly: 99, usd_yearly: 79, on_quote: false },
+  { id: "discovery", name: "Gratuit", domains: 1, hosts_per_scan: 5, members: 1, active_modules: false, monitoring: false, max_frequency: "", alerts: false, reports: false, threats: false, deep_scans: false, deep_scans_per_month: 0, api_scans: false, public_api: false, auth_scans: false, agents: false, usd_monthly: 0, usd_yearly: 0, on_quote: false },
+  { id: "sme", name: "Essentiel", domains: 3, hosts_per_scan: 25, members: 3, active_modules: true, monitoring: true, max_frequency: "weekly", alerts: true, reports: true, threats: true, deep_scans: false, deep_scans_per_month: 0, api_scans: false, public_api: false, auth_scans: false, agents: false, usd_monthly: 35, usd_yearly: 29, on_quote: false },
+  { id: "pro", name: "Pro", domains: 15, hosts_per_scan: 25, members: 10, active_modules: true, monitoring: true, max_frequency: "daily", alerts: true, reports: true, threats: true, deep_scans: true, deep_scans_per_month: 4, api_scans: true, public_api: true, auth_scans: true, agents: false, usd_monthly: 99, usd_yearly: 79, on_quote: false },
 ];
 
 const overview: Overview = {
@@ -434,6 +434,37 @@ describe("dashboard", () => {
     expect(screen.getByText("DMARC record published")).toBeTruthy();
     expect(screen.getByText("Vos emails")).toBeTruthy();
     expect(screen.getByText("Enregistrement SPF publié")).toBeTruthy();
+  });
+
+  it("offers API keys from the Pro plan, and shows a new key once", async () => {
+    orgRoutes({ [`GET /orgs/${ORG}/members`]: ok({ items: [] }) });
+    renderAt(`/orgs/${ORG}/reglages?s=api`);
+    expect(await screen.findByText("Inclus dans les offres Pro et Sur devis.")).toBeTruthy();
+
+    const pro: Subscription = { ...subscription, plan: plans[2]!, status: "active", until: null };
+    const key = { id: "k1", name: "CI", prefix: "orus_abcdefg", scope: "read", created_by: "user:jordy@example.cg", created_at: "2026-11-18T10:00:00Z", expires_at: null, last_used_at: null, revoked_at: null };
+    let created = false;
+    const calls = orgRoutes(
+      {
+        [`GET /orgs/${ORG}/members`]: ok({ items: [] }),
+        [`GET /orgs/${ORG}/apikeys`]: () => ({ status: 200, json: { items: created ? [key] : [] } }),
+        [`POST /orgs/${ORG}/apikeys`]: () => {
+          created = true;
+          return { status: 201, json: { key, secret: "orus_abcdefg_the_whole_secret" } };
+        },
+      },
+      pro,
+    );
+    renderAt(`/orgs/${ORG}/reglages?s=api`);
+    expect(await screen.findByText("Aucune clé pour l’instant.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "+ Créer une clé" }));
+    fireEvent.change(await screen.findByLabelText("Nom"), { target: { value: "CI" } });
+    fireEvent.click(screen.getByRole("button", { name: "Créer la clé" }));
+    expect(await screen.findByText("orus_abcdefg_the_whole_secret")).toBeTruthy();
+    expect(calls.find((c) => c.key === `POST /orgs/${ORG}/apikeys`)?.body).toEqual({ name: "CI", scope: "read", expires_in_days: 0 });
+    fireEvent.click(screen.getByRole("button", { name: "J’ai copié la clé" }));
+    expect(screen.queryByText("orus_abcdefg_the_whole_secret")).toBeNull();
+    expect(screen.getByText("orus_abcdefg…")).toBeTruthy();
   });
 
   it("lists the domains, then offers to add one", async () => {

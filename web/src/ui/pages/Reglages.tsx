@@ -11,6 +11,7 @@ import { byPriority, dayName, money, sinceText } from "../model";
 import { useOrg } from "../OrgData";
 import { useUI } from "../ui";
 import { AddDomainRow } from "./Actifs";
+import { ApiKeysSection } from "./ApiKeys";
 
 /** The mockup's day buttons start on Monday; the API's weekday 0 is Sunday. */
 const toApiDay = (i: number) => (i + 1) % 7;
@@ -56,6 +57,7 @@ export function limitRows(plans: Plan[]): [string, ...string[]][] {
     [tr("Ports vérifiés", "Ports checked"), ...col((p) => (p.active_modules ? tr("50 ports courants", "50 common ports") : tr("Aucun", "None")))],
     [tr("Vulnérabilités connues", "Known vulnerabilities"), ...col((p) => (p.active_modules ? yes : no))],
     [tr("Analyse des API", "API testing"), ...col((p) => (p.api_scans ? yes : no))],
+    [tr("API publique (clés d’accès)", "Public API (access keys)"), ...col((p) => (p.public_api ? yes : no))],
     [tr("Scan authentifié (compte de test)", "Authenticated scan (test account)"), ...col((p) => (p.auth_scans ? yes : no))],
     [tr("Réseaux internes (agents)", "Internal networks (agents)"), ...col((p) => (p.agents ? yes : tr("Sur devis", "Custom plan")))],
     [tr("Fuites de données", "Data leaks"), soon, soon, soon],
@@ -85,6 +87,7 @@ const SECTIONS = [
   labeled<SettingsSection>("domaines", "Domaines", "Domains"),
   labeled<SettingsSection>("alertes", "Alertes", "Alerts"),
   labeled<SettingsSection>("equipe", "Équipe", "Team"),
+  labeled<SettingsSection>("api", "API", "API"),
   labeled<SettingsSection>("abonnement", "Abonnement", "Subscription"),
   labeled<SettingsSection>("apparence", "Apparence", "Appearance"),
 ];
@@ -582,6 +585,7 @@ export function ReglagesPage() {
         </>
       )}
       {sec === "equipe" && <Team />}
+      {sec === "api" && <ApiKeysSection />}
 
       {sec === "abonnement" && (
         <>

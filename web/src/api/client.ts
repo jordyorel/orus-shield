@@ -1,4 +1,4 @@
-import type { Activity, Agent, DeclaredAPI, TestAccount, AuthActivity, Check, DeviceSession, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, OrgSettings, Overview, Plan, QuickProblem, QuickResult, RecoveryCodes, Role, Scan, ScheduleInput, Subscription, Target } from "./types";
+import type { Activity, Agent, APIKey, DeclaredAPI, TestAccount, AuthActivity, Check, DeviceSession, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, OrgSettings, Overview, Plan, QuickProblem, QuickResult, RecoveryCodes, Role, Scan, ScheduleInput, Subscription, Target } from "./types";
 import type { Exclusions } from "../exclusions";
 import { getLang } from "../i18n";
 
@@ -116,6 +116,10 @@ export const api = {
   unlockQuickTest: (id: string, email: string, marketing: boolean) =>
     request<{ problems: QuickProblem[]; emailed: boolean }>("POST", `/quicktest/${encodeURIComponent(id)}/unlock`, { email, marketing }),
   billingPortal: (orgId: string) => request<{ url: string }>("POST", `${org(orgId)}/billing/portal`),
+  apiKeys: (orgId: string) => request<List<APIKey>>("GET", `${org(orgId)}/apikeys`),
+  createApiKey: (orgId: string, name: string, scope: "read" | "write", expiresInDays: number) =>
+    request<{ key: APIKey; secret: string }>("POST", `${org(orgId)}/apikeys`, { name, scope, expires_in_days: expiresInDays }),
+  revokeApiKey: (orgId: string, id: string) => request<void>("DELETE", `${org(orgId)}/apikeys/${encodeURIComponent(id)}`),
   /** billingSync records the subscription of a finished checkout at once, without waiting for Paddle's webhook. */
   billingSync: (orgId: string, transactionId: string) =>
     request<{ state: "active" | "pending" }>("POST", `${org(orgId)}/billing/sync`, { transaction_id: transactionId }),

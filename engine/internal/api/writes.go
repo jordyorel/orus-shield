@@ -47,8 +47,14 @@ func (s *Server) writeRoutes(mux *http.ServeMux) {
 	write("PATCH "+base+"/targets/{target}", s.targetOnly(s.updateTarget))
 	write("POST "+base+"/targets/{target}/verification", s.targetOnly(s.verificationInstructions))
 	write("POST "+base+"/targets/{target}/verify", s.targetOnly(s.verifyTarget))
-	write("POST "+base+"/targets/{target}/scans", s.targetOnly(s.startScan))
-	write("PUT "+base+"/targets/{target}/findings/{finding}/status", s.targetOnly(s.setFindingStatus))
+	// The only writes an API key may make ("write" keys): start a scan and
+	// change a finding's status.
+	mux.HandleFunc("POST "+base+"/targets/{target}/scans", s.withOrgOrKey(store.RoleAdmin, store.ScopeWrite, s.targetOnly(s.startScan)))
+	mux.HandleFunc("PUT "+base+"/targets/{target}/findings/{finding}/status", s.withOrgOrKey(store.RoleAdmin, store.ScopeWrite, s.targetOnly(s.setFindingStatus)))
+	// API keys are managed by a signed-in admin only, never with a key.
+	write("GET "+base+"/apikeys", s.listAPIKeys)
+	write("POST "+base+"/apikeys", s.createAPIKey)
+	write("DELETE "+base+"/apikeys/{key}", s.revokeAPIKey)
 	// The audit log names who did what: admins only, like writes.
 	write("GET "+base+"/audit", s.auditLog)
 }
@@ -58,7 +64,12 @@ func (s *Server) writeRoutes(mux *http.ServeMux) {
 const maxRatePerSec = 200
 
 // actor is how the caller appears in the audit log.
-func actor(req orgRequest) string { return "user:" + req.sess.Email }
+func actor(req orgRequest) string {
+	if req.keyName != "" {
+		return "api_key:" + req.keyName
+	}
+	return "user:" + req.sess.Email
+}
 
 type createTargetRequest struct {
 	Domain     string          `json:"domain"`

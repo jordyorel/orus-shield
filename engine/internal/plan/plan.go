@@ -68,6 +68,9 @@ type Plan struct {
 	// Agents: internal networks scanned by agents installed by the
 	// customer (step J).
 	Agents bool
+	// PublicAPI: API keys, for the customer's own tools to read results,
+	// start scans and mark findings (Réglages > API).
+	PublicAPI bool
 	// Prices in USD, per month, billed monthly or yearly (cards and PayPal
 	// through Paddle). Zero with OnQuote: set by contract.
 	USDMonthly, USDYearly int
@@ -83,10 +86,10 @@ var Plans = []Plan{
 		MaxFrequency: Weekly, Alerts: true, Reports: true, Threats: true,
 		USDMonthly: 35, USDYearly: 29},
 	{ID: Pro, Name: "Pro", Domains: 15, HostsPerScan: 25, Members: 10, ActiveModules: true, Monitoring: true,
-		MaxFrequency: Daily, Alerts: true, Reports: true, Threats: true, DeepScans: true, DeepScansPerMonth: 4, APIScans: true, AuthScans: true,
+		MaxFrequency: Daily, Alerts: true, Reports: true, Threats: true, DeepScans: true, DeepScansPerMonth: 4, APIScans: true, AuthScans: true, PublicAPI: true,
 		USDMonthly: 99, USDYearly: 79},
 	{ID: Enterprise, Name: "Sur devis", HostsPerScan: 25, ActiveModules: true, Monitoring: true,
-		MaxFrequency: Daily, Alerts: true, Reports: true, Threats: true, DeepScans: true, APIScans: true, AuthScans: true, Agents: true, OnQuote: true},
+		MaxFrequency: Daily, Alerts: true, Reports: true, Threats: true, DeepScans: true, APIScans: true, AuthScans: true, PublicAPI: true, Agents: true, OnQuote: true},
 }
 
 // Get returns the plan with id.

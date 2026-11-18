@@ -19,6 +19,9 @@ type orgRequest struct {
 	sess store.Session
 	role string
 	org  *store.Org
+	// keyName: the request came with an API key of this name, not a
+	// session (sess then only carries it for logs).
+	keyName string
 }
 
 type orgHandler func(w http.ResponseWriter, r *http.Request, req orgRequest)
@@ -48,7 +51,7 @@ func (s *Server) withOrg(minRole string, h orgHandler) http.HandlerFunc {
 
 func (s *Server) orgRoutes(mux *http.ServeMux) {
 	read := func(pattern string, h orgHandler) {
-		mux.HandleFunc("GET /api/v1/orgs/{org}"+pattern, s.withOrg(store.RoleViewer, h))
+		mux.HandleFunc("GET /api/v1/orgs/{org}"+pattern, s.withOrgOrKey(store.RoleViewer, store.ScopeRead, h))
 	}
 	read("/overview", s.overview)
 	read("/findings", s.orgFindings)
