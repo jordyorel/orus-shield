@@ -51,7 +51,7 @@ export function loadPaddle(): Promise<PaddleJS> {
 let initialized = "";
 
 /** openCheckout shows Paddle's checkout for a transaction. */
-export async function openCheckout(o: { transactionId: string; clientToken: string; environment: string; email: string; inlineTarget?: string }) {
+export async function openCheckout(o: { transactionId: string; orgId: string; clientToken: string; environment: string; email: string; inlineTarget?: string }) {
   const paddle = await loadPaddle();
   if (initialized !== o.clientToken) {
     if (o.environment === "sandbox") paddle.Environment.set("sandbox");
@@ -61,7 +61,9 @@ export async function openCheckout(o: { transactionId: string; clientToken: stri
   const settings: PaddleCheckoutSettings = {
     displayMode: o.inlineTarget ? "inline" : "overlay",
     locale: "fr",
-    successUrl: `${window.location.origin}/paiement?statut=ok`,
+    // The return page syncs this transaction at once (POST /billing/sync),
+    // in case Paddle's webhook is late.
+    successUrl: `${window.location.origin}/paiement?statut=ok&org=${encodeURIComponent(o.orgId)}&txn=${encodeURIComponent(o.transactionId)}`,
   };
   if (o.inlineTarget) {
     settings.frameTarget = o.inlineTarget;

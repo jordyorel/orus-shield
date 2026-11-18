@@ -351,6 +351,64 @@ export function TarifsPage() {
  * PaiementPage takes the payment: our API creates the Paddle transaction,
  * then Paddle's checkout (card inline, PayPal in an overlay) collects it.
  */
+/** SYNC_TRIES: how many times the return page asks for the subscription
+ * (every SYNC_MS) before saying it will appear on its own. */
+const SYNC_TRIES = 20;
+const SYNC_MS = 3000;
+
+/** PayDone is the return from Paddle's checkout. It asks our API to record
+ * the subscription from the transaction at once (the webhook may be late),
+ * and says honestly whether it is active yet. */
+function PayDone({ orgId, txn, signedIn }: { orgId: string; txn: string; signedIn: boolean }) {
+  const canSync = signedIn && orgId !== "" && txn !== "";
+  const [state, setState] = useState<"syncing" | "active" | "late">(canSync ? "syncing" : "late");
+  useEffect(() => {
+    if (!canSync) return;
+    let stop = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const attempt = async (n: number) => {
+      try {
+        const r = await api.billingSync(orgId, txn);
+        if (stop) return;
+        if (r.state === "active") {
+          setState("active");
+          return;
+        }
+      } catch {
+        // Paddle or our API unreachable for a moment: ask again.
+      }
+      if (stop) return;
+      if (n + 1 >= SYNC_TRIES) setState("late");
+      else timer = setTimeout(() => void attempt(n + 1), SYNC_MS);
+    };
+    void attempt(0);
+    return () => {
+      stop = true;
+      clearTimeout(timer);
+    };
+  }, [canSync, orgId, txn]);
+  return (
+    <section className="paydone">
+      <div className="okmark big" aria-hidden="true">
+        <Tick size={40} width={3} />
+      </div>
+      <h1>{state === "active" ? "C’est activé, merci." : "Paiement reçu, merci."}</h1>
+      <p className="herosub" style={{ marginInline: "auto" }} role="status">
+        {state === "active"
+          ? "Votre offre est active : scans chaque semaine, vérification de vos corrections, alertes. Vos factures sont dans Réglages, Abonnement."
+          : state === "syncing"
+            ? "Activation de votre offre en cours…"
+            : "Votre offre s’active dès que Paddle nous confirme le paiement. Cela peut prendre quelques minutes : vous recevrez aussi son email."}
+      </p>
+      <div className="actions" style={{ justifyContent: "center" }}>
+        <Link className="btn" to={orgId ? `/orgs/${encodeURIComponent(orgId)}/aujourdhui` : "/app"}>
+          Aller au tableau de bord
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 export function PaiementPage() {
   useBodyClass(["pay"]);
   const { search } = useLocation();
@@ -395,6 +453,7 @@ export function PaiementPage() {
       const co = await api.checkout(orgId, plan, bill === "an" ? "yearly" : "monthly");
       await openCheckout({
         transactionId: co.transaction_id,
+        orgId,
         clientToken: co.client_token,
         environment: co.environment,
         email: co.email,
@@ -447,20 +506,7 @@ export function PaiementPage() {
           </a>
         </div>
         {paid ? (
-          <section className="paydone">
-            <div className="okmark big" aria-hidden="true">
-              <Tick size={40} width={3} />
-            </div>
-            <h1>Paiement reçu, merci.</h1>
-            <p className="herosub" style={{ marginInline: "auto" }}>
-              Votre offre est activée dès que Paddle nous confirme le paiement, en général en quelques secondes. Vos factures sont dans Réglages, Abonnement.
-            </p>
-            <div className="actions" style={{ justifyContent: "center" }}>
-              <Link className="btn" to="/app">
-                Aller au tableau de bord
-              </Link>
-            </div>
-          </section>
+          <PayDone orgId={orgId} txn={search.get("txn") ?? ""} signedIn={!!me} />
         ) : (
         <div className="paygrid">
           <section>

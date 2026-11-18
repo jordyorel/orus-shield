@@ -1,0 +1,12 @@
+-- 0026: the billing period of a Paddle subscription, and payments synced on
+-- the customer's return.
+--
+-- billing_period (monthly or yearly) says what the customer pays, so the
+-- dashboard shows "348 $ par an" for a yearly subscription instead of the
+-- monthly price. NULL for manual and free offers.
+--
+-- When the customer comes back from Paddle's checkout, the API reads the
+-- transaction from Paddle and applies its subscription at once, in case
+-- the webhook is late or lost (store.ProviderUpdate.OnlyIfNew: never over a
+-- subscription a webhook already recorded).
+ALTER TABLE subscriptions ADD COLUMN billing_period text CHECK (billing_period IN ('monthly', 'yearly'));

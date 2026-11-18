@@ -68,7 +68,7 @@ const dmarc: Finding = {
 
 const settings: OrgSettings = { alert_level: "high", email_alerts: true, profile: "standard", disabled_modules: [], frequency: "weekly", weekday: 6, hour: 2, timezone: "UTC", rate_per_sec: 0, deep_consent_at: null };
 
-const subscription: Subscription = { plan: plans[1]!, status: "trialing", until: "2026-11-26T00:00:00Z", in_grace: false, lapsed: false, usage: { domains: 1, members: 1, deep_scans: 0 }, trial_available: false, plans };
+const subscription: Subscription = { plan: plans[1]!, status: "trialing", until: "2026-11-26T00:00:00Z", in_grace: false, lapsed: false, usage: { domains: 1, members: 1, deep_scans: 0 }, trial_available: false, period: "", plans };
 
 function orgRoutes(extra: Record<string, ReturnType<typeof ok>> = {}, sub: Subscription = subscription) {
   const base = `/orgs/${ORG}`;
@@ -301,6 +301,26 @@ describe("dashboard", () => {
       expect(await screen.findByText("Faisons vérifier votre correction")).toBeTruthy();
       expect(calls.some((c) => c.key.startsWith("PUT"))).toBe(true);
     });
+  });
+
+  it("records the subscription on the return from Paddle, without waiting for the webhook", async () => {
+    let asks = 0;
+    const calls = mockApi({
+      "GET /auth/me": ok(me),
+      "GET /plans": ok({ items: plans }),
+      [`GET /orgs/${ORG}/subscription`]: ok(subscription),
+      [`POST /orgs/${ORG}/billing/sync`]: () => ({ status: 200, json: { state: ++asks < 2 ? "pending" : "active" } }),
+    });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderAt(`/paiement?statut=ok&org=${ORG}&txn=txn_42`);
+      expect(await screen.findByText("Activation de votre offre en cours…")).toBeTruthy();
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(await screen.findByText("C’est activé, merci.")).toBeTruthy();
+      expect(calls.find((c) => c.key === `POST /orgs/${ORG}/billing/sync`)?.body).toEqual({ transaction_id: "txn_42" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("unsubscribes from reminders with the link's token, after a click", async () => {

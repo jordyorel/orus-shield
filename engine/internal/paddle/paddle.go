@@ -169,6 +169,60 @@ func (c *Client) CreateTransaction(ctx context.Context, priceID, orgID, email st
 	return out.Data.ID, nil
 }
 
+// Transaction is the part of a transaction we read back after a checkout.
+type Transaction struct {
+	ID             string     `json:"id"`
+	Status         string     `json:"status"` // draft, ready, billed, paid, completed, canceled, past_due
+	SubscriptionID string     `json:"subscription_id"`
+	CustomerID     string     `json:"customer_id"`
+	CustomData     CustomData `json:"custom_data"`
+	Items          []struct {
+		Price struct {
+			ID          string `json:"id"`
+			TrialPeriod *struct {
+				Interval  string `json:"interval"`
+				Frequency int    `json:"frequency"`
+			} `json:"trial_period"`
+		} `json:"price"`
+	} `json:"items"`
+	BillingPeriod *struct {
+		StartsAt time.Time `json:"starts_at"`
+		EndsAt   time.Time `json:"ends_at"`
+	} `json:"billing_period"`
+}
+
+// PriceID is the transaction's (single) price.
+func (t Transaction) PriceID() string {
+	if len(t.Items) == 0 {
+		return ""
+	}
+	return t.Items[0].Price.ID
+}
+
+// Trial reports whether the transaction's price starts with a trial.
+func (t Transaction) Trial() bool {
+	return len(t.Items) > 0 && t.Items[0].Price.TrialPeriod != nil
+}
+
+// Paid reports whether the checkout went through (a trial's transaction is
+// completed at zero).
+func (t Transaction) Paid() bool { return t.Status == "completed" || t.Status == "paid" }
+
+// GetTransaction reads a transaction (the API key needs the transaction
+// read permission, which creating them already requires).
+func (c *Client) GetTransaction(ctx context.Context, id string) (Transaction, error) {
+	if !strings.HasPrefix(id, "txn_") || len(id) > 100 || strings.ContainsAny(id, "/?#") {
+		return Transaction{}, fmt.Errorf("%w: invalid transaction ID", ErrPaddle)
+	}
+	var out struct {
+		Data Transaction `json:"data"`
+	}
+	if err := c.call(ctx, http.MethodGet, "/transactions/"+id, nil, &out); err != nil {
+		return Transaction{}, err
+	}
+	return out.Data, nil
+}
+
 // PortalURL opens a customer's portal (invoices, payment method,
 // cancellation) and returns its address.
 func (c *Client) PortalURL(ctx context.Context, customerID string, subscriptionIDs []string) (string, error) {

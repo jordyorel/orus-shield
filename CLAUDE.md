@@ -363,7 +363,16 @@ a scheduled cancel or canceled becomes Canceled, trialing stays a trial.
 The 14-day trial needs a card (decided 2026-11-13, migration 0023): a new organization starts on
 Gratuit; its first checkout uses the trial prices (`ORUS_PADDLE_TRIAL_PRICE_*`, Paddle charges at
 the trial's end), later ones the normal prices (one trial per organization: never had a Paddle
-customer). A checkout while a Paddle subscription runs is refused (409): it would charge twice;
+customer). The return page (`/paiement?statut=ok&org=&txn=`) calls `POST /orgs/{org}/billing/sync`, which
+reads the transaction from Paddle (transaction read permission only) and records its subscription
+at once (trial or first period, `billing_period` monthly or yearly, migration 0026), in case the
+webhook is late or lost; it never overwrites a subscription a webhook already recorded
+(`ProviderUpdate.OnlyIfNew`), and another organization's transaction is not found. The checkout
+also records its transaction (`pending_checkouts`, migration 0027, two days): while no paid offer
+is in force, `GET /subscription` (every dashboard load) syncs the latest one, so the trial starts
+even without the return page (inline checkout) or the webhook. Webhooks still drive everything after. In development without a tunnel, Paddle's webhooks cannot reach the API:
+replay them from Paddle once it is up. Deleting an organization here cancels nothing at Paddle.
+A checkout while a Paddle subscription runs is refused (409): it would charge twice;
 changing the offer of a running subscription is not built yet. An offer chosen on Tarifs before
 signup is kept in the browser and opens its payment when the new admin first reaches /app. "Voir les factures"
 opens Paddle's customer portal (`POST /orgs/{org}/billing/portal`). `orusctl org plan` still
@@ -383,7 +392,10 @@ the versions and hashes in `deploy/nuclei/install.sh`) is what brings new threat
 DNS: `ORUS_DNS_SERVER` (an IP, e.g. 127.0.0.1 for Unbound or 1.1.1.1) sends every lookup of
 the worker, the API and orusctl to one server; unset, the machine's resolver is used. Set it
 in production: a network's resolver kept a stale NXDOMAIN for over an hour during the lab
-test, which made per-IP ownership refuse a valid IP.
+test, which made per-IP ownership refuse a valid IP. The verification TXT record is read from
+the domain's own name servers (`resolver.AuthoritativeTXT`: NS of the domain or its closest
+parent, then the record asked of them directly), so a record just published is seen at once and
+a removed one is not kept alive by a cache; when no name server answers, an ordinary lookup decides.
 
 Two-factor authentication (TOTP) is mandatory for admins: an admin session opened without
 a second factor gets `403 {"code": "mfa_required"}` on every route of that organization,

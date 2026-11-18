@@ -57,8 +57,11 @@ type subscriptionJSON struct {
 	Usage   usageJSON  `json:"usage"`
 	// TrialAvailable: the organization's first checkout starts a 14-day
 	// trial (card required, charged at its end).
-	TrialAvailable bool       `json:"trial_available"`
-	Plans          []planJSON `json:"plans"` // every offer, for comparison
+	TrialAvailable bool `json:"trial_available"`
+	// Period: what a Paddle subscription pays, "monthly" or "yearly"; ""
+	// for the free, manual and contract offers.
+	Period string     `json:"period"`
+	Plans  []planJSON `json:"plans"` // every offer, for comparison
 }
 
 // subscription answers GET /orgs/{org}/subscription.
@@ -70,6 +73,16 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request, req orgReq
 		return
 	}
 	eff := plan.Resolve(sub, s.cfg.Now())
+	// No paid offer in force: a checkout may have been paid meanwhile, its
+	// webhook late or lost. Ask Paddle, then read the offer again.
+	if !eff.Plan.Monitoring && s.cfg.Paddle.Enabled() {
+		s.syncPendingCheckout(ctx, req.org)
+		if sub, err = req.org.Subscription(ctx); err != nil {
+			s.internalError(w, r, err)
+			return
+		}
+		eff = plan.Resolve(sub, s.cfg.Now())
+	}
 	domains, err := req.org.CountTargets(ctx)
 	if err != nil {
 		s.internalError(w, r, err)
@@ -95,6 +108,14 @@ func (s *Server) subscription(w http.ResponseWriter, r *http.Request, req orgReq
 	if out.TrialAvailable, _, err = s.cardTrial(r, req); err != nil {
 		s.internalError(w, r, err)
 		return
+	}
+	acct, err := req.org.BillingAccount(ctx)
+	if err != nil {
+		s.internalError(w, r, err)
+		return
+	}
+	if acct != nil && !eff.Lapsed {
+		out.Period = acct.Period
 	}
 	out.Plans = allPlans()
 	writeJSON(w, http.StatusOK, out)

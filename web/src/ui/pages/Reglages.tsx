@@ -144,7 +144,13 @@ export function ReglagesPage() {
   const planCol = { discovery: 1, sme: 2, pro: 3, enterprise: 3 }[plan.id];
   const sub = data.subscription;
   const until = sub.until ? new Date(sub.until).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) : "";
-  const price = plan.on_quote ? "sur devis" : plan.usd_monthly ? `à ${plan.usd_monthly} $ par mois` : "gratuite";
+  const price = plan.on_quote
+    ? "sur devis"
+    : sub.period === "yearly"
+      ? `à ${plan.usd_yearly * 12} $ par an`
+      : plan.usd_monthly
+        ? `à ${plan.usd_monthly} $ par mois`
+        : "gratuite";
   const subLine =
     sub.status === "trialing" && until
       ? ` ${price}. Essai gratuit jusqu’au ${until}.`

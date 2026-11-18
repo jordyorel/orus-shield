@@ -217,3 +217,135 @@ func TestPaddleOff(t *testing.T) {
 		t.Errorf("webhook without Paddle = %d, want 503", r.status)
 	}
 }
+
+func TestBillingSync(t *testing.T) {
+	ends := time.Date(2026, 12, 1, 20, 2, 7, 0, time.UTC)
+	var orgID string // the tenant's, known once created
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tx := func(status, org string) {
+			_, _ = fmt.Fprintf(w, `{"data":{"id":"txn","status":%q,"subscription_id":"sub_9","customer_id":"ctm_9","custom_data":{"org_id":%q},
+				"items":[{"price":{"id":"pri_sme_y_t","trial_period":{"interval":"day","frequency":14}}}],
+				"billing_period":{"starts_at":"2026-11-17T20:02:07Z","ends_at":%q}}}`, status, org, ends.Format(time.RFC3339))
+		}
+		switch r.URL.Path {
+		case "/transactions/txn_ok":
+			tx("completed", orgID)
+		case "/transactions/txn_ready":
+			tx("ready", orgID)
+		case "/transactions/txn_other":
+			tx("completed", "01a1c4c7-edc4-743c-b378-719267497786")
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer fake.Close()
+	e := newEnvWith(t, func(c *Config) {
+		c.Paddle = paddle.Config{Environment: paddle.Sandbox, APIKey: "key", ClientToken: "test_tok", WebhookSecret: webhookSecret, BaseURL: fake.URL,
+			Prices: map[string]string{"sme/monthly": "pri_sme_m", "sme/yearly": "pri_sme_y", "sme/monthly/trial": "pri_sme_m_t", "sme/yearly/trial": "pri_sme_y_t"}}
+	})
+	a := e.tenant("A", "example.com")
+	orgID = a.orgID
+	path := "/api/v1/orgs/" + a.orgID + "/billing/sync"
+	sync := func(id string) (int, billingSyncJSON) {
+		var out billingSyncJSON
+		r := e.do("POST", path, a.session, billingSyncRequest{TransactionID: id})
+		if r.status == http.StatusOK {
+			r.json(t, &out)
+		}
+		return r.status, out
+	}
+
+	// Not paid yet: pending, nothing recorded.
+	if st, out := sync("txn_ready"); st != http.StatusOK || out.State != "pending" {
+		t.Errorf("unpaid = %d %+v, want pending", st, out)
+	}
+	// Another organization's transaction is not found.
+	if st, _ := sync("txn_other"); st != http.StatusNotFound {
+		t.Errorf("other organization's transaction = %d, want 404", st)
+	}
+	// Paid: the yearly trial is recorded at once, without the webhook.
+	if st, out := sync("txn_ok"); st != http.StatusOK || out.State != "active" {
+		t.Fatalf("paid = %d %+v", st, out)
+	}
+	sub, err := e.st.SubscriptionOf(context.Background(), a.orgID)
+	if err != nil || sub == nil || sub.Plan != plan.SME || sub.Status != plan.Trialing || sub.TrialEndsAt == nil || !sub.TrialEndsAt.Equal(ends) {
+		t.Fatalf("subscription after sync = %+v, %v", sub, err)
+	}
+	var subJS subscriptionJSON
+	e.do("GET", "/api/v1/orgs/"+a.orgID+"/subscription", a.session, nil).json(t, &subJS)
+	if subJS.Period != "yearly" || subJS.Plan.ID != plan.SME {
+		t.Errorf("subscription JSON = %+v, want Essentiel yearly", subJS)
+	}
+
+	// Later changes (a webhook's cancellation) are never overwritten by a
+	// sync of the same subscription.
+	if err := e.st.SetSubscription(context.Background(), a.orgID, plan.Subscription{Plan: plan.SME, Status: plan.Canceled, PeriodEnd: &ends}, "paddle", "test"); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := sync("txn_ok"); st != http.StatusOK {
+		t.Fatalf("sync again = %d", st)
+	}
+	if sub, _ := e.st.SubscriptionOf(context.Background(), a.orgID); sub.Status != plan.Canceled {
+		t.Errorf("sync overwrote a later change: %+v", sub)
+	}
+	// Viewers cannot sync; a malformed ID never reaches Paddle.
+	if r := e.do("POST", path, a.viewer, billingSyncRequest{TransactionID: "txn_ok"}); r.status != http.StatusForbidden {
+		t.Errorf("viewer = %d, want 403", r.status)
+	}
+	if st, _ := sync("../customers"); st != http.StatusBadRequest {
+		t.Errorf("malformed ID = %d, want 400", st)
+	}
+}
+
+func TestPendingCheckoutSync(t *testing.T) {
+	ends := time.Date(2026, 12, 2, 8, 8, 46, 0, time.UTC)
+	var orgID string
+	paid := false
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/transactions":
+			_, _ = w.Write([]byte(`{"data":{"id":"txn_pc"}}`))
+		case r.URL.Path == "/transactions/txn_pc":
+			status := "ready"
+			if paid {
+				status = "completed"
+			}
+			_, _ = fmt.Fprintf(w, `{"data":{"id":"txn_pc","status":%q,"subscription_id":"sub_pc","customer_id":"ctm_pc","custom_data":{"org_id":%q},
+				"items":[{"price":{"id":"pri_sme_y_t","trial_period":{"interval":"day","frequency":14}}}],
+				"billing_period":{"starts_at":"2026-11-18T08:08:46Z","ends_at":%q}}}`, status, orgID, ends.Format(time.RFC3339))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer fake.Close()
+	e := newEnvWith(t, func(c *Config) {
+		c.Paddle = paddle.Config{Environment: paddle.Sandbox, APIKey: "key", ClientToken: "test_tok", WebhookSecret: webhookSecret, BaseURL: fake.URL,
+			Prices: map[string]string{"sme/yearly": "pri_sme_y", "sme/yearly/trial": "pri_sme_y_t"}}
+	})
+	a := e.tenant("A", "example.com")
+	orgID = a.orgID
+	base := "/api/v1/orgs/" + a.orgID
+	e.setPlan(a.orgID, plan.Subscription{Plan: plan.Discovery, Status: plan.Active})
+
+	if r := e.do("POST", base+"/checkout", a.session, checkoutRequest{Plan: "sme", Period: "yearly"}); r.status != http.StatusOK {
+		t.Fatalf("checkout = %d %s", r.status, r.body)
+	}
+	var sub subscriptionJSON
+	// Not paid yet: still Gratuit.
+	e.do("GET", base+"/subscription", a.session, nil).json(t, &sub)
+	if sub.Plan.ID != plan.Discovery {
+		t.Errorf("before payment = %s", sub.Plan.ID)
+	}
+	// Paid, no webhook, no return page: reading the subscription records it.
+	paid = true
+	e.do("GET", base+"/subscription", a.session, nil).json(t, &sub)
+	if sub.Plan.ID != plan.SME || sub.Status != "trialing" || sub.Period != "yearly" {
+		t.Errorf("after payment = %+v, want Essentiel trialing yearly", sub)
+	}
+	// Applied once: the pending checkout is forgotten.
+	if id, err := e.st.Org(a.orgID); err != nil {
+		t.Fatal(err)
+	} else if pending, err := id.LatestPendingCheckout(context.Background(), e.now); err != nil || pending != "" {
+		t.Errorf("pending checkout after sync = %q, %v", pending, err)
+	}
+}

@@ -315,6 +315,8 @@ export interface Subscription {
   usage: { domains: number; members: number; deep_scans: number };
   /** trial_available: the first checkout starts a 14-day trial (card required). */
   trial_available: boolean;
+  /** period: what a Paddle subscription pays; "" for free, manual and contract offers. */
+  period: "monthly" | "yearly" | "";
   plans: Plan[];
 }
 

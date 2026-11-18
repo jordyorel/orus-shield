@@ -107,6 +107,9 @@ export const api = {
   checkout: (orgId: string, plan: "sme" | "pro", period: "monthly" | "yearly") =>
     request<{ transaction_id: string; client_token: string; environment: string; email: string; trial: boolean }>("POST", `${org(orgId)}/checkout`, { plan, period }),
   billingPortal: (orgId: string) => request<{ url: string }>("POST", `${org(orgId)}/billing/portal`),
+  /** billingSync records the subscription of a finished checkout at once, without waiting for Paddle's webhook. */
+  billingSync: (orgId: string, transactionId: string) =>
+    request<{ state: "active" | "pending" }>("POST", `${org(orgId)}/billing/sync`, { transaction_id: transactionId }),
   agents: (orgId: string, signal?: AbortSignal) => request<List<Agent>>("GET", `${org(orgId)}/agents`, undefined, signal),
   createAgent: (orgId: string, name: string, ranges: string[]) =>
     request<{ agent: Agent; enrolment_code: string }>("POST", `${org(orgId)}/agents`, { name, ranges }),
