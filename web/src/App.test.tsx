@@ -387,6 +387,25 @@ describe("dashboard", () => {
       expect(screen.queryByText("No DMARC record")).toBeNull();
     });
 
+    it("prepares the problem for the customer's provider, in the language chosen for it", async () => {
+      const fr = {
+        ...dmarc,
+        translations: { fr: { title: "Aucun enregistrement DMARC", description: "Le domaine ne publie aucune politique DMARC.", remediation: ["Publiez un enregistrement DMARC."] } },
+        remediation: ["Publish a DMARC record."],
+      };
+      orgRoutes({ [`GET /orgs/${ORG}/findings`]: ok({ items: [fr] }) });
+      renderAt(`/orgs/${ORG}/problemes?id=f1`);
+      expect(await screen.findByRole("heading", { name: "Envoyer à mon prestataire" })).toBeTruthy();
+      const wa = () => new URL(screen.getByRole("link", { name: "WhatsApp" }).getAttribute("href") ?? "").searchParams.get("text") ?? "";
+      expect(wa()).toContain("1. Publiez un enregistrement DMARC.");
+      expect(screen.getByRole("link", { name: "Email" }).getAttribute("href")).toMatch(/^mailto:\?subject=/);
+      fireEvent.click(screen.getByRole("button", { name: "English" }));
+      expect(wa()).toContain("1. Publish a DMARC record.");
+      expect(wa()).toContain("Thank you,\nJordy Konda");
+      // The dashboard itself stays in French.
+      expect(screen.getByRole("heading", { name: "Aucun enregistrement DMARC" })).toBeTruthy();
+    });
+
     it("shows a sheet large on demand, and keeps it so", async () => {
       orgRoutes();
       renderAt(`/orgs/${ORG}/problemes?id=f1`);

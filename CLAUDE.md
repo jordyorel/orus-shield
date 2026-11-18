@@ -51,7 +51,10 @@ one problem line (`groupIssues`), fixed in one gesture; ticking says it starts a
 line then shows its verdict ("Vérification en cours…", "Confirmé", "Toujours présent au contrôle de
 …", `OrgProvider.watchFixes`); Aujourd'hui and each domain in Actifs show the last and next scan with
 "Scanner maintenant" (`ScanLine`); the top bar shows a running scan and the offer (trial days left,
-or Gratuit with the way to the trial); alert email links open Problèmes on the finding (`?id=`).
+or Gratuit with the way to the trial); alert email links open Problèmes on the finding (`?id=`); each open problem's sheet has
+"Envoyer à mon prestataire" (`ui/share.ts`: the whole problem, steps and evidence, as a message in
+French or English, sent by the customer through `mailto:` or `wa.me`, or copied; nothing leaves the
+browser before their click).
 Anything without a real source (WhatsApp, data leaks, payment providers, public domain test,
 Monday summary, deep profile, invoices, account deletion, regenerating recovery codes) stays
 in place, greyed, with a "Bientôt" badge: never simulated. Backend for it (migration 0016):

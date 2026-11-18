@@ -7,9 +7,10 @@ import { api, ApiError } from "../api/client";
 import type { Scan } from "../api/types";
 import { Close, Expand, NavIcon, Shrink, Tick } from "./icons";
 import { CATS, RANK, SEV, STATE_LABEL, catState, evaluatedCats, worst, type Issue, type SevOrOk } from "./model";
-import { tr } from "../i18n";
+import { tr, useLang, type Lang } from "../i18n";
 import { Link } from "../router";
 import { useOrg } from "./OrgData";
+import { mailtoLink, providerMessage, whatsappLink } from "./share";
 import { useUI } from "./ui";
 
 export function SevTag({ s, label }: { s: SevOrOk; label?: string | undefined }) {
@@ -140,6 +141,57 @@ export function useFix() {
       else toast(e instanceof ApiError && e.status === 403 ? tr("Réservé aux administrateurs", "Administrators only") : tr("Impossible pour le moment, réessayez", "Not possible right now, try again"));
     }
   };
+}
+
+/**
+ * ShareBlock is "Envoyer à mon prestataire": the problem, ready to forward
+ * to whoever fixes it (web agency, host, IT person), by email or WhatsApp,
+ * or copied. The message's language is chosen here: the provider may not
+ * speak the dashboard's.
+ */
+function ShareBlock({ i, copy }: { i: Issue; copy: (v: string) => void }) {
+  const { issues, me } = useOrg();
+  const { lang } = useLang();
+  const [msgLang, setMsgLang] = useState<Lang>(lang);
+  // Every name of its problem line (the same check failing on several).
+  const hosts = [
+    ...new Set(issues.filter((x) => x.targetId === i.targetId && x.finding.check_id === i.finding.check_id && x.title === i.title && x.fixed === i.fixed).map((x) => x.host)),
+  ];
+  const m = providerMessage(i, hosts, msgLang, me.name);
+  return (
+    <>
+      <h3>{tr("Envoyer à mon prestataire", "Send to my provider")}</h3>
+      <p className="why">
+        {tr(
+          "C’est votre agence web, votre hébergeur ou votre informaticien qui corrige ? Envoyez-lui ce problème, avec ses étapes et sa preuve technique.",
+          "Is it your web agency, your host or your IT person who fixes things? Send them this problem, with its steps and technical evidence.",
+        )}
+      </p>
+      <div className="sharerow">
+        <div className="seg2 langsw" role="group" aria-label={tr("Langue du message", "Language of the message")}>
+          {(
+            [
+              ["fr", "FR", "Français"],
+              ["en", "EN", "English"],
+            ] as const
+          ).map(([k, short, name]) => (
+            <button key={k} type="button" lang={k} aria-label={name} aria-pressed={msgLang === k} onClick={() => setMsgLang(k)}>
+              {short}
+            </button>
+          ))}
+        </div>
+        <a className="btn ghost sm" href={mailtoLink(m)}>
+          {tr("Email", "Email")}
+        </a>
+        <a className="btn ghost sm" href={whatsappLink(m)} target="_blank" rel="noopener noreferrer">
+          WhatsApp
+        </a>
+        <button className="link" type="button" onClick={() => copy(m.subject + "\n\n" + m.body)}>
+          {tr("Copier le message", "Copy the message")}
+        </button>
+      </div>
+    </>
+  );
 }
 
 export function FindingSheet({ id, targetId }: { id: string; targetId: string }) {
@@ -282,6 +334,7 @@ export function FindingSheet({ id, targetId }: { id: string; targetId: string })
           {tr("Copier", "Copy")}
         </button>
       </div>
+      {!i.fixed && <ShareBlock i={i} copy={copy} />}
       {!i.fixed && (
         <p className="hint">
           {tr(
