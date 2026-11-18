@@ -179,7 +179,10 @@ function QuickStart({ orgId }: { orgId: string }) {
         {tr(
           "Toutes les routes commencent par /api/v1/orgs/{organisation}. 120 requêtes par minute et par clé ; au-delà, la réponse est 429.",
           "Every route starts with /api/v1/orgs/{organization}. 120 requests per minute per key; beyond that, the answer is 429.",
-        )}
+        )}{" "}
+        <a href="/docs/api" target="_blank" rel="noopener">
+          {tr("Documentation complète", "Full documentation")}
+        </a>
       </p>
     </div>
   );

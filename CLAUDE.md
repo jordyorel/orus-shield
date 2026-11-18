@@ -428,8 +428,12 @@ elsewhere), stops working when the offer no longer includes the API (403 plan_li
 120 requests per minute (in the API process), and appears in the audit log as `api_key:<name>`. The
 API looks keys up through `orus_auth` (it records the last use, at most once a minute); organizations
 manage them through `orus_app` with row-level security. Browsers' CSRF protection does not apply to
-these requests (no Sec-Fetch-Site), and a page cannot use a key it does not know. Next: OpenAPI
-documentation, signed outgoing webhooks, Slack and Teams.
+these requests (no Sec-Fetch-Site), and a page cannot use a key it does not know. The public API is
+documented in OpenAPI 3.1 (`engine/internal/api/openapi.json`, embedded, served at
+`GET /api/v1/openapi.json`; French texts in `x-*-fr` extensions); `TestOpenAPIMatchesTheServer` calls
+every documented operation with a key, so the document cannot drift from the routes. The dashboard
+renders it at `/docs/api` (`ui/pages/docs.tsx`), linked from Réglages > API and the public footer.
+Next: signed outgoing webhooks, Slack and Teams.
 
 Internal agents (step J, Sur devis, plan.Agents): an admin creates an agent in Actifs >
 Réseaux internes with a name and private ranges (RFC 1918 or IPv6 ULA, at most a /20; migration

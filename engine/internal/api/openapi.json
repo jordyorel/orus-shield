@@ -1,0 +1,2098 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Orus Shield API",
+    "version": "1.0.0",
+    "description": "Read your organization's security results and act on them from your own tools.\n\nAuthenticate with an API key created in Settings > API (Pro and custom plans): `Authorization: Bearer orus_…`. A key reaches its organization only. A **read** key reads every route below; a **write** key may also start a scan and change a finding's status (operations marked `x-scope: write`). Members, billing, settings and test accounts are never reachable with a key.\n\nLimits: 120 requests per minute per key (429 beyond, with Retry-After). Lists are returned as `{\"items\": [...]}`. Errors are `{\"error\": \"…\", \"code\": \"…\"}`; `code` is present when the client can act on it.",
+    "contact": {
+      "name": "Orus Shield"
+    },
+    "x-description-fr": "Lisez les résultats de sécurité de votre organisation et agissez dessus depuis vos propres outils.\n\nAuthentifiez-vous avec une clé d’API créée dans Réglages > API (offres Pro et Sur devis) : `Authorization: Bearer orus_…`. Une clé n’atteint que son organisation. Une clé **lecture** lit toutes les routes ci-dessous ; une clé **écriture** peut aussi lancer un scan et changer le statut d’un problème (opérations marquées `x-scope: write`). L’équipe, la facturation, les réglages et les comptes de test ne sont jamais accessibles avec une clé.\n\nLimites : 120 requêtes par minute et par clé (429 au-delà, avec Retry-After). Les listes sont renvoyées sous la forme `{\"items\": [...]}`. Les erreurs sont `{\"error\": \"…\", \"code\": \"…\"}` ; `code` est présent quand le client peut agir dessus."
+  },
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "This Orus Shield server"
+    }
+  ],
+  "security": [
+    {
+      "apiKey": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Overview",
+      "x-name-fr": "Vue d’ensemble"
+    },
+    {
+      "name": "Findings",
+      "x-name-fr": "Problèmes"
+    },
+    {
+      "name": "Assets",
+      "x-name-fr": "Actifs"
+    },
+    {
+      "name": "Domains and scans",
+      "x-name-fr": "Domaines et scans"
+    },
+    {
+      "name": "Reports",
+      "x-name-fr": "Rapports"
+    }
+  ],
+  "paths": {
+    "/orgs/{org}/overview": {
+      "get": {
+        "summary": "Security overview",
+        "description": "The organization's score (pooled across domains), open findings by severity, daily score trend, remediation times and priorities.",
+        "tags": [
+          "Overview"
+        ],
+        "operationId": "getOverview",
+        "x-scope": "read",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "description": "Your organization's ID (shown in Settings > API).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID de votre organisation (affiché dans Réglages > API)."
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "description": "Period in days (1 to 365).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 365,
+              "default": 30
+            },
+            "x-description-fr": "Période en jours (1 à 365)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The overview.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Overview"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The key's scope or the organization's plan does not allow it (code read_only_key or plan_limit).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or another organization's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over 120 requests per minute for this key (Retry-After: 60).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-summary-fr": "Vue d’ensemble",
+        "x-description-fr": "Le score de l’organisation (tous domaines confondus), les problèmes ouverts par gravité, la courbe du score jour par jour, les délais de correction et les priorités."
+      }
+    },
+    "/orgs/{org}/findings": {
+      "get": {
+        "summary": "List findings",
+        "description": "Every finding of every domain, in the standard finding schema, with dashboard extras (estimated minutes, score gain, CVE data).",
+        "tags": [
+          "Findings"
+        ],
+        "operationId": "listFindings",
+        "x-scope": "read",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "description": "Your organization's ID (shown in Settings > API).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID de votre organisation (affiché dans Réglages > API)."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Only findings with this status.",
+            "schema": {
+              "$ref": "#/components/schemas/FindingStatus"
+            },
+            "x-description-fr": "Seulement les problèmes avec ce statut."
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "required": false,
+            "description": "Only findings with this severity.",
+            "schema": {
+              "$ref": "#/components/schemas/Severity"
+            },
+            "x-description-fr": "Seulement les problèmes de cette gravité."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The findings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Finding"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown status or severity.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The key's scope or the organization's plan does not allow it (code read_only_key or plan_limit).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or another organization's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over 120 requests per minute for this key (Retry-After: 60).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-summary-fr": "Lister les problèmes",
+        "x-description-fr": "Tous les problèmes de tous les domaines, au format standard, avec des compléments (minutes estimées, points gagnés, données CVE)."
+      }
+    },
+    "/orgs/{org}/targets/{target}/findings": {
+      "get": {
+        "summary": "List a domain's findings",
+        "description": "The findings of one domain.",
+        "tags": [
+          "Findings"
+        ],
+        "operationId": "listTargetFindings",
+        "x-scope": "read",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "description": "Your organization's ID (shown in Settings > API).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID de votre organisation (affiché dans Réglages > API)."
+          },
+          {
+            "name": "target",
+            "in": "path",
+            "required": true,
+            "description": "A domain's ID (from GET /targets).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID d’un domaine (voir GET /targets)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The findings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Finding"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The key's scope or the organization's plan does not allow it (code read_only_key or plan_limit).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or another organization's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over 120 requests per minute for this key (Retry-After: 60).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-summary-fr": "Problèmes d’un domaine",
+        "x-description-fr": "Les problèmes d’un seul domaine."
+      }
+    },
+    "/orgs/{org}/targets/{target}/findings/{finding}/status": {
+      "put": {
+        "summary": "Change a finding's status",
+        "description": "Mark a finding fixed (a verification scan of its module is queued, which reopens it if it is still there), accept its risk, or reopen it.",
+        "tags": [
+          "Findings"
+        ],
+        "operationId": "setFindingStatus",
+        "x-scope": "write",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "description": "Your organization's ID (shown in Settings > API).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID de votre organisation (affiché dans Réglages > API)."
+          },
+          {
+            "name": "target",
+            "in": "path",
+            "required": true,
+            "description": "A domain's ID (from GET /targets).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID d’un domaine (voir GET /targets)."
+          },
+          {
+            "name": "finding",
+            "in": "path",
+            "required": true,
+            "description": "The finding's ID.",
+            "schema": {
+              "type": "string"
+            },
+            "x-description-fr": "L’ID du problème."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Recorded."
+          },
+          "400": {
+            "description": "Unknown status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The key's scope or the organization's plan does not allow it (code read_only_key or plan_limit).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or another organization's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over 120 requests per minute for this key (Retry-After: 60).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "status"
+                ],
+                "properties": {
+                  "status": {
+                    "$ref": "#/components/schemas/FindingStatus"
+                  }
+                }
+              },
+              "example": {
+                "status": "fixed"
+              }
+            }
+          }
+        },
+        "x-summary-fr": "Changer le statut d’un problème",
+        "x-description-fr": "Marquer un problème corrigé (un scan de vérification de son module part aussitôt et le rouvre s’il est toujours là), accepter son risque, ou le rouvrir."
+      }
+    },
+    "/orgs/{org}/checks": {
+      "get": {
+        "summary": "List evaluated checks",
+        "description": "Every check of the catalog with its latest status on each domain: passed, failed or not applicable. The score is computed from these.",
+        "tags": [
+          "Findings"
+        ],
+        "operationId": "listChecks",
+        "x-scope": "read",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "description": "Your organization's ID (shown in Settings > API).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID de votre organisation (affiché dans Réglages > API)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The checks.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Check"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The key's scope or the organization's plan does not allow it (code read_only_key or plan_limit).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or another organization's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over 120 requests per minute for this key (Retry-After: 60).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-summary-fr": "Lister les contrôles",
+        "x-description-fr": "Chaque contrôle du catalogue avec son dernier statut sur chaque domaine : réussi, en échec ou non applicable. Le score en est calculé."
+      }
+    },
+    "/orgs/{org}/assets": {
+      "get": {
+        "summary": "List assets",
+        "description": "The current asset inventory of every domain: hostnames, IP addresses, services, certificates.",
+        "tags": [
+          "Assets"
+        ],
+        "operationId": "listAssets",
+        "x-scope": "read",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "description": "Your organization's ID (shown in Settings > API).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID de votre organisation (affiché dans Réglages > API)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The assets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Asset"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The key's scope or the organization's plan does not allow it (code read_only_key or plan_limit).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or another organization's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over 120 requests per minute for this key (Retry-After: 60).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-summary-fr": "Lister les actifs",
+        "x-description-fr": "L’inventaire actuel de chaque domaine : noms, adresses IP, services, certificats."
+      }
+    },
+    "/orgs/{org}/targets": {
+      "get": {
+        "summary": "List domains",
+        "description": "Your domains, verified or not, with their schedule.",
+        "tags": [
+          "Domains and scans"
+        ],
+        "operationId": "listTargets",
+        "x-scope": "read",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "description": "Your organization's ID (shown in Settings > API).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID de votre organisation (affiché dans Réglages > API)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The domains.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Target"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The key's scope or the organization's plan does not allow it (code read_only_key or plan_limit).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or another organization's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over 120 requests per minute for this key (Retry-After: 60).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-summary-fr": "Lister les domaines",
+        "x-description-fr": "Vos domaines, vérifiés ou non, avec leur planification."
+      }
+    },
+    "/orgs/{org}/targets/{target}": {
+      "get": {
+        "summary": "Get a domain",
+        "description": "One domain.",
+        "tags": [
+          "Domains and scans"
+        ],
+        "operationId": "getTarget",
+        "x-scope": "read",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "description": "Your organization's ID (shown in Settings > API).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID de votre organisation (affiché dans Réglages > API)."
+          },
+          {
+            "name": "target",
+            "in": "path",
+            "required": true,
+            "description": "A domain's ID (from GET /targets).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID d’un domaine (voir GET /targets)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The domain.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Target"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The key's scope or the organization's plan does not allow it (code read_only_key or plan_limit).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or another organization's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over 120 requests per minute for this key (Retry-After: 60).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-summary-fr": "Un domaine",
+        "x-description-fr": "Un seul domaine."
+      }
+    },
+    "/orgs/{org}/targets/{target}/scans": {
+      "get": {
+        "summary": "List a domain's scans",
+        "description": "The domain's scans, most recent first.",
+        "tags": [
+          "Domains and scans"
+        ],
+        "operationId": "listTargetScans",
+        "x-scope": "read",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "description": "Your organization's ID (shown in Settings > API).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID de votre organisation (affiché dans Réglages > API)."
+          },
+          {
+            "name": "target",
+            "in": "path",
+            "required": true,
+            "description": "A domain's ID (from GET /targets).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID d’un domaine (voir GET /targets)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The scans.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Scan"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The key's scope or the organization's plan does not allow it (code read_only_key or plan_limit).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or another organization's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over 120 requests per minute for this key (Retry-After: 60).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-summary-fr": "Scans d’un domaine",
+        "x-description-fr": "Les scans du domaine, du plus récent au plus ancien."
+      },
+      "post": {
+        "summary": "Start a scan",
+        "description": "Queue a scan of a verified domain with the modules your plan allows (all of them when `modules` is omitted). A waiting scan with at least these modules is reused.",
+        "tags": [
+          "Domains and scans"
+        ],
+        "operationId": "startScan",
+        "x-scope": "write",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "description": "Your organization's ID (shown in Settings > API).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID de votre organisation (affiché dans Réglages > API)."
+          },
+          {
+            "name": "target",
+            "in": "path",
+            "required": true,
+            "description": "A domain's ID (from GET /targets).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID d’un domaine (voir GET /targets)."
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Queued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Scan"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The domain is not verified yet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The key's scope or the organization's plan does not allow it (code read_only_key or plan_limit).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or another organization's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over 120 requests per minute for this key (Retry-After: 60).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "modules": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Module IDs, such as email, tls, web, ports, vulns."
+                  }
+                }
+              },
+              "example": {
+                "modules": [
+                  "email",
+                  "tls"
+                ]
+              }
+            }
+          }
+        },
+        "x-summary-fr": "Lancer un scan",
+        "x-description-fr": "Mettre en file un scan d’un domaine vérifié, avec les modules permis par votre offre (tous si modules est omis). Un scan en attente avec au moins ces modules est réutilisé."
+      }
+    },
+    "/orgs/{org}/scans": {
+      "get": {
+        "summary": "List recent scans",
+        "description": "The organization's latest scans, every domain.",
+        "tags": [
+          "Domains and scans"
+        ],
+        "operationId": "listScans",
+        "x-scope": "read",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "description": "Your organization's ID (shown in Settings > API).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID de votre organisation (affiché dans Réglages > API)."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "How many (1 to 100).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "x-description-fr": "Combien (1 à 100)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The scans.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Scan"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The key's scope or the organization's plan does not allow it (code read_only_key or plan_limit).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or another organization's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over 120 requests per minute for this key (Retry-After: 60).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-summary-fr": "Derniers scans",
+        "x-description-fr": "Les derniers scans de l’organisation, tous domaines."
+      }
+    },
+    "/orgs/{org}/scans/{scan}": {
+      "get": {
+        "summary": "Get a scan",
+        "description": "One scan, to follow it until it is done or failed.",
+        "tags": [
+          "Domains and scans"
+        ],
+        "operationId": "getScan",
+        "x-scope": "read",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "description": "Your organization's ID (shown in Settings > API).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID de votre organisation (affiché dans Réglages > API)."
+          },
+          {
+            "name": "scan",
+            "in": "path",
+            "required": true,
+            "description": "The scan's ID.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID du scan."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The scan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Scan"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The key's scope or the organization's plan does not allow it (code read_only_key or plan_limit).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or another organization's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over 120 requests per minute for this key (Retry-After: 60).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-summary-fr": "Un scan",
+        "x-description-fr": "Un scan, pour le suivre jusqu’à ce qu’il soit terminé ou en échec."
+      }
+    },
+    "/orgs/{org}/trends": {
+      "get": {
+        "summary": "Monthly trends",
+        "description": "Findings opened and fixed per calendar month.",
+        "tags": [
+          "Reports"
+        ],
+        "operationId": "getTrends",
+        "x-scope": "read",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "description": "Your organization's ID (shown in Settings > API).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID de votre organisation (affiché dans Réglages > API)."
+          },
+          {
+            "name": "months",
+            "in": "query",
+            "required": false,
+            "description": "How many months (1 to 24).",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 24,
+              "default": 6
+            },
+            "x-description-fr": "Combien de mois (1 à 24)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The months, oldest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Month"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The key's scope or the organization's plan does not allow it (code read_only_key or plan_limit).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or another organization's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over 120 requests per minute for this key (Retry-After: 60).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-summary-fr": "Tendances mensuelles",
+        "x-description-fr": "Problèmes ouverts et corrigés par mois."
+      }
+    },
+    "/orgs/{org}/threats": {
+      "get": {
+        "summary": "Emerging threats",
+        "description": "Newly published vulnerabilities that match technologies detected on your domains, and the rescan each one triggered.",
+        "tags": [
+          "Reports"
+        ],
+        "operationId": "listThreats",
+        "x-scope": "read",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "description": "Your organization's ID (shown in Settings > API).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID de votre organisation (affiché dans Réglages > API)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The threats, most recent first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Threat"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The key's scope or the organization's plan does not allow it (code read_only_key or plan_limit).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or another organization's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over 120 requests per minute for this key (Retry-After: 60).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-summary-fr": "Menaces émergentes",
+        "x-description-fr": "Les vulnérabilités récemment publiées qui touchent des technologies détectées sur vos domaines, et le rescan déclenché pour chacune."
+      }
+    },
+    "/orgs/{org}/report": {
+      "get": {
+        "summary": "Download a PDF report",
+        "description": "The executive (two pages, plain language) or technical (every finding with its evidence) report, in French or English. Needs a plan with reports.",
+        "tags": [
+          "Reports"
+        ],
+        "operationId": "getReport",
+        "x-scope": "read",
+        "parameters": [
+          {
+            "name": "org",
+            "in": "path",
+            "required": true,
+            "description": "Your organization's ID (shown in Settings > API).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "x-description-fr": "L’ID de votre organisation (affiché dans Réglages > API)."
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Which report.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "executive",
+                "technical"
+              ]
+            },
+            "x-description-fr": "Quel rapport."
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "required": false,
+            "description": "Its language.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "fr",
+                "en"
+              ],
+              "default": "fr"
+            },
+            "x-description-fr": "Sa langue."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The PDF.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "kind must be executive or technical, lang fr or en.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, revoked or expired key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The key's scope or the organization's plan does not allow it (code read_only_key or plan_limit).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found, or another organization's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over 120 requests per minute for this key (Retry-After: 60).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-summary-fr": "Télécharger un rapport PDF",
+        "x-description-fr": "Le rapport Direction (deux pages, sans jargon) ou Technique (chaque problème avec sa preuve), en français ou en anglais. Demande une offre avec rapports."
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "apiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "An API key from Settings > API: `orus_…`."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "description": "When the client can act on it: invalid_key, read_only_key, plan_limit, rate_limited…"
+          }
+        }
+      },
+      "Severity": {
+        "type": "string",
+        "enum": [
+          "critical",
+          "high",
+          "medium",
+          "low",
+          "info"
+        ]
+      },
+      "FindingStatus": {
+        "type": "string",
+        "enum": [
+          "open",
+          "fixed",
+          "accepted_risk"
+        ]
+      },
+      "FindingText": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "remediation": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Finding": {
+        "type": "object",
+        "description": "A finding in the standard schema (version 1).",
+        "properties": {
+          "target_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "schema_version": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "description": "Stable: the same problem keeps its ID across scans."
+          },
+          "module_id": {
+            "type": "string"
+          },
+          "check_id": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string",
+            "description": "The domain."
+          },
+          "asset": {
+            "type": "string",
+            "description": "What was checked, such as _dmarc.example.com or example.com:443."
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string",
+            "description": "Raw technical proof."
+          },
+          "remediation": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "references": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "first_seen": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_seen": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FindingStatus"
+          },
+          "fixed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "translations": {
+            "type": "object",
+            "description": "The same text in other languages, by code (fr).",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FindingText"
+            }
+          },
+          "category": {
+            "type": "string"
+          },
+          "minutes": {
+            "type": "integer",
+            "description": "Estimated minutes to fix."
+          },
+          "gain": {
+            "type": "integer",
+            "description": "Points the domain's score wins once fixed."
+          },
+          "emerging": {
+            "type": "boolean"
+          },
+          "cve": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "cvss": {
+                "type": "number"
+              },
+              "epss": {
+                "type": "number"
+              },
+              "kev": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "Check": {
+        "type": "object",
+        "properties": {
+          "target_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "title_fr": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "not_applicable"
+            ]
+          },
+          "findings": {
+            "type": "integer"
+          },
+          "evaluated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Asset": {
+        "type": "object",
+        "properties": {
+          "target_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "hostname",
+              "ip",
+              "service",
+              "certificate"
+            ]
+          },
+          "value": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "first_seen": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_seen": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "gone_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "Target": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "verified": {
+            "type": "boolean"
+          },
+          "verified_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "rate_per_sec": {
+            "type": "number"
+          },
+          "exclusions": {
+            "type": "object"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "schedule": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "frequency": {
+                "type": "string",
+                "enum": [
+                  "daily",
+                  "weekly",
+                  "monthly"
+                ]
+              },
+              "weekday": {
+                "type": "integer",
+                "description": "0 is Sunday."
+              },
+              "hour": {
+                "type": "integer"
+              },
+              "timezone": {
+                "type": "string"
+              },
+              "next_scan_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "internal": {
+            "type": "boolean",
+            "description": "An agent's internal network, not a domain."
+          }
+        }
+      },
+      "Scan": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "target_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "modules": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "requested_by": {
+            "type": "string",
+            "description": "Who asked for it; api_key:<name> for a key."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "done",
+              "failed"
+            ]
+          },
+          "attempts": {
+            "type": "integer"
+          },
+          "error": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "new_findings": {
+            "type": "integer"
+          },
+          "fixed_findings": {
+            "type": "integer"
+          }
+        }
+      },
+      "Overview": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": "integer"
+          },
+          "targets": {
+            "type": "integer"
+          },
+          "verified_targets": {
+            "type": "integer"
+          },
+          "open_findings": {
+            "type": "object",
+            "description": "By severity.",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "assets": {
+            "type": "integer"
+          },
+          "new_assets": {
+            "type": "integer"
+          },
+          "score": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "0 to 100; null when nothing was evaluated."
+          },
+          "score_change": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "trend": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "score": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "remediation": {
+            "type": "object"
+          },
+          "priorities": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "per_target": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "Month": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "description": "YYYY-MM"
+          },
+          "opened": {
+            "type": "integer"
+          },
+          "fixed": {
+            "type": "integer"
+          }
+        }
+      },
+      "Threat": {
+        "type": "object",
+        "properties": {
+          "template_id": {
+            "type": "string"
+          },
+          "cve": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "kev": {
+            "type": "boolean"
+          },
+          "epss": {
+            "type": "number"
+          },
+          "target_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scan_id": {
+            "type": "string"
+          },
+          "scan_status": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    }
+  }
+}

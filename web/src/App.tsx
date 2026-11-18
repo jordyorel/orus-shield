@@ -6,6 +6,7 @@ import { appPath, AppShell } from "./ui/AppShell";
 import { OrgProvider, useOrg } from "./ui/OrgData";
 import { ActifsPage } from "./ui/pages/Actifs";
 import { AujourdhuiPage } from "./ui/pages/Aujourdhui";
+import { ApiDocsPage } from "./ui/pages/docs";
 import { GuidePage, GuidesIndexPage } from "./ui/pages/guides";
 import { TestPage } from "./ui/pages/quicktest";
 import { ConnexionPage, InscriptionPage, MfaSetupPage, SetPasswordPage, takeOffer, UnsubscribePage } from "./ui/pages/auth";
@@ -64,6 +65,7 @@ export function App() {
   if (path === "/") return <Page><AccueilPage /></Page>;
   if (path === "/tarifs") return <Page><TarifsPage /></Page>;
   if (path === "/guides") return <Page><GuidesIndexPage /></Page>;
+  if (path === "/docs/api") return <Page><ApiDocsPage /></Page>;
   if (path.startsWith("/guides/")) return <Page><GuidePage slug={path.slice("/guides/".length)} /></Page>;
   // The public test is for visitors: a signed-in customer's domains are
   // tested in depth on their dashboard.

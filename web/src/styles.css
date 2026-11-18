@@ -823,6 +823,42 @@ body.pay main{max-width:1120px;padding:0 18px 48px}
 .keyopt input{margin-top:3px;accent-color:var(--azur)}
 .keyopt span{display:grid;gap:2px}
 .keyopt small{color:var(--ink2);font-size:13px}
+/* /docs/api */
+.doclayout{display:grid;gap:24px;margin-top:20px}
+@media (min-width:1000px){.doclayout{grid-template-columns:260px minmax(0,1fr);align-items:start}}
+.docnav{display:none}
+@media (min-width:1000px){.docnav{display:grid;gap:2px;position:sticky;top:20px;max-height:calc(100vh - 40px);overflow:auto;font-size:14px}}
+.docnav p{margin:14px 0 4px;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink2)}
+.docnav a{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:10px;color:var(--ink);text-decoration:none}
+.docnav a:hover{background:var(--soft)}
+.docnav .verb{width:42px;flex:none;font-size:10px;height:18px}
+.docmain{min-width:0}
+.docmain>h2{font-size:24px;margin:32px 0 0}
+.docintro{color:var(--ink2);font-size:16px;line-height:1.65;display:grid;gap:10px;max-width:72ch}
+.docintro p{margin:0}
+.docintro code,.docdesc code,.doctable td code{font:13px ui-monospace,Menlo,monospace;background:var(--soft);padding:1px 6px;border-radius:6px;color:var(--ink)}
+.docop{margin-top:14px;scroll-margin-top:20px}
+.docophead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.docophead>code{font:14px ui-monospace,Menlo,monospace;overflow-wrap:anywhere}
+.docophead .verb{width:52px}
+.docophead .scopechip{margin-left:auto}
+.docop h3{margin:12px 0 0;font-size:19px}
+.docop h4{margin:18px 0 8px;font-size:14px}
+.docdesc{color:var(--ink2);font-size:15px;line-height:1.6;margin-top:6px}
+.docdesc p{margin:0 0 6px}
+.doctable{width:100%;border-collapse:collapse;font-size:14px}
+.doctable th,.doctable td{text-align:left;vertical-align:top;padding:8px 10px 8px 0;border-top:1px solid var(--line)}
+.doctable th{width:30%;font-weight:500}
+.doctable th code{font:13px ui-monospace,Menlo,monospace}
+.doctable th small{display:block;color:var(--ink2);font-size:12px}
+.doctable td{color:var(--ink2)}
+.doctable td:nth-child(2){width:24%;font:12.5px ui-monospace,Menlo,monospace;overflow-wrap:anywhere}
+.docresp{list-style:none;padding:0;margin:0;display:grid;gap:6px;font-size:14px}
+.docresp li{display:flex;gap:10px;align-items:baseline}
+.rcode{flex:none;display:inline-grid;place-items:center;width:44px;height:22px;border-radius:6px;font:700 12px ui-monospace,Menlo,monospace}
+.rcode.c2{color:var(--lagon);background:color-mix(in srgb,var(--lagon) 14%,transparent)}
+.rcode.c4{color:var(--ambre);background:color-mix(in srgb,var(--ambre) 14%,transparent)}
+.rcode.c5{color:var(--corail);background:color-mix(in srgb,var(--corail) 14%,transparent)}
 /* Réglages: sections menu on the left, a reading column, one row per setting */
 .setlayout{display:block}
 @media (min-width:1100px){

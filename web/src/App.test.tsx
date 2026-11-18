@@ -205,6 +205,34 @@ describe("public site", () => {
     expect(await screen.findByRole("heading", { name: "Ce guide n’existe pas." })).toBeTruthy();
   });
 
+  it("documents the public API from its OpenAPI document, in the reader's language", async () => {
+    const doc = {
+      openapi: "3.1.0",
+      info: { title: "Orus Shield API", version: "1.0.0", description: "Read your **results**.", "x-description-fr": "Lisez vos **résultats**." },
+      tags: [{ name: "Findings", "x-name-fr": "Problèmes" }],
+      paths: {
+        "/orgs/{org}/findings": {
+          get: {
+            operationId: "listFindings",
+            summary: "List findings",
+            "x-summary-fr": "Lister les problèmes",
+            "x-scope": "read",
+            tags: ["Findings"],
+            parameters: [{ name: "org", in: "path", required: true, description: "Your organization.", "x-description-fr": "Votre organisation.", schema: { type: "string" } }],
+            responses: { "200": { description: "The findings.", content: { "application/json": { schema: { type: "object", properties: { items: { type: "array", items: { $ref: "#/components/schemas/Finding" } } } } } } } },
+          },
+        },
+      },
+      components: { schemas: { Finding: { type: "object", properties: { id: { type: "string", description: "Stable." } } } } },
+    };
+    mockApi({ "GET /auth/me": fail(401), "GET /openapi.json": ok(doc) });
+    renderAt("/docs/api");
+    expect(await screen.findByRole("heading", { name: "Lister les problèmes" })).toBeTruthy();
+    expect(screen.getByText("Votre organisation.")).toBeTruthy();
+    expect(screen.getByText("résultats")).toBeTruthy();
+    expect(screen.getAllByText("Finding").length).toBeGreaterThan(0);
+  });
+
   it("says plainly why a domain cannot be tested", async () => {
     mockApi({ "GET /auth/me": fail(401), "POST /quicktest": fail(400, "enter a public domain name", "invalid_domain") });
     renderAt("/test?domaine=localhost");

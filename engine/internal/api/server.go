@@ -179,6 +179,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/mfa/disable", s.withSession(s.mfaDisable))
 	// The offers, for the public pricing page: no session needed.
 	mux.HandleFunc("GET /api/v1/plans", s.listPlans)
+	mux.HandleFunc("GET /api/v1/openapi.json", openAPI)
 	mux.HandleFunc("POST /api/v1/quicktest", s.quickTest)
 	mux.HandleFunc("POST /api/v1/quicktest/{id}/unlock", s.unlockQuickTest)
 	// The unsubscribe link of trial reminders: the token is the proof.

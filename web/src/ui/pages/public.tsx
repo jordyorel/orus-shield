@@ -15,7 +15,7 @@ import { cleanDomain } from "../prefill";
 import { useBodyClass, useUI } from "../ui";
 import { limitRows } from "./Reglages";
 
-export function PubHead({ cur }: { cur: "accueil" | "tarifs" | "legal" | "test" | "guides" }) {
+export function PubHead({ cur }: { cur: "accueil" | "tarifs" | "legal" | "test" | "guides" | "docs" }) {
   const { theme, setTheme } = useUI();
   const { state } = useAuth();
   return (
@@ -74,6 +74,7 @@ export function PubFoot() {
       <span>Orus Shield</span>
       <span>
         <Link to="/guides">{tr("Guides", "Guides")}</Link>
+        <Link to="/docs/api">{tr("API", "API")}</Link>
         <Link to="/conditions">{tr("Conditions d’utilisation", "Terms of use")}</Link>
         <Link to="/confidentialite">{tr("Confidentialité", "Privacy")}</Link>
         <Link to="/tarifs">{tr("Tarifs", "Pricing")}</Link>

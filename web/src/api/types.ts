@@ -478,3 +478,43 @@ export interface APIKey {
   last_used_at: string | null;
   revoked_at: string | null;
 }
+
+/** The parts of the OpenAPI 3.1 document the documentation page reads. */
+export interface OpenAPISchema {
+  $ref?: string;
+  type?: string | string[];
+  enum?: string[];
+  format?: string;
+  description?: string;
+  items?: OpenAPISchema;
+  properties?: Record<string, OpenAPISchema>;
+  additionalProperties?: OpenAPISchema | boolean;
+  required?: string[];
+}
+export interface OpenAPIParam {
+  name: string;
+  in: "path" | "query";
+  required?: boolean;
+  description?: string;
+  "x-description-fr"?: string;
+  schema?: OpenAPISchema;
+}
+export interface OpenAPIOperation {
+  summary: string;
+  description?: string;
+  "x-summary-fr"?: string;
+  "x-description-fr"?: string;
+  "x-scope"?: "read" | "write";
+  operationId: string;
+  tags?: string[];
+  parameters?: OpenAPIParam[];
+  requestBody?: { required?: boolean; content: Record<string, { schema?: OpenAPISchema; example?: unknown }> };
+  responses: Record<string, { description: string; content?: Record<string, { schema?: OpenAPISchema }> }>;
+}
+export interface OpenAPIDoc {
+  openapi: string;
+  info: { title: string; version: string; description?: string; "x-description-fr"?: string };
+  tags?: { name: string; "x-name-fr"?: string }[];
+  paths: Record<string, Record<string, OpenAPIOperation>>;
+  components?: { schemas?: Record<string, OpenAPISchema> };
+}

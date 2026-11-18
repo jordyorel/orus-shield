@@ -1,4 +1,4 @@
-import type { Activity, Agent, APIKey, DeclaredAPI, TestAccount, AuthActivity, Check, DeviceSession, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, OrgSettings, Overview, Plan, QuickProblem, QuickResult, RecoveryCodes, Role, Scan, ScheduleInput, Subscription, Target } from "./types";
+import type { Activity, Agent, APIKey, OpenAPIDoc, DeclaredAPI, TestAccount, AuthActivity, Check, DeviceSession, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, OrgSettings, Overview, Plan, QuickProblem, QuickResult, RecoveryCodes, Role, Scan, ScheduleInput, Subscription, Target } from "./types";
 import type { Exclusions } from "../exclusions";
 import { getLang } from "../i18n";
 
@@ -99,6 +99,8 @@ export const api = {
   scan: (orgId: string, scanId: string, signal?: AbortSignal) =>
     request<Scan>("GET", `${org(orgId)}/scans/${encodeURIComponent(scanId)}`, undefined, signal),
   plans: (signal?: AbortSignal) => request<List<Plan>>("GET", "/plans", undefined, signal),
+  /** openapi: the public API's OpenAPI document (pages/docs.tsx renders it). */
+  openapi: (signal?: AbortSignal) => request<OpenAPIDoc>("GET", "/openapi.json", undefined, signal),
   /** unsubscribe stops the trial reminders sent to the address of a link's token. */
   unsubscribe: (token: string) => request<void>("POST", "/unsubscribe", { token }),
   subscription: (orgId: string, signal?: AbortSignal) => request<Subscription>("GET", `${org(orgId)}/subscription`, undefined, signal),
