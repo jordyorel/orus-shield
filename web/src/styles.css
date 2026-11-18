@@ -667,6 +667,25 @@ body.pay main{max-width:1120px;padding:0 18px 48px}
 .qtunlock .addrow{margin-top:12px}
 .qtcta{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:28px;background:color-mix(in srgb,var(--azur) 8%,var(--surface))}
 .qtcta h2{margin:0;font-size:22px}
+/* Guides (/guides) */
+.guidegrid{list-style:none;padding:0;margin:20px 0 0;display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
+.guidecard{display:grid;gap:8px;height:100%;margin:0;text-decoration:none;color:var(--ink);transition:transform .2s,box-shadow .2s}
+.guidecard:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.guidecard b{font-family:'Bricolage Grotesque Variable',sans-serif;font-size:19px;line-height:1.25}
+.guidecard span{color:var(--ink2);font-size:15px}
+.guidecard small{color:var(--ink2);font-size:13px}
+.guidebox{margin-top:24px}
+.guidebox .mt{margin:0}
+.guide{max-width:760px;margin:24px auto 0}
+.guide h1{font-size:clamp(30px,5vw,44px);line-height:1.1;margin:8px 0 0}
+.guide h2{font-size:24px;margin:36px 0 0}
+.guide .plankicker a{color:inherit}
+.guidetext{color:var(--ink2);font-size:16px;line-height:1.65;margin-top:12px;display:grid;gap:12px}
+.guidetext p{margin:0}
+.guidetext ul{margin:0;padding-left:20px;display:grid;gap:8px}
+.guidetext b{color:var(--ink)}
+.guideintro{font-size:18px}
+.guidecode{margin:0;padding:14px 16px;border-radius:14px;background:var(--soft);color:var(--ink);font:13px/1.55 ui-monospace,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
 .slide small{color:var(--ink2);font-size:13px}
 .clock{display:flex;gap:2px;align-items:flex-end;height:18px}
 .clock i{flex:1;height:8px;border-radius:2px;background:var(--soft);transition:height .2s,background .2s}

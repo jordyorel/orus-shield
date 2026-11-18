@@ -182,6 +182,29 @@ describe("public site", () => {
     await waitFor(() => expect(window.location.pathname).toBe(`/orgs/${ORG}/aujourdhui`));
   });
 
+  it("lists the guides and leads each one to the public test", async () => {
+    mockApi({ "GET /auth/me": fail(401) });
+    renderAt("/guides");
+    for (const t of ["Vérifier et configurer DMARC pour protéger vos emails", "SPF : déclarer qui a le droit d’envoyer vos emails", "Tester le certificat SSL/TLS de votre site", "Sécuriser son site : HTTPS, HSTS et en-têtes de sécurité"]) {
+      expect(await screen.findByText(t)).toBeTruthy();
+    }
+    fireEvent.click(screen.getByText("Vérifier et configurer DMARC pour protéger vos emails"));
+    expect(await screen.findByRole("heading", { level: 1, name: "Vérifier et configurer DMARC pour protéger vos emails" })).toBeTruthy();
+    expect(window.location.pathname).toBe("/guides/dmarc");
+    expect(document.title).toBe("Vérifier et configurer DMARC pour protéger vos emails · Orus Shield");
+    expect(document.querySelector('meta[name="description"]')?.getAttribute("content")).toMatch(/^DMARC empêche/);
+    expect(screen.getByText("v=DMARC1; p=none; rua=mailto:dmarc@votre-entreprise.cg")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Votre nom de domaine"), { target: { value: "acme.cg" } });
+    fireEvent.click(screen.getByRole("button", { name: "Tester mon domaine" }));
+    await waitFor(() => expect(window.location.pathname + window.location.search).toBe("/test?domaine=acme.cg"));
+  });
+
+  it("says when a guide does not exist", async () => {
+    mockApi({ "GET /auth/me": fail(401) });
+    renderAt("/guides/nope");
+    expect(await screen.findByRole("heading", { name: "Ce guide n’existe pas." })).toBeTruthy();
+  });
+
   it("says plainly why a domain cannot be tested", async () => {
     mockApi({ "GET /auth/me": fail(401), "POST /quicktest": fail(400, "enter a public domain name", "invalid_domain") });
     renderAt("/test?domaine=localhost");

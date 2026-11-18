@@ -15,7 +15,7 @@ import { cleanDomain } from "../prefill";
 import { useBodyClass, useUI } from "../ui";
 import { limitRows } from "./Reglages";
 
-export function PubHead({ cur }: { cur: "accueil" | "tarifs" | "legal" | "test" }) {
+export function PubHead({ cur }: { cur: "accueil" | "tarifs" | "legal" | "test" | "guides" }) {
   const { theme, setTheme } = useUI();
   const { state } = useAuth();
   return (
@@ -33,6 +33,9 @@ export function PubHead({ cur }: { cur: "accueil" | "tarifs" | "legal" | "test" 
             {tr("Test gratuit", "Free test")}
           </Link>
         )}
+        <Link to="/guides" aria-current={cur === "guides" ? "page" : undefined}>
+          {tr("Guides", "Guides")}
+        </Link>
         <Link to="/tarifs" aria-current={cur === "tarifs" ? "page" : undefined}>
           {tr("Tarifs", "Pricing")}
         </Link>
@@ -70,6 +73,7 @@ export function PubFoot() {
     <footer className="pubfoot">
       <span>Orus Shield</span>
       <span>
+        <Link to="/guides">{tr("Guides", "Guides")}</Link>
         <Link to="/conditions">{tr("Conditions d’utilisation", "Terms of use")}</Link>
         <Link to="/confidentialite">{tr("Confidentialité", "Privacy")}</Link>
         <Link to="/tarifs">{tr("Tarifs", "Pricing")}</Link>

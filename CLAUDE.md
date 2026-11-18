@@ -310,7 +310,12 @@ gives way to "Aller à mon tableau de bord", the menu hides "Test gratuit" and /
 The home page's hero (2026-11-18, beyond the mockup): "Trouvez vos failles avant les pirates."; its radar
 shows an example result for visitors (score 63, four problems, marked "Exemple"), and once signed in
 the customer's own score and one dot per open problem (`MyPerimeter`, first organization's overview,
-"Bon retour, <name>."); the public header shows the profile avatar when signed in (`POST /api/v1/quicktest`, package
+"Bon retour, <name>."); the public header shows the profile avatar when signed in. Guides (`/guides`,
+`ui/pages/guides.tsx`, content for search engines leading to the test): DMARC, SPF, TLS certificate,
+HTTPS and security headers, each a whole text in French and in English, with its own title and meta
+description (`useMeta`); they state only standard facts (records, dig, openssl, nginx, Apache). The
+site renders in JavaScript: prerendering the public pages to static HTML would help search engines
+(not done yet) (`POST /api/v1/quicktest`, package
 `quicktest`, run in the API process, outside the queue, belonging to no organization). Its boundary:
 the passive email, tls and web modules only, on the name and its www (no discovery, ports or
 vulnerabilities: those still need an account and a verified domain), behind `quicktest.Gate` (public
