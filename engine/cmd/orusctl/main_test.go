@@ -108,6 +108,10 @@ type fakeAdmin struct {
 	subs    map[string]plan.Subscription
 }
 
+func (f *fakeAdmin) Funnel(_ context.Context, _ time.Time) (store.Funnel, error) {
+	return store.Funnel{Tests: 200, Domains: 150, Leads: 40, Marketing: 30, Signups: 12, Trialing: 3, Paying: 2}, nil
+}
+
 func (f *fakeAdmin) SubscriptionOf(ctx context.Context, orgID string) (*plan.Subscription, error) {
 	if sub, ok := f.subs[orgID]; ok {
 		return &sub, nil
@@ -665,5 +669,20 @@ func TestOrgPlan(t *testing.T) {
 		if err := c.run(ctx, args); !errors.Is(err, errUsage) {
 			t.Errorf("run(%v) = %v, want errUsage", args, err)
 		}
+	}
+}
+
+func TestFunnel(t *testing.T) {
+	c, _, out := newCLI()
+	if err := c.run(context.Background(), []string{"funnel", "-days", "7"}); err != nil {
+		t.Fatalf("funnel: %v", err)
+	}
+	for _, want := range []string{"LAST 7 DAYS", "public tests", "200", "emails left", "20%", "75%", "paying"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("output lacks %q:\n%s", want, out.String())
+		}
+	}
+	if err := c.run(context.Background(), []string{"funnel", "-days", "0"}); !errors.Is(err, errUsage) {
+		t.Errorf("-days 0 = %v, want a usage error", err)
 	}
 }

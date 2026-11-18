@@ -251,6 +251,7 @@ func TestEnglishTemplates(t *testing.T) {
 		"findings":    NewFindings(English, "a@example.com", "Acme", "acme.example", []AlertItem{{Severity: "critical", Title: "Certificate has expired", Asset: "acme.example:443", Reopened: true, Link: "l"}}, 2, "list"),
 		"threats":     EmergingThreats(English, "a@example.com", "Acme", "acme.example", []ThreatItem{{CVE: "CVE-2026-1", Name: "X RCE", Severity: "high", KEV: true, EPSS: 0.5, Products: []string{"nginx"}}}, 1, "scans"),
 		"first scan":  FirstScan(English, "a@example.com", "Acme", "acme.example", FirstScanFigures{Score: &score, Critical: 1, IPs: 2, Free: true}, "today", "offer"),
+		"quick test":  QuickTestReport(English, "a@example.com", "acme.example", &score, []QuickItem{{Severity: "high", Title: "No DMARC record", Steps: []string{"Publish a DMARC record."}}}, "signup"),
 		"trial nudge": TrialReminder(English, "a@example.com", "Acme", "acme.example", TrialNudge{Day: 10, Open: 3, High: 1, Top: "No DMARC record"}, "offer", "unsub"),
 	}
 	french := []string{"Bonjour", "L'équipe", "Vous recevez", "valable", "organisation «", " : "}
@@ -292,5 +293,29 @@ func TestListUnsubscribeHeader(t *testing.T) {
 	}
 	if _, err := build(from, to, Message{Subject: "s", Text: "t", Unsubscribe: "x>\r\nBcc: y"}, time.Now()); err == nil {
 		t.Error("header injection through the unsubscribe link accepted")
+	}
+}
+
+func TestQuickTestReport(t *testing.T) {
+	score := 50
+	m := QuickTestReport(French, "a@example.com", "acme.example", &score,
+		[]QuickItem{{Severity: "high", Title: "Aucun enregistrement DMARC", Steps: []string{"Publiez un enregistrement DMARC.", "Lisez les rapports."}}},
+		SignupDomainLink("https://app.example/", "acme.example"))
+	for _, want := range []string{
+		"Score de sécurité : 50/100",
+		"1 problème à corriger",
+		"- [Élevée] Aucun enregistrement DMARC\n  1. Publiez un enregistrement DMARC.\n  2. Lisez les rapports.",
+		"https://app.example/inscription?domaine=acme.example",
+		"Il ne vérifie pas les ports",
+	} {
+		if !strings.Contains(m.Text, want) {
+			t.Errorf("report lacks %q:\n%s", want, m.Text)
+		}
+	}
+	if m.Subject != "Orus Shield : le rapport de sécurité de acme.example" {
+		t.Errorf("subject = %q", m.Subject)
+	}
+	if m := QuickTestReport(English, "a@example.com", "acme.example", nil, nil, "l"); !strings.Contains(m.Text, "No problem found") || !strings.Contains(m.Text, "not available") {
+		t.Errorf("empty English report:\n%s", m.Text)
 	}
 }

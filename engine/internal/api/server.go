@@ -11,6 +11,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,6 +26,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/mailer"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/paddle"
+	"github.com/jordyorel/orus-shield/engine/internal/quicktest"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 	"github.com/jordyorel/orus-shield/engine/internal/seal"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
@@ -67,6 +69,10 @@ type Config struct {
 	// (ORUS_CREDENTIALS_KEY, seal.KeyLen bytes). nil: the credential
 	// routes answer 503 and no test account can be stored.
 	CredentialsKey []byte
+	// QuickTest runs the home page's public domain test (package
+	// quicktest); nil means the real passive modules. Tests replace it
+	// (rule 6: never scan real third-party systems in tests).
+	QuickTest func(ctx context.Context, domain string) (quicktest.Report, error)
 }
 
 const (
@@ -94,6 +100,10 @@ type Server struct {
 	billing *store.Billing
 	// unsub records opt-outs from trial reminders (role orus_auth).
 	unsub *store.Auth
+	// public stores the public domain tests and their leads (role
+	// orus_public); quickSlots bounds the tests running at once.
+	public     *store.Public
+	quickSlots chan struct{}
 }
 
 // New returns the API server on st. It keeps only st's authentication
@@ -115,7 +125,11 @@ func New(st *store.Store, cfg Config, log *slog.Logger) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("api: %w", err)
 	}
-	srv := &Server{acct: acct, org: st.Org, cfg: cfg, log: log, agents: st.Agents(), billing: st.Billing(), unsub: st.Auth()}
+	if cfg.QuickTest == nil {
+		cfg.QuickTest = quickRunner(cfg.DNS)
+	}
+	srv := &Server{acct: acct, org: st.Org, cfg: cfg, log: log, agents: st.Agents(), billing: st.Billing(), unsub: st.Auth(),
+		public: st.Public(), quickSlots: make(chan struct{}, quickSlots)}
 	if len(cfg.CredentialsKey) > 0 {
 		if srv.creds, err = seal.NewKey(cfg.CredentialsKey); err != nil {
 			return nil, fmt.Errorf("api: credentials key: %w", err)
@@ -161,6 +175,8 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/mfa/disable", s.withSession(s.mfaDisable))
 	// The offers, for the public pricing page: no session needed.
 	mux.HandleFunc("GET /api/v1/plans", s.listPlans)
+	mux.HandleFunc("POST /api/v1/quicktest", s.quickTest)
+	mux.HandleFunc("POST /api/v1/quicktest/{id}/unlock", s.unlockQuickTest)
 	// The unsubscribe link of trial reminders: the token is the proof.
 	mux.HandleFunc("POST /api/v1/unsubscribe", s.unsubscribe)
 	s.orgRoutes(mux)

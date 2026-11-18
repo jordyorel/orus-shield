@@ -156,6 +156,10 @@ function ConfidentialiteFR() {
           </li>
           <li>Comptes de test que vous fournissez : chiffrés avec une clé dédiée, jamais réaffichés, utilisés seulement pendant les scans.</li>
           <li>Paiement : géré par Paddle, notre revendeur ; nous recevons l’état de votre abonnement et un identifiant client, jamais votre numéro de carte.</li>
+          <li>
+            Test public d’un domaine, sans compte : le domaine testé, l’adresse IP qui l’a demandé et le résultat. Si vous demandez le rapport : votre adresse
+            email, et votre accord éventuel pour recevoir nos conseils et offres.
+          </li>
         </ul>
       </Article>
       <Article title="3. Pourquoi">
@@ -164,6 +168,8 @@ function ConfidentialiteFR() {
           <li>Protéger les comptes et la plateforme, et garder la trace des scans (intérêt légitime, obligations de sécurité).</li>
           <li>Vous envoyer les emails du service : alertes, invitations, réinitialisation du mot de passe.</li>
           <li>Facturer (obligations légales).</li>
+          <li>Empêcher les abus du test public : limites par adresse IP (intérêt légitime) ; vous envoyer le rapport demandé.</li>
+          <li>Seulement avec votre accord : vous envoyer nos conseils et offres. Vous pouvez retirer cet accord à tout moment, en un clic.</li>
         </ul>
         <p>Nous ne vendons pas vos données et ne les utilisons pas pour de la publicité.</p>
       </Article>
@@ -185,11 +191,12 @@ function ConfidentialiteFR() {
           <li>Journal d’audit et journal des connexions : [durée].</li>
           <li>Comptes de test : jusqu’à ce que vous les supprimiez, ou avec le domaine concerné.</li>
           <li>Factures : la durée imposée par la loi, [durée].</li>
+          <li>Tests publics (domaine, adresse IP, résultat) : 30 jours. Adresses laissées pour un rapport : [durée], ou jusqu’à votre désinscription.</li>
         </ul>
       </Article>
       <Article title="6. Cookies et stockage">
         <p>
-          Un seul cookie : celui de votre session, indispensable pour rester connecté. Votre navigateur garde aussi votre choix de thème (clair ou sombre) et de langue.
+          Un seul cookie : celui de votre session, indispensable pour rester connecté. Votre navigateur garde aussi votre choix de thème (clair ou sombre), de langue et d’affichage du menu, et, le temps de vous inscrire, le domaine que vous avez testé.
           Pas de cookie publicitaire ni de mesure d’audience ; les polices sont servies par nos serveurs, sans appel à un service tiers.
         </p>
       </Article>
@@ -362,6 +369,10 @@ function ConfidentialiteEN() {
           </li>
           <li>Test accounts you provide: encrypted with a dedicated key, never shown again, used only during scans.</li>
           <li>Payment: handled by Paddle, our reseller; we receive the state of your subscription and a customer identifier, never your card number.</li>
+          <li>
+            Public test of a domain, without an account: the domain tested, the IP address that asked for it and the result. If you ask for the report: your
+            email address, and your optional consent to receive our tips and offers.
+          </li>
         </ul>
       </Article>
       <Article title="3. Why">
@@ -370,6 +381,8 @@ function ConfidentialiteEN() {
           <li>To protect accounts and the platform, and keep a record of scans (legitimate interest, security obligations).</li>
           <li>To send you the service’s emails: alerts, invitations, password resets.</li>
           <li>To invoice (legal obligations).</li>
+          <li>To prevent abuse of the public test: limits per IP address (legitimate interest); to send you the report you asked for.</li>
+          <li>Only with your consent: to send you our tips and offers. You can withdraw it at any time, in one click.</li>
         </ul>
         <p>We do not sell your data and do not use it for advertising.</p>
       </Article>
@@ -391,11 +404,12 @@ function ConfidentialiteEN() {
           <li>Audit log and sign-in log: [period].</li>
           <li>Test accounts: until you delete them, or with the domain concerned.</li>
           <li>Invoices: the period required by law, [period].</li>
+          <li>Public tests (domain, IP address, result): 30 days. Addresses left for a report: [period], or until you unsubscribe.</li>
         </ul>
       </Article>
       <Article title="6. Cookies and storage">
         <p>
-          A single cookie: your session cookie, needed to stay signed in. Your browser also keeps your choice of theme (light or dark) and of language. No
+          A single cookie: your session cookie, needed to stay signed in. Your browser also keeps your choice of theme (light or dark), of language and of how the menu is shown, and, while you sign up, the domain you tested. No
           advertising cookie and no audience measurement; fonts are served by our servers, without calling a third-party service.
         </p>
       </Article>

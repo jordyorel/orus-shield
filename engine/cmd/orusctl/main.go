@@ -78,6 +78,7 @@ const usage = `usage:
   orusctl assets [-org ORG] [-all] <domain>          (inventory; -all: include gone assets)
   orusctl posture [-org ORG] [-v] <domain>           (score and history; -v: every check)
   orusctl audit [-org ORG] <domain>
+  orusctl funnel [-days N]                           (public test to paying customer, last N days, default 30)
 
 ORG is an organization name or ID; default: $ORUS_ORG, else "Default".
 Flags go before the positional arguments. ORUS_DATABASE_URL must be set.`
@@ -100,6 +101,7 @@ type Admin interface {
 	ResetMFA(ctx context.Context, userID, actor string) error
 	SubscriptionOf(ctx context.Context, orgID string) (*plan.Subscription, error)
 	SetSubscription(ctx context.Context, orgID string, sub plan.Subscription, provider, actor string) error
+	Funnel(ctx context.Context, since time.Time) (store.Funnel, error)
 }
 
 // setupTokenTTL is how long a new user has to choose a password.
@@ -276,6 +278,8 @@ func (c cli) run(ctx context.Context, args []string) error {
 		return c.posture(ctx, rest)
 	case "audit":
 		return c.audit(ctx, rest)
+	case "funnel":
+		return c.funnel(ctx, rest)
 	}
 	return fmt.Errorf("%w: unknown command %q", errUsage, cmd)
 }
@@ -807,6 +811,40 @@ func (c cli) audit(ctx context.Context, args []string) error {
 		details, _ := e.Details.(json.RawMessage)
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.At.Format(time.RFC3339), e.Actor, e.Action, details)
 	}
+	return w.Flush()
+}
+
+// funnel prints the steps from the home page's public test to a paying
+// customer, with the share kept at each step.
+func (c cli) funnel(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("funnel", flag.ContinueOnError)
+	days := fs.Int("days", 30, "period in days")
+	if _, err := parse(fs, args, 0); err != nil {
+		return err
+	}
+	if *days < 1 || *days > 3650 {
+		return fmt.Errorf("%w: funnel: -days must be between 1 and 3650", errUsage)
+	}
+	f, err := c.admin.Funnel(ctx, time.Now().AddDate(0, 0, -*days))
+	if err != nil {
+		return err
+	}
+	share := func(n, of int) string {
+		if of == 0 {
+			return ""
+		}
+		return fmt.Sprintf("%.0f%%", 100*float64(n)/float64(of))
+	}
+	w := tabwriter.NewWriter(c.out, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(w, "LAST %d DAYS\tCOUNT\tOF PREVIOUS\n", *days)
+	fmt.Fprintf(w, "public tests\t%d\t\n", f.Tests)
+	fmt.Fprintf(w, "  distinct domains\t%d\t\n", f.Domains)
+	fmt.Fprintf(w, "emails left\t%d\t%s\n", f.Leads, share(f.Leads, f.Tests))
+	fmt.Fprintf(w, "  agreed to messages\t%d\t%s\n", f.Marketing, share(f.Marketing, f.Leads))
+	fmt.Fprintf(w, "signups completed\t%d\t\n", f.Signups)
+	fmt.Fprintf(w, "NOW, WITH PADDLE\t\t\n")
+	fmt.Fprintf(w, "  in trial\t%d\t\n", f.Trialing)
+	fmt.Fprintf(w, "  paying\t%d\t\n", f.Paying)
 	return w.Flush()
 }
 

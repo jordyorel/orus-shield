@@ -7,7 +7,9 @@ import { useOrg } from "../OrgData";
 import { AssetSheet, SevTag } from "../sheets";
 import { tr } from "../../i18n";
 import { ScanLine } from "../ScanLine";
+import { takeDomain } from "../prefill";
 import { useUI } from "../ui";
+
 
 const RETRY_MS = 30_000;
 const RETRY_MAX = 20; // 10 minutes
@@ -33,7 +35,8 @@ export function AddPanel({ resume = false }: { resume?: boolean }) {
   const { toast } = useUI();
   // A domain added earlier and not verified yet resumes at its record.
   const pending = data?.targets.find((t) => !t.verified && !t.internal);
-  const [ad, setAd] = useState<Add>({ step: 0, domain: "", err: "" });
+  // A domain tested on the public test page before signing up comes ready.
+  const [ad, setAd] = useState<Add>(() => ({ step: 0, domain: takeDomain(), err: "" }));
   const [busy, setBusy] = useState(false);
 
   const showRecord = async (target: Target) => {

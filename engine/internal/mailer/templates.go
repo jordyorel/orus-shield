@@ -878,3 +878,99 @@ func OfferLink(publicURL, orgID string) string {
 func UnsubscribeLink(publicURL, token string) string {
 	return strings.TrimRight(publicURL, "/") + "/desinscription#token=" + url.QueryEscape(token)
 }
+
+// QuickItem is one problem of a public test's report.
+type QuickItem struct {
+	Severity string
+	Title    string
+	Steps    []string
+}
+
+// QuickTestReport is the full report of the home page's public test, sent
+// to the visitor who left their email. It holds only what the test saw in
+// public data (passive checks), and leads to signing up to watch the
+// domain.
+func QuickTestReport(lang Lang, to, domain string, score *int, items []QuickItem, signupLink string) Message {
+	domain = oneLine(domain, 253)
+	var b strings.Builder
+	for k, it := range items {
+		if k > 0 {
+			b.WriteString("\n")
+		}
+		fmt.Fprintf(&b, "- [%s] %s\n", severityLabel(lang, it.Severity), oneLine(it.Title, 200))
+		for n, s := range it.Steps {
+			fmt.Fprintf(&b, "  %d. %s\n", n+1, oneLine(s, 600))
+		}
+	}
+	if lang == English {
+		sc := "not available"
+		if score != nil {
+			sc = fmt.Sprintf("%d/100", *score)
+		}
+		problems := "No problem found in what this test checks.\n"
+		if len(items) > 0 {
+			problems = fmt.Sprintf("%d %s to fix, with the steps:\n\n%s", len(items), pluralEN(len(items), "problem", "problems"), b.String())
+		}
+		return Message{
+			To:      to,
+			Subject: fmt.Sprintf("Orus Shield: the security report of %s", domain),
+			Text: fmt.Sprintf(`Hello,
+
+Here is the report of the test you ran on %s.
+
+Security score: %s
+%s
+This free test only reads public data: your email records, your
+certificate and your site's headers, on %s and www.%s. It does not
+check your servers' ports, your other names or known vulnerabilities.
+
+To check everything, every week, and be alerted when something breaks,
+create your account (free audit, no card):
+
+%s
+
+You receive this email because this address was entered on our site to
+receive the report. We will not write to you again without your consent.
+%s
+`, domain, sc, problems, domain, domain, signupLink, signatureEN),
+		}
+	}
+	sc := "non disponible"
+	if score != nil {
+		sc = fmt.Sprintf("%d/100", *score)
+	}
+	problems := "Aucun problème trouvé dans ce que ce test vérifie.\n"
+	if len(items) > 0 {
+		problems = fmt.Sprintf("%d problème%s à corriger, avec les étapes :\n\n%s", len(items), plural(len(items)), b.String())
+	}
+	return Message{
+		To:      to,
+		Subject: fmt.Sprintf("Orus Shield : le rapport de sécurité de %s", domain),
+		Text: fmt.Sprintf(`Bonjour,
+
+Voici le rapport du test que vous avez lancé sur %s.
+
+Score de sécurité : %s
+%s
+Ce test gratuit ne lit que des données publiques : vos enregistrements
+email, votre certificat et les en-têtes de votre site, sur %s et www.%s.
+Il ne vérifie pas les ports de vos serveurs, vos autres noms ni les
+vulnérabilités connues.
+
+Pour tout vérifier, chaque semaine, et être alerté quand quelque chose
+casse, créez votre compte (audit gratuit, sans carte) :
+
+%s
+
+Vous recevez cet email parce que cette adresse a été saisie sur notre site
+pour recevoir le rapport. Nous ne vous écrirons plus sans votre accord.
+%s
+`, domain, sc, problems, domain, domain, signupLink, signature),
+	}
+}
+
+// SignupDomainLink is the signup page with the tested domain, which the
+// dashboard then offers to add.
+func SignupDomainLink(publicURL, domain string) string {
+	return strings.TrimRight(publicURL, "/") + "/inscription?domaine=" + url.QueryEscape(domain)
+}

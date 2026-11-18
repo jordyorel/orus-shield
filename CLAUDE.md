@@ -156,6 +156,7 @@ engine/
   internal/gate/     per-scan module.Gate: customer exclusions + rate limiter
   internal/gateproxy/ local HTTP proxy putting an external scanner (Nuclei) behind the gate
   internal/ownership/ DNS TXT ownership verification and re-checks (rule 1)
+  internal/quicktest/ public domain test of the home page: passive modules, public-address gate
   internal/store/    PostgreSQL: organizations, targets, scan queue, findings lifecycle,
                      audit log; org-scoped handle (store.Org) + row-level security
   internal/worker/   claims scans, runs modules, records results
@@ -301,6 +302,22 @@ scan: the quick profile's modules (no vulns, api or zap; switched-off modules le
 scan. `POST /targets/{target}/scans` without modules runs every module the offer allows (passive
 only on Gratuit). The dashboard checks the TXT record again by itself every 30 s for 10 minutes
 after a failed check.
+
+Public domain test (decided 2026-11-18, the one exception to the rule above, for acquisition): `/test`
+(and the home page's form) tests any domain without an account (`POST /api/v1/quicktest`, package
+`quicktest`, run in the API process, outside the queue, belonging to no organization). Its boundary:
+the passive email, tls and web modules only, on the name and its www (no discovery, ports or
+vulnerabilities: those still need an account and a verified domain), behind `quicktest.Gate` (public
+addresses only: a name pointing at 127.0.0.1 or 10.x is refused, against server-side request forgery;
+rate limit), 20 s budget. Limits: the same domain within an hour reuses its result, 10 tests per hour
+per IP, 300 runs per hour in all, 4 at once. Anyone sees the score and the failed checks (public facts,
+info findings left out); leaving an email (`/quicktest/{id}/unlock`) shows the explanations and steps
+and emails the report (`mailer.QuickTestReport`, page language), with a separate, optional marketing
+consent; 3 reports per hour per address. Stored through the `orus_public` role (migration 0030:
+`quick_tests` kept 30 days, `quick_test_leads`); production grants it to the API's login role like the
+other roles. `orusctl funnel [-days N]` counts tests, emails left, signups and Paddle customers from
+our own data (no tracker: the privacy policy promises no audience measurement). The tested domain is
+carried to Premiers pas through signup (`ui/prefill.ts`).
 
 Gratuit is a single audit (decided 2026-11-17, `plan.Monitoring` false, no schedule): the first
 scan of the organization is offered and its results stay readable; any later scan (manual,

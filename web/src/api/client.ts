@@ -1,4 +1,4 @@
-import type { Activity, Agent, DeclaredAPI, TestAccount, AuthActivity, Check, DeviceSession, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, OrgSettings, Overview, Plan, RecoveryCodes, Role, Scan, ScheduleInput, Subscription, Target } from "./types";
+import type { Activity, Agent, DeclaredAPI, TestAccount, AuthActivity, Check, DeviceSession, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, OrgSettings, Overview, Plan, QuickProblem, QuickResult, RecoveryCodes, Role, Scan, ScheduleInput, Subscription, Target } from "./types";
 import type { Exclusions } from "../exclusions";
 import { getLang } from "../i18n";
 
@@ -112,6 +112,9 @@ export const api = {
   authActivity: (signal?: AbortSignal) => request<List<AuthActivity>>("GET", "/auth/activity", undefined, signal),
   checkout: (orgId: string, plan: "sme" | "pro", period: "monthly" | "yearly") =>
     request<{ transaction_id: string; client_token: string; environment: string; email: string; trial: boolean }>("POST", `${org(orgId)}/checkout`, { plan, period }),
+  quickTest: (domain: string) => request<QuickResult>("POST", "/quicktest", { domain }),
+  unlockQuickTest: (id: string, email: string, marketing: boolean) =>
+    request<{ problems: QuickProblem[]; emailed: boolean }>("POST", `/quicktest/${encodeURIComponent(id)}/unlock`, { email, marketing }),
   billingPortal: (orgId: string) => request<{ url: string }>("POST", `${org(orgId)}/billing/portal`),
   /** billingSync records the subscription of a finished checkout at once, without waiting for Paddle's webhook. */
   billingSync: (orgId: string, transactionId: string) =>

@@ -10,6 +10,7 @@ import { fallback, msg } from "../../messages";
 import { Link, navigate, useLocation } from "../../router";
 import { Arrow, Envelope, Eye, Logo } from "../icons";
 import { LangSwitch } from "../LangSwitch";
+import { cleanDomain, rememberDomain } from "../prefill";
 import { EMAIL_RE, pwScore } from "../model";
 import { encodeQR, qrPath } from "../qr";
 import { shake, useBodyClass, useUI } from "../ui";
@@ -476,6 +477,8 @@ export function InscriptionPage() {
     try {
       await send();
       rememberOffer(search.get("offre") ?? "");
+      // A domain tested on the public test page: Premiers pas offers it.
+      rememberDomain(cleanDomain(search.get("domaine") ?? ""));
       setErr("");
       setStep("sent");
     } catch (e2) {

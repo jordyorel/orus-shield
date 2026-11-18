@@ -6,6 +6,7 @@ import { appPath, AppShell } from "./ui/AppShell";
 import { OrgProvider, useOrg } from "./ui/OrgData";
 import { ActifsPage } from "./ui/pages/Actifs";
 import { AujourdhuiPage } from "./ui/pages/Aujourdhui";
+import { TestPage } from "./ui/pages/quicktest";
 import { ConnexionPage, InscriptionPage, MfaSetupPage, SetPasswordPage, takeOffer, UnsubscribePage } from "./ui/pages/auth";
 import { OffrePage } from "./ui/pages/Offre";
 import { ProblemesPage } from "./ui/pages/Problemes";
@@ -61,6 +62,7 @@ export function App() {
   // Pages open to everyone.
   if (path === "/") return <Page><AccueilPage /></Page>;
   if (path === "/tarifs") return <Page><TarifsPage /></Page>;
+  if (path === "/test") return <Page><TestPage /></Page>;
   if (path === "/conditions") return <Page><ConditionsPage /></Page>;
   if (path === "/confidentialite") return <Page><ConfidentialitePage /></Page>;
   if (path === "/traitement-des-donnees") return <Page><TraitementPage /></Page>;

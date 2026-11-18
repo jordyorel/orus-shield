@@ -11,10 +11,11 @@ import { LangSwitch } from "../LangSwitch";
 import { locale, tr } from "../../i18n";
 import { openCheckout } from "../paddle";
 import { money } from "../model";
+import { cleanDomain } from "../prefill";
 import { useBodyClass, useUI } from "../ui";
 import { limitRows } from "./Reglages";
 
-export function PubHead({ cur }: { cur: "accueil" | "tarifs" | "legal" }) {
+export function PubHead({ cur }: { cur: "accueil" | "tarifs" | "legal" | "test" }) {
   const { theme, setTheme } = useUI();
   const { state } = useAuth();
   return (
@@ -26,6 +27,9 @@ export function PubHead({ cur }: { cur: "accueil" | "tarifs" | "legal" }) {
       <nav aria-label={tr("Site", "Site")}>
         <Link to="/" aria-current={cur === "accueil" ? "page" : undefined}>
           {tr("Accueil", "Home")}
+        </Link>
+        <Link to="/test" aria-current={cur === "test" ? "page" : undefined}>
+          {tr("Test gratuit", "Free test")}
         </Link>
         <Link to="/tarifs" aria-current={cur === "tarifs" ? "page" : undefined}>
           {tr("Tarifs", "Pricing")}
@@ -127,7 +131,7 @@ export function AccueilPage() {
   useBodyClass(["public"]);
   const plans = usePlans();
   const ess = plans.find((p) => p.id === "sme");
-  const { toast } = useUI();
+  const [demo, setDemo] = useState("");
   return (
     <>
       <main>
@@ -142,18 +146,39 @@ export function AccueilPage() {
                   "Orus Shield watches your domains, your email and your servers, then tells you what to fix first, in plain language.",
                 )}
               </p>
-              <div className="addrow is-soon">
+              {/* The public test: the domain goes to /test, which runs it. */}
+              <form
+                className="addrow"
+                noValidate
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const d = cleanDomain(demo);
+                  navigate(d ? `/test?domaine=${encodeURIComponent(d)}` : "/test");
+                }}
+              >
                 <label className="vh" htmlFor="demo-in">
                   {tr("Votre nom de domaine", "Your domain name")}
                 </label>
-                <input id="demo-in" type="text" inputMode="url" autoComplete="off" placeholder={tr("votre-entreprise.cg", "your-company.com")} disabled />
-                <button className="btn" type="button" aria-disabled="true" onClick={() => toast(tr("Test sans compte : bientôt disponible. Créez un compte gratuit pour tester votre domaine.", "Testing without an account: coming soon. Create a free account to test your domain."))}>
+                <input
+                  id="demo-in"
+                  type="text"
+                  inputMode="url"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder={tr("votre-entreprise.cg", "your-company.com")}
+                  value={demo}
+                  onChange={(e) => setDemo(e.target.value)}
+                />
+                <button className="btn" type="submit">
                   {tr("Tester mon domaine", "Test my domain")}
-                  <Soon />
                 </button>
-              </div>
-              <p className="err" role="alert" />
-              <p className="sub">{tr("Audit gratuit, sans carte. Contrôles passifs seulement : rien n’est envoyé vers vos serveurs.", "Free audit, no card. Passive checks only: nothing is sent to your servers.")}</p>
+              </form>
+              <p className="sub">
+                {tr(
+                  "Gratuit et sans compte : votre score sur 100 en 20 secondes. Contrôles passifs seulement, à partir de données publiques.",
+                  "Free, no account: your score out of 100 in 20 seconds. Passive checks only, from public data.",
+                )}
+              </p>
             </div>
             <div className="herovis">
               <HeroRadar />

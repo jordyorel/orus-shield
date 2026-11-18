@@ -431,3 +431,34 @@ export interface Agent {
   created_at: string;
   created_by: string;
 }
+
+/** The home page's public domain test (quickResponse): passive checks of
+ * public data, without an account. */
+export interface QuickCheck {
+  id: string;
+  category: Category;
+  severity: Severity;
+  title: string;
+  title_fr: string;
+  status: "passed" | "failed";
+}
+
+export interface QuickProblem {
+  check_id: string;
+  severity: Severity;
+  title: string;
+  title_fr: string;
+  hosts: string[];
+  /** Only once the visitor left an email (unlock). */
+  details?: { description: string; remediation: string[]; description_fr: string; remediation_fr: string[] };
+}
+
+export interface QuickResult {
+  id: string;
+  domain: string;
+  score: number | null;
+  at: string;
+  checks: QuickCheck[];
+  problems: QuickProblem[];
+  unreached: string[];
+}

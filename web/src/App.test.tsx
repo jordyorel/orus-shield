@@ -120,6 +120,58 @@ describe("public site", () => {
     expect(screen.queryByText(/Mobile Money/)).toBeNull();
   });
 
+  const quick = {
+    id: "q1",
+    domain: "example.cg",
+    score: 50,
+    at: "2026-11-18T12:00:00Z",
+    checks: [
+      { id: "dmarc-missing", category: "email", severity: "high", title: "DMARC record published", title_fr: "Enregistrement DMARC publié", status: "failed" },
+      { id: "spf-missing", category: "email", severity: "high", title: "SPF record published", title_fr: "Enregistrement SPF publié", status: "passed" },
+    ],
+    problems: [{ check_id: "dmarc-missing", severity: "high", title: "No DMARC record", title_fr: "Aucun enregistrement DMARC", hosts: ["example.cg"] }],
+    unreached: [],
+  };
+
+  it("tests a domain from the home page, without an account", async () => {
+    const calls = mockApi({ "GET /auth/me": fail(401), "GET /plans": ok({ items: plans }), "POST /quicktest": ok(quick) });
+    renderAt("/");
+    fireEvent.change(await screen.findByLabelText("Votre nom de domaine"), { target: { value: "https://www.Example.cg/contact" } });
+    fireEvent.click(screen.getByRole("button", { name: "Tester mon domaine" }));
+    expect(await screen.findByText("Niveau moyen, 1 point faible à régler.")).toBeTruthy();
+    expect(window.location.pathname + window.location.search).toBe("/test?domaine=www.example.cg");
+    expect(calls.find((c) => c.key === "POST /quicktest")?.body).toEqual({ domain: "www.example.cg" });
+    expect(screen.getByText("Aucun enregistrement DMARC")).toBeTruthy();
+    expect(screen.getByText("Enregistrement SPF publié")).toBeTruthy(); // what is fine
+  });
+
+  it("shows how to fix once an email is left, with an optional consent", async () => {
+    const unlocked = {
+      emailed: true,
+      problems: [
+        {
+          ...quick.problems[0],
+          details: { description: "Anyone can send email in your name.", remediation: ["Publish a DMARC record."], description_fr: "N’importe qui peut envoyer des emails en votre nom.", remediation_fr: ["Publiez un enregistrement DMARC."] },
+        },
+      ],
+    };
+    const calls = mockApi({ "GET /auth/me": fail(401), "POST /quicktest": ok(quick), "POST /quicktest/q1/unlock": ok(unlocked) });
+    renderAt("/test?domaine=example.cg");
+    expect(await screen.findByText("Aucun enregistrement DMARC")).toBeTruthy();
+    expect(screen.queryByText("Publiez un enregistrement DMARC.")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Adresse email"), { target: { value: "boss@example.cg" } });
+    fireEvent.click(screen.getByRole("button", { name: "Voir comment corriger" }));
+    expect(await screen.findByText("Publiez un enregistrement DMARC.")).toBeTruthy();
+    expect(screen.getByText("Le rapport est aussi parti à votre adresse email.")).toBeTruthy();
+    expect(calls.find((c) => c.key === "POST /quicktest/q1/unlock")?.body).toEqual({ email: "boss@example.cg", marketing: false });
+  });
+
+  it("says plainly why a domain cannot be tested", async () => {
+    mockApi({ "GET /auth/me": fail(401), "POST /quicktest": fail(400, "enter a public domain name", "invalid_domain") });
+    renderAt("/test?domaine=localhost");
+    expect(await screen.findByText(/Saisissez un nom de domaine public/)).toBeTruthy();
+  });
+
   // signedIn: whether the browser keeps the session cookie (the second
   // GET /auth/me, after login).
   const loginRoutes = (cookieKept: boolean) => {
