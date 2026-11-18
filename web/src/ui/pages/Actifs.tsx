@@ -234,6 +234,35 @@ export function AddPanel({ resume = false }: { resume?: boolean }) {
   );
 }
 
+/**
+ * AddDomainRow ends a list of domains: "+ Ajouter un domaine", which opens
+ * the add and verify flow in place. It starts open while a domain waits for
+ * its verification, so its TXT record stays in view.
+ */
+export function AddDomainRow() {
+  const { data } = useOrg();
+  const pending = !!data?.targets.some((t) => !t.verified && !t.internal);
+  const [open, setOpen] = useState(pending);
+  if (!open) {
+    return (
+      <button className="addrowbtn" type="button" onClick={() => setOpen(true)}>
+        <span aria-hidden="true">+</span>
+        {tr("Ajouter un domaine", "Add a domain")}
+      </button>
+    );
+  }
+  return (
+    <div className="rpanel addpanel addopen">
+      {!pending && (
+        <button className="link addclose" type="button" onClick={() => setOpen(false)}>
+          {tr("Fermer", "Close")}
+        </button>
+      )}
+      <AddPanel resume={pending} />
+    </div>
+  );
+}
+
 export function ActifsPage() {
   const { data, assets, issues } = useOrg();
   const { showSheet } = useUI();
@@ -248,81 +277,107 @@ export function ActifsPage() {
   const p = data.subscription.plan;
   const cap = p.hosts_per_scan ? p.hosts_per_scan * Math.max(1, data.targets.length) : Math.max(1, assets.length);
 
+  const nOk = assets.length - nPb;
+  const domains = data.targets.filter((t) => !t.internal);
+  const count = { all: assets.length, pb: nPb, ok: nOk };
+  const shown = (a: (typeof assets)[number]) => (af === "all" ? true : af === "pb" ? openOf(a.n).length > 0 : openOf(a.n).length === 0);
+
   return (
     <>
-      <div className="rtop">
-        <h1 className="hello" style={{ margin: 0, fontFamily: "inherit", fontWeight: 400, letterSpacing: 0 }}>
-          {tr("Actifs", "Assets")}
-        </h1>
-      </div>
-      <p className="pagehead">
-        <b>{assets.length}</b> {tr("actifs surveillés", "monitored assets")}
-        <span>{tr(`${nPb} avec un problème ouvert`, `${nPb} with an open problem`)}</span>
-      </p>
-      <div className="meter" role="img" aria-label={tr(`${assets.length} actifs sur ${cap} inclus dans l'offre ${p.name}`, `${assets.length} of ${cap} assets included in the ${p.name} plan`)}>
+      <div className="todayhead">
         <div>
-          <b style={{ width: Math.min(100, (assets.length / cap) * 100) + "%" }} />
+          <p className="hello">{tr("Actifs", "Assets")}</p>
+          <h1 className="lead lead2">
+            {tr(`${assets.length} actif${assets.length > 1 ? "s" : ""} surveillé${assets.length > 1 ? "s" : ""}`, `${assets.length} monitored asset${assets.length > 1 ? "s" : ""}`)}
+          </h1>
+        </div>
+        <div className="filters" role="group" aria-label={tr("Filtrer les actifs", "Filter the assets")} style={{ padding: 0 }}>
+          {(
+            [
+              ["all", tr("Tous", "All")],
+              ["pb", tr("Avec un problème", "With a problem")],
+              ["ok", tr("Protégés", "Protected")],
+            ] as const
+          ).map(([k, l]) => (
+            <button key={k} className="pill" type="button" aria-pressed={af === k} onClick={() => setAf(k)}>
+              {l}
+              <span className="pillnum">{count[k]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="assetsum" role="img" aria-label={tr(`${assets.length} actifs sur ${cap} inclus dans l'offre ${p.name}`, `${assets.length} of ${cap} assets included in the ${p.name} plan`)}>
+        <div className="usebar">
+          <b style={{ width: Math.min(100, (assets.length / cap) * 100) + "%" }} className={assets.length / cap >= 0.9 ? "full" : ""} />
         </div>
         <span>
           {tr(`${assets.length} sur ${cap} inclus dans l’offre ${p.name}`, `${assets.length} of ${cap} included in the ${p.name} plan`)}
+          {" · "}
+          {tr(`${nPb} avec un problème`, `${nPb} with a problem`)}
+          {" · "}
+          {tr(`${nOk} protégé${nOk > 1 ? "s" : ""}`, `${nOk} protected`)}
         </span>
       </div>
-      <ul className="domlines" aria-label={tr("Vos domaines", "Your domains")}>
-        {data.targets
-          .filter((t) => !t.internal)
-          .map((t) => (
-            <li key={t.id}>
-              <b>{t.domain}</b>
-              {t.verified ? <ScanLine targets={[t]} /> : <span className="hint">{tr("À vérifier : ajoutez son enregistrement TXT plus bas.", "To verify: add its TXT record below.")}</span>}
-            </li>
-          ))}
-      </ul>
-      <div className="filters" role="group" aria-label={tr("Filtrer les actifs", "Filter the assets")}>
-        {(
-          [
-            ["all", tr("Tous", "All")],
-            ["pb", tr("Avec un problème", "With a problem")],
-            ["ok", tr("Protégés", "Protected")],
-          ] as const
-        ).map(([k, l]) => (
-          <button key={k} className="pill" type="button" aria-pressed={af === k} onClick={() => setAf(k)}>
-            {l}
-          </button>
-        ))}
+
+      {domains.map((t) => {
+        const mine = list.filter((a) => a.targetId === t.id && shown(a));
+        return (
+          <section key={t.id} className="rpanel domblock">
+            <div className="domhead">
+              <div className="domtop">
+                <h2>{t.domain}</h2>
+                <span className={"stchip " + (t.verified ? "st-ok" : "st-warn")}>{t.verified ? tr("Vérifié", "Verified") : tr("À vérifier", "To verify")}</span>
+              </div>
+              {t.verified ? <ScanLine targets={[t]} /> : <span className="hint">{tr("Publiez son enregistrement TXT, juste en dessous, pour le scanner.", "Publish its TXT record, just below, to scan it.")}</span>}
+            </div>
+            {mine.length ? (
+              <ul className="arows">
+                {mine.map((a) => {
+                  const o = openOf(a.n);
+                  const w = worst(o);
+                  return (
+                    <li key={a.n}>
+                      <button className={"arow sev-" + w} type="button" title={a.n} onClick={() => showSheet(<AssetSheet n={a.n} />)}>
+                        <span className="awho">
+                          <b>{a.n}</b>
+                          <small>
+                            {a.k}
+                            {o.length ? tr(` · ${o.length} problème${o.length > 1 ? "s" : ""}`, ` · ${o.length} problem${o.length > 1 ? "s" : ""}`) : ""}
+                          </small>
+                        </span>
+                        <span className="acats" aria-hidden="true">
+                          {CATS.map(([c, l]) => (
+                            <span key={c}>
+                              <i className={"hm " + catState(a, c, issues, evaluated)} />
+                              {l}
+                            </span>
+                          ))}
+                        </span>
+                        <span className="atech">
+                          {a.tech.slice(0, 2).map((x) => (
+                            <span key={x}>{x}</span>
+                          ))}
+                        </span>
+                        <SevTag s={w} label={w === "ok" ? tr("Protégé", "Protected") : undefined} />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="hint" style={{ marginTop: 12 }}>
+                {af === "all" ? tr("Aucun actif trouvé pour l’instant : il apparaîtra après le premier scan.", "No asset found yet: they appear after the first scan.") : tr("Aucun actif dans ce filtre.", "No asset in this filter.")}
+              </p>
+            )}
+          </section>
+        );
+      })}
+
+      <AddDomainRow />
+
+      <div className="section">
+        <InternalNetworks />
       </div>
-      <div className="agrid">
-        {list.map((a, k) => {
-          const o = openOf(a.n);
-          const w = worst(o);
-          return (
-            <button key={a.n} className="acard" type="button" style={{ animationDelay: (k * 0.04).toFixed(2) + "s" }} onClick={() => showSheet(<AssetSheet n={a.n} />)}>
-              <span className="atop">
-                <span className="n">{a.n}</span>
-                <SevTag s={w} label={w === "ok" ? tr("Protégé", "Protected") : undefined} />
-              </span>
-              <span className="k">
-                {a.k}
-                {o.length ? tr(`, ${o.length} problème${o.length > 1 ? "s" : ""}`, `, ${o.length} problem${o.length > 1 ? "s" : ""}`) : ""}
-              </span>
-              <span className="strip" aria-hidden="true">
-                {CATS.map(([c]) => (
-                  <i key={c} className={"hm " + catState(a, c, issues, evaluated)} />
-                ))}
-              </span>
-              <span className="tags">
-                {a.tech.slice(0, 2).map((x) => (
-                  <span key={x}>{x}</span>
-                ))}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      <p className="striphelp">{tr("Les cinq cases de chaque carte : Emails, TLS, Ports, Fuites, Menaces.", "The five boxes of each card: Email, TLS, Ports, Leaks, Threats.")}</p>
-      <div className="rpanel addpanel">
-        <AddPanel />
-      </div>
-      <InternalNetworks />
     </>
   );
 }

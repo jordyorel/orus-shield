@@ -3,12 +3,12 @@ import type { Activity } from "../../api/types";
 import { Link, navigate } from "../../router";
 import { appPath, settingsPath } from "../AppShell";
 import { Tick } from "../icons";
-import { COLOR, DIST, byPriority, feedDay, groupIssues, groupVerdict, hostsText, progressOf, progressText, scoreVerdict, verdictText, weakChecks, worst, type AssetView, type Issue, type IssueGroup } from "../model";
-import { tr } from "../../i18n";
+import { COLOR, DIST, PROGRESS_DAYS, SEV, byPriority, feedDay, groupIssues, groupVerdict, hostsText, progressOf, scoreLevel, verdictText, worst, type AssetView, type Issue, type IssueGroup } from "../model";
+import { locale, tr } from "../../i18n";
 import { localTitle } from "../lang";
 import { useOrg } from "../OrgData";
 import { AssetSheet, FindingSheet, ScoreSheet, useFix } from "../sheets";
-import { ScanLine } from "../ScanLine";
+import { scanTimes, useScanNow, when } from "../ScanLine";
 import { useUI } from "../ui";
 import { AddPanel } from "./Actifs";
 
@@ -176,6 +176,12 @@ export function Radar({ assets, issues, score }: { assets: AssetView[]; issues: 
       </div>
     </div>
   );
+}
+
+/** shortDay words a scan date briefly: "sam. 21 nov., 05:00". */
+function shortDay(iso: string): string {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString(locale(), { weekday: "short", day: "numeric", month: "short" })}, ${d.toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 /** RadarLegend says what the radar's dots mean: their colour is the worst
@@ -443,6 +449,7 @@ export function AujourdhuiPage() {
   const { me, org, data, issues, assets, verdicts } = useOrg();
   const { showSheet } = useUI();
   const fix = useFix();
+  const scanNow = useScanNow();
   const [onboard, setOnboard] = useState(() => readOnboard(org.org_id));
   const beforeFirstScan = !!data && !data.scans.some((s) => s.status === "done") && data.assets.length === 0;
   useEffect(() => {
@@ -522,29 +529,94 @@ export function AujourdhuiPage() {
     );
   }
 
+  const domains = data.targets.filter((t) => !t.internal);
+  const openGroups = groups.filter((g) => !g.fixed);
+  const bySev = (["crit", "high", "med", "low"] as const).map((k) => [k, openGroups.filter((g) => g.lead.sev === k).length] as const);
+  const times = scanTimes(data.scans, domains);
   return (
     <>
       {!data.subscription.plan.monitoring && <FreeBand />}
-      <div className="today">
+      <div className="todayhead">
         <div>
           <p className="hello">{first ? tr(`Bonjour ${first}`, `Hello ${first}`) : tr("Bonjour", "Hello")}</p>
-          <h1 className="lead">{head}</h1>
-          <ScanLine targets={data.targets.filter((t) => !t.internal)} />
-          <div className="section">
-            <div className="rhead">
-              <h2>{tr("À faire aujourd’hui", "To do today")}</h2>
-              <span className="dots big3" id="todo-prog" role="img" aria-label={tr(`${top.length - left} actions faites sur ${top.length}`, `${top.length - left} of ${top.length} actions done`)}>
-                {top.map((g) => (
-                  <i key={g.key} className={g.fixed ? "on" : ""} />
-                ))}
-              </span>
-            </div>
-            <p className="hint">
-              {tr(
-                "Classé par ce qui vous protège le plus, le plus vite. Cochez quand c’est corrigé : nous vérifions aussitôt.",
-                "Ranked by what protects you most, fastest. Tick when it is fixed: we check at once.",
-              )}
-            </p>
+          <h1 className="lead lead2">{head}</h1>
+        </div>
+      </div>
+
+      {/* The four answers to "where do I stand?", each with its action. */}
+      <div className="kpis">
+        <div className="rpanel kpi">
+          <small>{tr("Score de sécurité", "Security score")}</small>
+          <p className="kpinum">
+            <b>{score ?? "–"}</b>
+            {score !== null && <span>/100</span>}
+          </p>
+          <p className="kpisub">{scoreLevel(score)}</p>
+          <button className="link" type="button" onClick={() => showSheet(<ScoreSheet />)}>
+            {tr("Comprendre mon score", "Understand my score")}
+          </button>
+        </div>
+        <div className="rpanel kpi">
+          <small>{tr("Problèmes ouverts", "Open problems")}</small>
+          <p className="kpinum">
+            <b>{openGroups.length}</b>
+          </p>
+          <div className="sevmini" role="img" aria-label={bySev.map(([k, n]) => `${SEV[k][0]} : ${n}`).join(", ")}>
+            {bySev.map(([k, n]) => (n ? <i key={k} style={{ flex: n, background: COLOR[k] }} /> : null))}
+            {!openGroups.length && <i style={{ flex: 1, background: COLOR.ok }} />}
+          </div>
+          <Link className="link" to={appPath(org.org_id, "problemes")}>
+            {tr("Tout voir", "See all")}
+          </Link>
+        </div>
+        <div className="rpanel kpi">
+          <small>{tr(`Corrigés en ${PROGRESS_DAYS} jours`, `Fixed in ${PROGRESS_DAYS} days`)}</small>
+          <p className="kpinum">
+            <b>{progress?.fixed ?? 0}</b>
+          </p>
+          <p className="kpisub">
+            {progress && progress.from !== null && progress.from !== progress.to
+              ? tr(`Score ${progress.from} → ${progress.to}`, `Score ${progress.from} → ${progress.to}`)
+              : tr("Score stable", "Steady score")}
+          </p>
+          <Link className="link" to={appPath(org.org_id, "rapports")}>
+            {tr("Voir l’évolution", "See the trend")}
+          </Link>
+        </div>
+        <div className="rpanel kpi">
+          <small>{tr("Prochain scan", "Next scan")}</small>
+          <p className="kpinum kpidate">
+            <b>{times.running ? tr("En cours", "Running") : times.next ? shortDay(times.next) : "–"}</b>
+          </p>
+          <p className="kpisub">
+            {times.running
+              ? tr("Les résultats arrivent ici.", "Results will appear here.")
+              : times.last
+                ? tr(`Dernier : ${when(times.last)}`, `Last: ${when(times.last)}`)
+                : tr("Pas encore scanné", "Not scanned yet")}
+          </p>
+          <button className="link" type="button" disabled={times.running} onClick={() => void scanNow(domains)}>
+            {times.running ? tr("Scan en cours", "Scan running") : tr("Scanner maintenant", "Scan now")}
+          </button>
+        </div>
+      </div>
+
+      <div className="today2">
+        <div className="todaycol">
+        <section className="rpanel">
+          <div className="rhead">
+            <h2>{tr("À faire aujourd’hui", "To do today")}</h2>
+            <span className="countchip" id="todo-prog">
+              {tr(`${top.length - left} sur ${top.length}`, `${top.length - left} of ${top.length}`)}
+            </span>
+          </div>
+          <p className="hint">
+            {tr(
+              "Classé par ce qui vous protège le plus, le plus vite. Cochez quand c’est corrigé : nous vérifions aussitôt.",
+              "Ranked by what protects you most, fastest. Tick when it is fixed: we check at once.",
+            )}
+          </p>
+          {top.length ? (
             <ul className="todo">
               {top.map((g) => {
                 const i = g.lead;
@@ -570,45 +642,11 @@ export function AujourdhuiPage() {
                 );
               })}
             </ul>
-          </div>
-        </div>
-        <div>
-          <Radar assets={assets} issues={issues} score={score} />
-          <div className="scorenote">
-            <p>{scoreVerdict(score, weakChecks(data.checks, issues, data.targets).length)}</p>
-            <button className="link" type="button" onClick={() => showSheet(<ScoreSheet />)}>
-              {tr("Comprendre mon score", "Understand my score")}
-            </button>
-          </div>
-          <RadarLegend />
-        </div>
-      </div>
-      {progress && (
-        <div className="section">
-          <div className="rhead">
-            <h2>{tr("Vos progrès", "Your progress")}</h2>
-            <Link className="link" to={appPath(org.org_id, "rapports")}>
-              {tr("Voir l’évolution", "See the trend")}
-            </Link>
-          </div>
-          <div className="stats3 progress3">
-            <div>
-              <small>{tr("Problèmes corrigés", "Problems fixed")}</small>
-              <b>{progress.fixed}</b>
-            </div>
-            <div>
-              <small>{tr("Score", "Score")}</small>
-              <b>{progress.from !== null && progress.from !== progress.to ? `${progress.from} → ${progress.to}` : progress.to}</b>
-            </div>
-            <div>
-              <small>{tr("Problèmes ouverts", "Open problems")}</small>
-              <b>{groups.filter((g) => !g.fixed).length}</b>
-            </div>
-          </div>
-          <p className="hint">{progressText(progress)}</p>
-        </div>
-      )}
-      <div className="section">
+          ) : (
+            <p className="why">{tr("Rien à corriger : nous continuons de surveiller.", "Nothing to fix: we keep watching.")}</p>
+          )}
+        </section>
+        <section className="rpanel">
         <h2>{tr("Depuis votre dernière visite", "Since your last visit")}</h2>
         {data.activity.length ? (
           <ul className="feed">
@@ -619,6 +657,13 @@ export function AujourdhuiPage() {
         ) : (
           <p className="hint">{tr("Rien de nouveau ces sept derniers jours.", "Nothing new in the last seven days.")}</p>
         )}
+        </section>
+        </div>
+        <section className="rpanel perim">
+          <h2>{tr("Votre périmètre", "Your perimeter")}</h2>
+          <Radar assets={assets} issues={issues} score={score} />
+          <RadarLegend />
+        </section>
       </div>
     </>
   );

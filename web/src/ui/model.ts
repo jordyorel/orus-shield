@@ -549,23 +549,29 @@ export function verdictText(v: Verdict): string {
 /** WEIGHT mirrors posture.Weight, to rank what lowers the score. */
 export const WEIGHT: Record<Severity, number> = { critical: 10, high: 6, medium: 3, low: 1, info: 0 };
 
-/** scoreVerdict words a score in one sentence, with its weak points (the
- * failed checks that weigh in it). */
-export function scoreVerdict(score: number | null, weak: number): string {
+/** scoreLevel words a score's level: "Bon niveau". */
+export function scoreLevel(score: number | null): string {
+  if (score === null) return tr("Pas encore de score", "No score yet");
+  return score >= 90
+    ? tr("Très bon niveau", "Very good level")
+    : score >= 75
+      ? tr("Bon niveau", "Good level")
+      : score >= 50
+        ? tr("Niveau moyen", "Fair level")
+        : tr("Niveau faible", "Weak level");
+}
+
+/** scoreVerdict words a score in one sentence, with the problems to fix.
+ * open counts problem lines, as Problèmes and Aujourd'hui do (the same
+ * check failing on several names is one), so every screen gives the same
+ * number. */
+export function scoreVerdict(score: number | null, open: number): string {
   if (score === null) return tr("Pas encore de score : il apparaît après le premier scan.", "No score yet: it appears after the first scan.");
-  const level =
-    score >= 90
-      ? tr("Très bon niveau", "Very good level")
-      : score >= 75
-        ? tr("Bon niveau", "Good level")
-        : score >= 50
-          ? tr("Niveau moyen", "Fair level")
-          : tr("Niveau faible", "Weak level");
-  const pts =
-    weak === 0
-      ? tr("aucun point faible", "no weak point")
-      : tr(`${weak} point${weak > 1 ? "s" : ""} faible${weak > 1 ? "s" : ""} à régler`, `${weak} weak point${weak > 1 ? "s" : ""} to fix`);
-  return `${level}, ${pts}.`;
+  const pb =
+    open === 0
+      ? tr("aucun problème à corriger", "nothing to fix")
+      : tr(`${open} problème${open > 1 ? "s" : ""} à corriger`, `${open} problem${open > 1 ? "s" : ""} to fix`);
+  return `${scoreLevel(score)}, ${pb}.`;
 }
 
 /** WeakCheck is a failed check that lowers the score, with its problem. */

@@ -156,12 +156,12 @@ describe("the score explained", () => {
     { id: "t2", domain: "shop.cg" },
   ] as Target[];
 
-  it("words the level and the weak points", () => {
+  it("words the level and the problems to fix", () => {
     expect(scoreVerdict(null, 0)).toBe("Pas encore de score : il apparaît après le premier scan.");
-    expect(scoreVerdict(95, 0)).toBe("Très bon niveau, aucun point faible.");
-    expect(scoreVerdict(83, 2)).toBe("Bon niveau, 2 points faibles à régler.");
-    expect(scoreVerdict(74, 1)).toBe("Niveau moyen, 1 point faible à régler.");
-    expect(scoreVerdict(40, 5)).toBe("Niveau faible, 5 points faibles à régler.");
+    expect(scoreVerdict(95, 0)).toBe("Très bon niveau, aucun problème à corriger.");
+    expect(scoreVerdict(83, 2)).toBe("Bon niveau, 2 problèmes à corriger.");
+    expect(scoreVerdict(74, 1)).toBe("Niveau moyen, 1 problème à corriger.");
+    expect(scoreVerdict(40, 5)).toBe("Niveau faible, 5 problèmes à corriger.");
   });
 
   it("lists what lowers the score, heaviest first, with its problem", () => {

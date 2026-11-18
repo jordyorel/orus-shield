@@ -10,6 +10,7 @@ import { CloseButton, SevTag, UpsellSheet } from "../sheets";
 import { byPriority, dayName, money, sinceText } from "../model";
 import { useOrg } from "../OrgData";
 import { useUI } from "../ui";
+import { AddDomainRow } from "./Actifs";
 
 /** The mockup's day buttons start on Monday; the API's weekday 0 is Sunday. */
 const toApiDay = (i: number) => (i + 1) % 7;
@@ -137,7 +138,9 @@ export function ReglagesPage() {
   };
 
   const modOn = (m: (typeof MODS)[number]) => m.module !== null && !s.disabled_modules.includes(m.module) && (plan.active_modules || !["ports", "vulns"].includes(m.module));
-  const active = MODS.filter(modOn).length;
+  const available = MODS.filter((m) => m.module !== null);
+  const coming = MODS.filter((m) => m.module === null);
+  const active = available.filter(modOn).length;
   const toggleMod = (module: string) => {
     const off = s.disabled_modules.includes(module);
     save({ ...s, disabled_modules: off ? s.disabled_modules.filter((x) => x !== module) : [...s.disabled_modules, module] });
@@ -149,6 +152,8 @@ export function ReglagesPage() {
     if (!cs.length) return tr("Pas encore vérifié", "Not checked yet");
     const ids = new Set(cs.map((c) => c.id));
     const last = cs.reduce((a, c) => (c.evaluated_at > a ? c.evaluated_at : a), "");
+    // No known date: the count alone, never "NaN".
+    if (Number.isNaN(new Date(last).getTime())) return tr(`${ids.size} contrôle${ids.size > 1 ? "s" : ""}`, `${ids.size} check${ids.size > 1 ? "s" : ""}`);
     return tr(`${ids.size} contrôle${ids.size > 1 ? "s" : ""}, vérifiés ${sinceText(last, new Date())}`, `${ids.size} check${ids.size > 1 ? "s" : ""}, checked ${sinceText(last, new Date())}`);
   };
 
@@ -250,11 +255,15 @@ export function ReglagesPage() {
 
   return (
     <>
-      <div className="rtop">
-        <h1 className="hello" style={{ margin: 0, fontFamily: "inherit", fontWeight: 400, letterSpacing: 0 }}>
-          {tr("Réglages", "Settings")}
-        </h1>
+      <div className="todayhead">
+        <div>
+          <p className="hello">{tr("Réglages", "Settings")}</p>
+          <h1 className="lead lead2">{SECTIONS.find(([k]) => k === sec)?.[1]}</h1>
+        </div>
       </div>
+      {/* As in most settings pages: the sections in a menu on the left, the
+          settings in a reading column (desktop); pills on a phone. */}
+      <div className="setlayout">
       <nav className="filters setnav" aria-label={tr("Sections des réglages", "Settings sections")}>
         {SECTIONS.map(([k, l]) => (
           <Link key={k} className="pill" to={settingsPath(org.org_id, k)} aria-current={sec === k ? "page" : undefined}>
@@ -262,19 +271,23 @@ export function ReglagesPage() {
           </Link>
         ))}
       </nav>
+      <div className="setmain">
       {sec === "scans" && (
         <>
+      {/* Counted against the checks that exist: one still to come (data
+          leaks, no provider yet) is named, never counted as missing. */}
       <div className="cover">
         <div className="covernum">
           <b id="cov-n">{active}</b>
-          <span>{tr(`vérifications actives sur ${MODS.length}`, `of ${MODS.length} checks active`)}</span>
+          <span>{tr(`vérifications actives sur ${available.length}`, `of ${available.length} checks active`)}</span>
         </div>
         <div className="covertrack">
-          {MODS.map((m) => (
+          {available.map((m) => (
             <i key={m.key} data-cov={m.key} className={modOn(m) ? "on" : ""} />
           ))}
         </div>
         <p id="next-scan">{schedText(s)}</p>
+        {coming.length > 0 && <p className="covsoon">{tr(`${coming.map((m) => m.title).join(", ")} : bientôt`, `${coming.map((m) => m.title).join(", ")}: coming soon`)}</p>}
       </div>
 
       <div className="section">
@@ -349,8 +362,13 @@ export function ReglagesPage() {
 
       <div className="section">
         <h2>{tr("Quand scanner", "When to scan")}</h2>
-        <div className="rpanel" style={{ marginTop: 12 }}>
-          <div className="seg2 segfull" role="group" aria-label={tr("Fréquence", "Frequency")}>
+        <div className="rpanel setpanel" style={{ marginTop: 12 }}>
+          <div className="setrow">
+            <div>
+              <p className="mt">{tr("Fréquence", "Frequency")}</p>
+              <p className="md">{tr("Un scan complet de vos domaines, selon votre offre.", "A full scan of your domains, as your plan allows.")}</p>
+            </div>
+            <div className="seg2" role="group" aria-label={tr("Fréquence", "Frequency")}>
             {(
               [
                 ["jour", tr("Chaque jour", "Every day")],
@@ -363,19 +381,36 @@ export function ReglagesPage() {
               </button>
             ))}
           </div>
-          <div className={"days" + (s.frequency === "daily" ? " mute" : "")} role="group" aria-label={tr("Jour", "Day")}>
+          </div>
+          <div className="setrow">
+            <div>
+              <p className="mt">{tr("Jour", "Day")}</p>
+              <p className="md">{tr("Pour un scan chaque semaine.", "For a weekly scan.")}</p>
+            </div>
+            <div className={"days" + (s.frequency === "daily" ? " mute" : "")} role="group" aria-label={tr("Jour", "Day")}>
             {(tr("L M M J V S D", "M T W T F S S").split(" ")).map((d, i) => (
               <button key={i} type="button" aria-pressed={day === i} aria-label={dayName(i)} onClick={() => save({ ...s, weekday: toApiDay(i), frequency: s.frequency || "weekly" })}>
                 {d}
               </button>
             ))}
           </div>
-          <div className="slide">
-            <label htmlFor="hour">{tr("Heure de départ", "Start time")}</label>
-            <output id="hour-out" htmlFor="hour">
+          </div>
+          <div className="setrow">
+            <div>
+              <label className="mt" htmlFor="hour">
+                {tr("Heure de départ", "Start time")}
+              </label>
+              <p className="md">
+              {s.hour < 6 || s.hour >= 20
+                ? tr("De nuit : c’est là que le scan gêne le moins.", "At night: that is when the scan disturbs least.")
+                : tr("En journée : la partie foncée de la barre est la nuit, où le scan gêne le moins.", "In the daytime: the dark part of the bar is night, when the scan disturbs least.")}
+            </p>
+            </div>
+            <div className="slide">
+              <output id="hour-out" htmlFor="hour">
               {String(s.hour).padStart(2, "0")}:00
             </output>
-            <input
+              <input
               id="hour"
               className="hourrange"
               type="range"
@@ -385,22 +420,24 @@ export function ReglagesPage() {
               value={s.hour}
               onChange={(e) => save({ ...s, hour: Number(e.target.value), frequency: s.frequency || "weekly" }, 600)}
             />
-            <div className="ticks" aria-hidden="true">
+              <div className="ticks" aria-hidden="true">
               {[0, 6, 12, 18, 23].map((h) => (
                 <span key={h} style={{ "--at": h / 23 } as CSSProperties}>
                   {h} h
                 </span>
               ))}
             </div>
-            <small>
-              {s.hour < 6 || s.hour >= 20
-                ? tr("De nuit : c’est là que le scan gêne le moins.", "At night: that is when the scan disturbs least.")
-                : tr("En journée : la partie foncée de la barre est la nuit, où le scan gêne le moins.", "In the daytime: the dark part of the bar is night, when the scan disturbs least.")}
-            </small>
+            </div>
           </div>
-          <div className="slide">
-            <label htmlFor="rate">{tr("Vitesse du scan", "Scan speed")}</label>
-            <output id="rate-out" htmlFor="rate">
+          <div className="setrow">
+            <div>
+              <label className="mt" htmlFor="rate">
+                {tr("Vitesse du scan", "Scan speed")}
+              </label>
+              <p className="md" id="rate-hint">{rateHint(rate)}</p>
+            </div>
+            <div className="slide">
+              <output id="rate-out" htmlFor="rate">
               <span className="pulse" id="pulse" aria-hidden="true" style={{ "--spd": (3.2 - rate / 80).toFixed(2) + "s" } as CSSProperties}>
                 {Array.from({ length: 5 }, (_, i) => (
                   <i key={i} />
@@ -408,7 +445,7 @@ export function ReglagesPage() {
               </span>
               {tr(`${rate} requêtes par seconde`, `${rate} requests per second`)}
             </output>
-            <input
+              <input
               id="rate"
               type="range"
               min="5"
@@ -418,11 +455,11 @@ export function ReglagesPage() {
               style={{ "--fill": (rate - 5) / 195 } as CSSProperties}
               onChange={(e) => save({ ...s, rate_per_sec: Number(e.target.value) }, 600)}
             />
-            <div className="ticks ends" aria-hidden="true">
+              <div className="ticks ends" aria-hidden="true">
               <span>{tr("Doux", "Gentle")}</span>
               <span>{tr("Rapide", "Fast")}</span>
             </div>
-            <small id="rate-hint">{rateHint(rate)}</small>
+            </div>
           </div>
         </div>
       </div>
@@ -434,9 +471,11 @@ export function ReglagesPage() {
       <div className="section">
         <h2>{tr("Comment on vous prévient", "How we alert you")}</h2>
         <div className="rpanel" style={{ marginTop: 12 }}>
-          <p className="sub" style={{ margin: "0 0 8px" }}>
-            {tr("À partir de quelle gravité", "From which severity")}
-          </p>
+          <div className="setrow" style={{ paddingTop: 0 }}>
+            <div>
+              <p className="mt">{tr("À partir de quelle gravité", "From which severity")}</p>
+              <p className="md">{tr("Les problèmes moins graves restent visibles dans le tableau de bord.", "Less serious problems stay visible on the dashboard.")}</p>
+            </div>
           <div className="seg2" role="group" aria-label={tr("Seuil d'alerte", "Alert threshold")}>
             {(
               [
@@ -449,6 +488,7 @@ export function ReglagesPage() {
                 {l}
               </button>
             ))}
+          </div>
           </div>
           <div className="chans">
             <div className="chan off is-soon">
@@ -630,6 +670,8 @@ export function ReglagesPage() {
           </div>
         </>
       )}
+      </div>
+      </div>
     </>
   );
 }
@@ -663,10 +705,13 @@ function Domains({ targets }: { targets: Target[] }) {
   };
   return (
     <div className="section">
-      <h2>{tr("Domaines et exclusions", "Domains and exclusions")}</h2>
-      <p className="hint">{tr("Ce qu’on ne touche jamais : une adresse, un port, un chemin ou un nom par ligne.", "What we never touch: one address, port, path or name per line.")}</p>
+      <div className="rhead">
+        <h2>{tr("Vos domaines", "Your domains")}</h2>
+        <span className="countchip">{targets.length}</span>
+      </div>
+      <p className="hint">{tr("Pour chacun, ce qu’on ne touche jamais (exclusions) et, selon l’offre, ses API et son compte de test.", "For each one, what we never touch (exclusions) and, depending on the plan, its APIs and test account.")}</p>
       <div className="rpanel" style={{ marginTop: 12 }}>
-        {targets.length === 0 && <p className="md">{tr("Aucun domaine pour l’instant : ajoutez-en un dans Actifs.", "No domain yet: add one in Assets.")}</p>}
+        {targets.length === 0 && <p className="md">{tr("Aucun domaine pour l’instant.", "No domain yet.")}</p>}
         {targets.map((t) => (
           <div key={t.id} className="set" style={{ display: "block" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
@@ -709,6 +754,7 @@ function Domains({ targets }: { targets: Target[] }) {
           </div>
         ))}
       </div>
+      {isAdmin && <AddDomainRow />}
     </div>
   );
 }
@@ -1216,7 +1262,9 @@ function ScanHistory() {
           {data.scans.slice(0, 8).map((sc) => (
             <li key={sc.id} className={sc.status === "failed" ? "f-crit" : sc.status === "done" ? "f-ok" : ""}>
               <time dateTime={sc.created_at}>
-                {new Date(sc.created_at).toLocaleString(tr("fr-FR", "en-GB"), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {sinceText(sc.created_at, now)}
+                {Number.isNaN(new Date(sc.created_at).getTime())
+                  ? tr("Date inconnue", "Unknown date")
+                  : `${new Date(sc.created_at).toLocaleString(tr("fr-FR", "en-GB"), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · ${sinceText(sc.created_at, now)}`}
               </time>
               <span>
                 {label[sc.status]}

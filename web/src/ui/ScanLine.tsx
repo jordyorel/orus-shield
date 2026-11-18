@@ -4,7 +4,7 @@
 
 import { api } from "../api/client";
 import { locale, tr } from "../i18n";
-import type { Target } from "../api/types";
+import type { Scan, Target } from "../api/types";
 import { useOrg } from "./OrgData";
 import { isAuditUsed, UpsellSheet } from "./sheets";
 import { useUI } from "./ui";
@@ -55,22 +55,30 @@ export function useScanNow() {
   };
 }
 
+/** scanTimes tells, for targets, whether a scan runs, the last one
+ * finished and the next one scheduled. */
+export function scanTimes(scans: Scan[], targets: Target[]): { running: boolean; last: string | undefined; next: string | undefined } {
+  const ids = new Set(targets.map((t) => t.id));
+  const mine = scans.filter((s) => ids.has(s.target_id));
+  return {
+    running: mine.some((s) => s.status === "queued" || s.status === "running"),
+    last: mine
+      .filter((s) => s.status === "done" && s.finished_at)
+      .map((s) => s.finished_at as string)
+      .sort()
+      .at(-1),
+    next: targets
+      .map((t) => t.schedule?.next_scan_at)
+      .filter((x): x is string => !!x)
+      .sort()[0],
+  };
+}
+
 export function ScanLine({ targets }: { targets: Target[] }) {
   const { data } = useOrg();
   const scanNow = useScanNow();
   if (!data) return null;
-  const ids = new Set(targets.map((t) => t.id));
-  const scans = data.scans.filter((s) => ids.has(s.target_id));
-  const running = scans.some((s) => s.status === "queued" || s.status === "running");
-  const last = scans
-    .filter((s) => s.status === "done" && s.finished_at)
-    .map((s) => s.finished_at as string)
-    .sort()
-    .at(-1);
-  const next = targets
-    .map((t) => t.schedule?.next_scan_at)
-    .filter((x): x is string => !!x)
-    .sort()[0];
+  const { running, last, next } = scanTimes(data.scans, targets);
   return (
     <div className="scanline" role="status">
       <span>

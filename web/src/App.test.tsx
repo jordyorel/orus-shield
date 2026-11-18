@@ -140,7 +140,7 @@ describe("public site", () => {
     expect(screen.getByRole("img", { name: "Exemple de résultat : 63 sur 100, 4 problèmes" })).toBeTruthy();
     fireEvent.change(await screen.findByLabelText("Votre nom de domaine"), { target: { value: "https://www.Example.cg/contact" } });
     fireEvent.click(screen.getByRole("button", { name: "Tester mon domaine" }));
-    expect(await screen.findByText("Niveau moyen, 1 point faible à régler.")).toBeTruthy();
+    expect(await screen.findByText("Niveau moyen, 1 problème à corriger.")).toBeTruthy();
     expect(window.location.pathname + window.location.search).toBe("/test?domaine=www.example.cg");
     expect(calls.find((c) => c.key === "POST /quicktest")?.body).toEqual({ domain: "www.example.cg" });
     expect(screen.getByText("Aucun enregistrement DMARC")).toBeTruthy();
@@ -385,8 +385,7 @@ describe("dashboard", () => {
     expect(screen.getByText("+9 pts")).toBeTruthy();
     expect(document.querySelector("#score-num")?.textContent).toBe("74");
     // Progress: the score 30 days ago (the last one known then) against today's.
-    expect(screen.getByText("60 → 74")).toBeTruthy();
-    expect(screen.getByText("Ces 30 derniers jours, aucun problème corrigé pour l’instant. Votre score est passé de 60 à 74.")).toBeTruthy();
+    expect(screen.getByText("Score 60 → 74")).toBeTruthy();
   });
 
   it("folds the rail to its icons, and remembers it", async () => {
@@ -425,13 +424,25 @@ describe("dashboard", () => {
     ];
     orgRoutes({ [`GET /orgs/${ORG}/checks`]: ok({ items: checks }) });
     renderAt(`/orgs/${ORG}/aujourdhui`);
-    expect(await screen.findByText("Niveau moyen, 1 point faible à régler.")).toBeTruthy();
+    // The score's card says its level; the sheet gives the sentence, with
+    // the same count of problems as everywhere else.
+    expect(await screen.findByText("Niveau moyen")).toBeTruthy();
     expect(screen.getByText("Protégé")).toBeTruthy(); // the radar's legend
     fireEvent.click(screen.getByRole("button", { name: "Comprendre mon score" }));
     expect(await screen.findByRole("heading", { name: "Votre score : 74 sur 100" })).toBeTruthy();
+    expect(screen.getByText("Niveau moyen, 1 problème à corriger.")).toBeTruthy();
     expect(screen.getByText("DMARC record published")).toBeTruthy();
     expect(screen.getByText("Vos emails")).toBeTruthy();
     expect(screen.getByText("Enregistrement SPF publié")).toBeTruthy();
+  });
+
+  it("lists the domains, then offers to add one", async () => {
+    orgRoutes();
+    renderAt(`/orgs/${ORG}/actifs`);
+    const add = await screen.findByRole("button", { name: "Ajouter un domaine" });
+    expect(screen.queryByLabelText("Nom de domaine")).toBeNull();
+    fireEvent.click(add);
+    expect(screen.getByLabelText("Nom de domaine")).toBeTruthy();
   });
 
   it("marks a problem fixed through the API", async () => {
@@ -504,8 +515,7 @@ describe("dashboard", () => {
         [`POST /orgs/${ORG}/targets/t1/scans`]: ok({ id: "s2", target_id: "t1", domain: "example.cg", modules: [], requested_by: "u", status: "queued", attempts: 0, created_at: "", started_at: null, finished_at: null }),
       });
       renderAt(`/orgs/${ORG}/aujourdhui`);
-      expect(await screen.findByText(/Dernier scan : aujourd’hui à/)).toBeTruthy();
-      expect(screen.getByText(/Aucun scan planifié/)).toBeTruthy();
+      expect(await screen.findByText(/Dernier : aujourd’hui à/)).toBeTruthy();
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: "Scanner maintenant" }));
       });

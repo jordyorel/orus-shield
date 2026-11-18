@@ -6,7 +6,7 @@ import { useState } from "react";
 import { api, ApiError } from "../api/client";
 import type { Scan } from "../api/types";
 import { Close, Expand, NavIcon, Shrink, Tick } from "./icons";
-import { CATS, RANK, SEV, STATE_LABEL, catState, evaluatedCats, scoreVerdict, sevOf, strongChecks, weakChecks, worst, type Issue, type SevOrOk } from "./model";
+import { CATS, RANK, SEV, STATE_LABEL, catState, evaluatedCats, groupIssues, scoreVerdict, sevOf, strongChecks, weakChecks, worst, type Issue, type SevOrOk } from "./model";
 import { tr, useLang, type Lang } from "../i18n";
 import { Link } from "../router";
 import { useOrg } from "./OrgData";
@@ -528,7 +528,7 @@ export function ScoreSheet() {
         <CloseButton />
       </div>
       <h2 id="sheet-title">{score === null ? tr("Votre score", "Your score") : tr(`Votre score : ${score} sur 100`, `Your score: ${score} out of 100`)}</h2>
-      <p className="why">{scoreVerdict(score, weak.length)}</p>
+      <p className="why">{scoreVerdict(score, groupIssues(issues).filter((g) => !g.fixed).length)}</p>
       <h3>{tr("Comment il est calculé", "How it is computed")}</h3>
       <p className="why">
         {tr(

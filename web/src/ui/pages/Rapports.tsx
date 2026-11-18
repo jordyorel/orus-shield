@@ -318,19 +318,19 @@ function HeatRow({
   );
 }
 
+/** Seg is one family of automated checks: how many passed, as a share. */
 function Seg({ name, pass, total }: { name: string; pass: number; total: number }) {
+  const pct = total ? Math.round((pass / total) * 100) : 0;
   return (
-    <div className="chk">
-      <span>{name}</span>
-      <span className="dots" role="img" aria-label={tr(`${name} : ${pass} contrôles réussis sur ${total}`, `${name}: ${pass} of ${total} checks passed`)}>
-        {Array.from({ length: total }, (_, i) => (
-          <i key={i} className={i < pass ? "on" : ""} />
-        ))}
-      </span>
-      <span className="num">
-        {pass}
-        <small> / {total}</small>
-      </span>
+    <div className="rpanel kpi segcard">
+      <small>{name}</small>
+      <p className="kpinum">
+        <b>{total ? `${pct} %` : "–"}</b>
+      </p>
+      <div className="usebar" role="img" aria-label={tr(`${name} : ${pass} contrôles réussis sur ${total}`, `${name}: ${pass} of ${total} checks passed`)}>
+        <b style={{ width: (total ? pct : 0) + "%" }} className={pct === 100 ? "done" : pct < 50 ? "full" : ""} />
+      </div>
+      <p className="kpisub">{total ? tr(`${pass} réussis sur ${total}`, `${pass} of ${total} passed`) : tr("Pas encore évalué", "Not evaluated yet")}</p>
     </div>
   );
 }
@@ -394,10 +394,11 @@ export function RapportsPage() {
 
   return (
     <>
-      <div className="rtop">
-        <h1 className="hello" style={{ margin: 0, fontFamily: "inherit", fontWeight: 400, letterSpacing: 0 }}>
-          {tr("Rapports", "Reports")}
-        </h1>
+      <div className="todayhead">
+        <div>
+          <p className="hello">{tr("Rapports", "Reports")}</p>
+          <h1 className="lead lead2">{tr("L’évolution de votre sécurité.", "How your security is evolving.")}</h1>
+        </div>
         <div className="seg2" role="group" aria-label={tr("Période", "Period")}>
           {(
             [
@@ -416,14 +417,16 @@ export function RapportsPage() {
         <Heat assets={assets} issues={issues} evaluated={evaluated} />
       </div>
 
-      <div className="section checks">
+      <div className="section">
         <div className="rhead">
-          <h2 style={{ fontSize: 18 }}>{tr("Contrôles automatisés", "Automated checks")}</h2>
-          <p style={{ fontSize: 14, color: "var(--ink2)" }}>{tr(`${pass} réussis sur ${total}`, `${pass} of ${total} passed`)}</p>
+          <h2>{tr("Contrôles automatisés", "Automated checks")}</h2>
+          <span className="countchip">{tr(`${pass} réussis sur ${total}`, `${pass} of ${total} passed`)}</span>
         </div>
-        {segs.map(([name, [p, t]]) => (
-          <Seg key={name} name={name} pass={p} total={t} />
-        ))}
+        <div className="kpis kpis3">
+          {segs.map(([name, [p, t]]) => (
+            <Seg key={name} name={name} pass={p} total={t} />
+          ))}
+        </div>
       </div>
 
       <div className="section">

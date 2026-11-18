@@ -46,6 +46,17 @@ dashboard: per-domain exclusions, team, latest scans; subscription), plus `profi
 MFA, password, devices, activity). Code lives in `web/src/ui/` (`model.ts` maps API data to
 the mockup's vocabulary). Offers are named Gratuit / Essentiel / Pro / Sur devis (plan IDs
 discovery, sme, pro, enterprise) with the prices of package `plan`, not the mockup's.
+Aujourd'hui was reorganized on 2026-11-18 (beyond the mockup, Jordy's request): a short head, four key
+figures in cards (score and level, open problems with a severity bar, fixed in 30 days with the score
+change, next scan with "Scanner maintenant"), then the day's actions and the activity in the left
+column beside "Votre périmètre" (radar and legend). Every screen counts problems the same way: problem
+lines (`groupIssues`), also in the score's sentence. Actifs and Rapports follow the same pattern: a
+short head (Actifs: "N actifs surveillés", filters with counts, a one-line summary with the offer's
+gauge; then one block per domain, its scan line on top and its assets as rows edged in their
+severity's colour, with the five categories as labelled coloured dots and the technologies; it stays
+neat with two assets as with fifty; adding a domain beside internal networks.
+Rapports: score trend and heat map, the automated checks as three cards with a share and a bar). The dashboard and the public site use the width
+of the screen (main up to 1440 px and 1360 px).
 UX additions agreed on 2026-11-18 (beyond the mockup): the same check failing on several names is
 one problem line (`groupIssues`), fixed in one gesture; ticking says it starts a verification and the
 line then shows its verdict ("Vérification en cours…", "Confirmé", "Toujours présent au contrôle de
@@ -61,7 +72,12 @@ engine's check statuses, `weakChecks` / `strongChecks`); "Vos progrès" on Aujou
 problem lines fixed in the last 30 days, from `fixed_at`, and the score then, the last one known
 at the period's start, against today's); Réglages in sections reached from a menu of pills, one
 at a time, each with its address (`settingsPath`, `?s=domaines|alertes|equipe|abonnement|apparence`,
-Scans by default), and its sliders drawn by us (night shown in the hour's track); Abonnement as a
+Scans by default; on desktop the sections are a menu on the left and the settings a reading column
+of about 780 px, each setting a row with its name and explanation on the left and its control on the
+right: When to scan, the alert level; the coverage counts the checks that exist, "4 sur 4", and names
+the one to come, data leaks, instead of counting it missing), domains are a list ended by
+"+ Ajouter un domaine" (`AddDomainRow`, in Actifs and Réglages > Domaines; it opens the add and verify
+flow in place, already open while a domain waits for verification), and its sliders drawn by us (night shown in the hour's track); Abonnement as a
 plan card (state chip, price, next date), usage tiles and the comparison with "Votre offre"; on
 desktop the rail carries the only logo and folds to its icons ("Réduire le menu", kept in
 localStorage `orus.rail`, tab names as tooltips), with the profile at its foot, above the toggle (name
