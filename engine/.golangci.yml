@@ -12,6 +12,26 @@ linters:
     - misspell
     - unconvert
   settings:
+    misspell:
+      # misspell knows English only, and findings carry French texts too
+      # (Finding.Localized): these are correct French words it mistakes
+      # for English typos. Kept as a list so English stays checked.
+      ignore-rules:
+        - administrer
+        - administrez
+        - certificats
+        - commandes
+        - conteneurs
+        - distribuent
+        - exemple
+        - interm      # "intermédiaires", cut at the accent
+        - lecteurs
+        - manipulant
+        - principales
+        - recommandation
+        - relient
+        - surveill
+        - trafic
     errcheck:
       exclude-functions:
         # "defer tx.Rollback(ctx)" is the standard pgx pattern: after Commit
