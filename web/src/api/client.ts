@@ -101,6 +101,7 @@ export const api = {
   saveSettings: (orgId: string, s: OrgSettings) => request<OrgSettings>("PUT", `${org(orgId)}/settings`, s),
   activity: (orgId: string, signal?: AbortSignal) => request<List<Activity>>("GET", `${org(orgId)}/activity?days=7&limit=10`, undefined, signal),
   updateMe: (name: string) => request<Me>("PATCH", "/auth/me", { name }),
+  setLang: (lang: "fr" | "en") => request<Me>("PATCH", "/auth/me", { lang }),
   sessions: (signal?: AbortSignal) => request<List<DeviceSession>>("GET", "/auth/sessions", undefined, signal),
   endSession: (id: string) => request<void>("DELETE", `/auth/sessions/${encodeURIComponent(id)}`),
   authActivity: (signal?: AbortSignal) => request<List<AuthActivity>>("GET", "/auth/activity", undefined, signal),

@@ -2,18 +2,37 @@
 // from the API's data. Pure functions: every screen and the tests use them.
 
 import type { Check, Finding, OrgAsset, Severity } from "../api/types";
+import { locale, tr } from "../i18n";
 import { findingText } from "./lang";
+
+/** label is a [key, label] pair whose label follows the current language. */
+function label<K>(k: K, fr: string, en: string): [K, string] {
+  const t: [K, string] = [k, ""];
+  Object.defineProperty(t, 1, { get: () => tr(fr, en), enumerable: true });
+  return t;
+}
 
 /** The mockup's severity keys, plus "low" (shown "Faible") which it lacks. */
 export type Sev = "crit" | "high" | "med" | "low";
 export type SevOrOk = Sev | "ok";
 
+// Getters: the labels follow the current language.
 export const SEV: Record<SevOrOk, [string, string]> = {
-  crit: ["Critique", "s-crit"],
-  high: ["Élevé", "s-high"],
-  med: ["Moyen", "s-med"],
-  low: ["Faible", "s-med"],
-  ok: ["Corrigé", "s-ok"],
+  get crit(): [string, string] {
+    return [tr("Critique", "Critical"), "s-crit"];
+  },
+  get high(): [string, string] {
+    return [tr("Élevé", "High"), "s-high"];
+  },
+  get med(): [string, string] {
+    return [tr("Moyen", "Medium"), "s-med"];
+  },
+  get low(): [string, string] {
+    return [tr("Faible", "Low"), "s-med"];
+  },
+  get ok(): [string, string] {
+    return [tr("Corrigé", "Fixed"), "s-ok"];
+  },
 };
 
 export const RANK: Record<SevOrOk, number> = { crit: 0, high: 1, med: 2, low: 3, ok: 4 };
@@ -39,18 +58,28 @@ export function sevOf(s: Severity): Sev {
 /** The five columns of the mockup: Emails, TLS, Ports, Fuites, Menaces. */
 export type Cat = "emails" | "tls" | "ports" | "fuites" | "menaces";
 export const CATS: [Cat, string][] = [
-  ["emails", "Emails"],
-  ["tls", "TLS"],
-  ["ports", "Ports"],
-  ["fuites", "Fuites"],
-  ["menaces", "Menaces"],
+  label<Cat>("emails", "Emails", "Email"),
+  label<Cat>("tls", "TLS", "TLS"),
+  label<Cat>("ports", "Ports", "Ports"),
+  label<Cat>("fuites", "Fuites", "Leaks"),
+  label<Cat>("menaces", "Menaces", "Threats"),
 ];
 export const CATNAME: Record<Cat, string> = {
-  emails: "Emails",
-  tls: "Chiffrement",
-  ports: "Ports et services",
-  fuites: "Fuites de données",
-  menaces: "Menaces émergentes",
+  get emails() {
+    return tr("Emails", "Email");
+  },
+  get tls() {
+    return tr("Chiffrement", "Encryption");
+  },
+  get ports() {
+    return tr("Ports et services", "Ports and services");
+  },
+  get fuites() {
+    return tr("Fuites de données", "Data leaks");
+  },
+  get menaces() {
+    return tr("Menaces émergentes", "Emerging threats");
+  },
 };
 
 /**
@@ -78,20 +107,20 @@ export function catOfModule(moduleId: string): Cat | null {
 
 /** The module label of a problem row (the mockup's i.module). */
 export function moduleName(f: Finding): string {
-  if (f.emerging) return "Menaces émergentes";
+  if (f.emerging) return tr("Menaces émergentes", "Emerging threats");
   switch (f.module_id) {
     case "email":
-      return "Emails";
+      return tr("Emails", "Email");
     case "tls":
       return "TLS";
     case "web":
-      return "Site web";
+      return tr("Site web", "Website");
     case "ports":
       return "Ports";
     case "vulns":
-      return "Vulnérabilités";
+      return tr("Vulnérabilités", "Vulnerabilities");
     case "zap":
-      return "Application web";
+      return tr("Application web", "Web application");
     case "api":
       return "API";
   }
@@ -247,11 +276,11 @@ export function toAssets(assets: OrgAsset[]): AssetView[] {
       .filter(Boolean);
     const cdn = h.details.cdn;
     if (cdn && cdn !== "none") tech.push(cdn);
-    let k = "Sous-domaine";
-    if (h.value === h.domain) k = "Domaine";
-    else if ([...ports].some((p) => MAIL_PORTS.has(p))) k = "Messagerie";
-    else if ([...ports].some((p) => WEB_PORTS.has(p)) || (!ports.size && h.details.technologies)) k = "Site";
-    else if (ports.size) k = "Serveur";
+    let k = tr("Sous-domaine", "Subdomain");
+    if (h.value === h.domain) k = tr("Domaine", "Domain");
+    else if ([...ports].some((p) => MAIL_PORTS.has(p))) k = tr("Messagerie", "Mail");
+    else if ([...ports].some((p) => WEB_PORTS.has(p)) || (!ports.size && h.details.technologies)) k = tr("Site", "Website");
+    else if (ports.size) k = tr("Serveur", "Server");
     return { n: h.value, targetId: h.target_id, domain: h.domain, k, a: n ? (20 + (i * 360) / n) % 360 : 0, tech, svc };
   });
 }
@@ -295,12 +324,24 @@ export function evaluatedCats(checks: Check[]): Map<string, Set<Cat>> {
 }
 
 export const STATE_LABEL: Record<CellState, string> = {
-  crit: "Critique",
-  high: "Élevé",
-  med: "Moyen",
-  low: "Faible",
-  ok: "Rien à signaler",
-  na: "Non concerné",
+  get crit() {
+    return tr("Critique", "Critical");
+  },
+  get high() {
+    return tr("Élevé", "High");
+  },
+  get med() {
+    return tr("Moyen", "Medium");
+  },
+  get low() {
+    return tr("Faible", "Low");
+  },
+  get ok() {
+    return tr("Rien à signaler", "All clear");
+  },
+  get na() {
+    return tr("Non concerné", "Not applicable");
+  },
 };
 
 /** The mockup's password strength, 0 to 4. */
@@ -330,7 +371,7 @@ export function device(ua: string): string {
             ? "Mac"
             : /Linux/.test(ua)
               ? "Linux"
-              : "Appareil inconnu";
+              : tr("Appareil inconnu", "Unknown device");
   const browser = /Edg\//.test(ua)
     ? "Edge"
     : /OPR\//.test(ua)
@@ -355,41 +396,46 @@ export function daysAgo(iso: string, now: Date): number {
   return Math.round((b - a) / DAY_MS);
 }
 
-export const DAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
+/** dayName is a weekday's name, Monday first (0) to Sunday (6), lowercase in French. */
+export function dayName(i: number): string {
+  const fr = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
+  const en = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  return tr(fr[i] ?? "", en[i] ?? "");
+}
 
 /** feedDay: "Aujourd’hui", "Hier", then the weekday name within a week. */
 export function feedDay(iso: string, now: Date): string {
   const n = daysAgo(iso, now);
-  if (n <= 0) return "Aujourd’hui";
-  if (n === 1) return "Hier";
+  if (n <= 0) return tr("Aujourd’hui", "Today");
+  if (n === 1) return tr("Hier", "Yesterday");
   const d = new Date(iso);
   if (n < 7) {
-    const name = DAYS[(d.getDay() + 6) % 7] ?? "";
+    const name = dayName((d.getDay() + 6) % 7);
     return name.charAt(0).toUpperCase() + name.slice(1);
   }
-  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+  return d.toLocaleDateString(locale(), { day: "numeric", month: "long" });
 }
 
 /** whenActive: "Actif aujourd’hui", "Actif hier", "Actif il y a 6 jours". */
 export function whenActive(iso: string, now: Date): string {
   const n = daysAgo(iso, now);
-  if (n <= 0) return "Actif aujourd’hui";
-  if (n === 1) return "Actif hier";
-  return `Actif il y a ${n} jours`;
+  if (n <= 0) return tr("Actif aujourd’hui", "Active today");
+  if (n === 1) return tr("Actif hier", "Active yesterday");
+  return tr(`Actif il y a ${n} jours`, `Active ${n} days ago`);
 }
 
 /** sinceText: "il y a 2 h", "il y a 3 jours", "il y a 3 mois". */
 export function sinceText(iso: string, now: Date): string {
   const ms = now.getTime() - new Date(iso).getTime();
   const h = Math.floor(ms / 3_600_000);
-  if (h < 1) return "il y a moins d’une heure";
-  if (h < 24) return `il y a ${h} h`;
+  if (h < 1) return tr("il y a moins d’une heure", "less than an hour ago");
+  if (h < 24) return tr(`il y a ${h} h`, `${h} h ago`);
   const d = Math.floor(h / 24);
-  if (d < 31) return `il y a ${d} jour${d > 1 ? "s" : ""}`;
+  if (d < 31) return tr(`il y a ${d} jour${d > 1 ? "s" : ""}`, `${d} day${d > 1 ? "s" : ""} ago`);
   const m = Math.floor(d / 30);
-  if (m < 12) return `il y a ${m} mois`;
+  if (m < 12) return tr(`il y a ${m} mois`, `${m} month${m > 1 ? "s" : ""} ago`);
   const y = Math.floor(m / 12);
-  return `il y a ${y} an${y > 1 ? "s" : ""}`;
+  return tr(`il y a ${y} an${y > 1 ? "s" : ""}`, `${y} year${y > 1 ? "s" : ""} ago`);
 }
 
 /** weekly keeps one score per week, the last of each, oldest first. */
@@ -466,7 +512,7 @@ export function groupIssues(issues: Issue[]): IssueGroup[] {
 export function hostsText(hosts: string[]): string {
   if (hosts.length <= 2) return hosts.join(", ");
   const more = hosts.length - 2;
-  return `${hosts[0]}, ${hosts[1]} et ${more} autre${more > 1 ? "s" : ""}`;
+  return tr(`${hosts[0]}, ${hosts[1]} et ${more} autre${more > 1 ? "s" : ""}`, `${hosts[0]}, ${hosts[1]} and ${more} more`);
 }
 
 /** Verdict is what the verification scan said after a problem was marked fixed. */
@@ -483,12 +529,14 @@ export function groupVerdict(members: Issue[], verdicts: Record<string, Verdict>
 export function verdictText(v: Verdict): string {
   switch (v.state) {
     case "checking":
-      return "Vérification en cours…";
+      return tr("Vérification en cours…", "Checking…");
     case "confirmed":
-      return "Confirmé par le contrôle";
-    case "still":
-      return `Toujours présent au contrôle de ${new Date(v.at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`;
+      return tr("Confirmé par le contrôle", "Confirmed by the check");
+    case "still": {
+      const at = new Date(v.at).toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" });
+      return tr(`Toujours présent au contrôle de ${at}`, `Still there at the ${at} check`);
+    }
     case "late":
-      return "Vérification en attente : le résultat arrivera ici";
+      return tr("Vérification en attente : le résultat arrivera ici", "Check pending: the result will appear here");
   }
 }

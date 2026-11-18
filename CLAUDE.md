@@ -69,9 +69,14 @@ same number of steps as the English; optional field of schema version 1, `Findin
 every check its `TitleFR`. Modules write both at creation (values inserted in both; `FrenchDate`).
 Nuclei and ZAP texts come from the tools: the French text names the kind of problem, explains it,
 and quotes the tool's English detail as such. Reports, alert emails and the dashboard (`web/src/ui/lang.ts`)
-use the French text; older findings get it at their next scan. Next steps: the dashboard's English
-interface with a per-user language (Profil), English emails, the public site in English (legal pages
-need a lawyer's translation).
+use the French text; older findings get it at their next scan. Step 2 is done: the whole site
+(public pages, sign-in, dashboard, legal pages) speaks French and English (`web/src/i18n.tsx`:
+`tr("fr", "en")` side by side, no key files; legal pages as whole texts per language, the French
+one prevails, both drafts for the lawyer). A FR / EN switch sits at the top of the public and
+sign-in pages (`ui/LangSwitch.tsx`), and Profil has the same choice. Each user's language is
+`users.lang` (migration 0028, `PATCH /auth/me {"lang"}`; the switch saves it when signed in),
+else this browser's choice, else the browser's language (French unless English). Next step:
+English emails, following `users.lang`.
 
 ## How to work on this repo
 

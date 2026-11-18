@@ -2,6 +2,7 @@
 // found, what it did not check, and the trial. Every figure comes from the
 // organization's own data; nothing is estimated.
 
+import { tr } from "../../i18n";
 import { Link } from "../../router";
 import { appPath } from "../AppShell";
 import { byPriority, SEV, type Sev } from "../model";
@@ -22,11 +23,11 @@ export function OffrePage() {
   if (sub.plan.monitoring) {
     return (
       <>
-        <p className="hello">{first ? `Bonjour ${first}` : "Bonjour"}</p>
-        <h1 className="lead">Votre offre {sub.plan.name} est active.</h1>
+        <p className="hello">{first ? tr(`Bonjour ${first}`, `Hello ${first}`) : tr("Bonjour", "Hello")}</p>
+        <h1 className="lead">{tr(`Votre offre ${sub.plan.name} est active.`, `Your ${sub.plan.name} plan is active.`)}</h1>
         <p className="sub">
           <Link className="link" to={today}>
-            Voir mes résultats
+            {tr("Voir mes résultats", "See my results")}
           </Link>
         </p>
       </>
@@ -46,16 +47,18 @@ export function OffrePage() {
 
   return (
     <>
-      <p className="hello">{first ? `Bonjour ${first}` : "Bonjour"}</p>
-      <h1 className="lead">Votre audit est prêt. Voici la suite.</h1>
+      <p className="hello">{first ? tr(`Bonjour ${first}`, `Hello ${first}`) : tr("Bonjour", "Hello")}</p>
+      <h1 className="lead">{tr("Votre audit est prêt. Voici la suite.", "Your audit is ready. Here is what comes next.")}</h1>
 
       <div className="section offer">
         <div className="rhead">
-          <h2>Ce que nous avons trouvé</h2>
+          <h2>{tr("Ce que nous avons trouvé", "What we found")}</h2>
         </div>
         <p className="sub">
-          {score !== null ? `Score de sécurité : ${score}/100. ` : ""}
-          {open.length === 0 ? "Aucun problème à corriger pour le moment." : `${open.length} problème${open.length > 1 ? "s" : ""} à corriger.`}
+          {score !== null ? tr(`Score de sécurité : ${score}/100. `, `Security score: ${score}/100. `) : ""}
+          {open.length === 0
+            ? tr("Aucun problème à corriger pour le moment.", "Nothing to fix for now.")
+            : tr(`${open.length} problème${open.length > 1 ? "s" : ""} à corriger.`, `${open.length} problem${open.length > 1 ? "s" : ""} to fix.`)}
         </p>
         {counts.length > 0 && (
           <p className="tags">
@@ -66,19 +69,24 @@ export function OffrePage() {
         )}
         {top && (
           <p className="sub">
-            Le plus urgent : <b>{top.title}</b> ({top.host}).
+            {tr("Le plus urgent : ", "Most urgent: ")}
+            <b>{top.title}</b> ({top.host}).
           </p>
         )}
       </div>
 
       <div className="section offer">
         <div className="rhead">
-          <h2>Ce que votre audit gratuit n’a pas vérifié</h2>
+          <h2>{tr("Ce que votre audit gratuit n’a pas vérifié", "What your free audit did not check")}</h2>
         </div>
         <ul className="upsell">
-          <li>{ips > 0 ? `Les ports ouverts de vos ${ips} serveur${ips > 1 ? "s" : ""}` : "Les ports ouverts de vos serveurs"}</li>
-          <li>Les vulnérabilités connues de vos sites web</li>
-          <li>La suite : rien ne sera revérifié, ni vos corrections, ni les nouveaux problèmes</li>
+          <li>
+            {ips > 0
+              ? tr(`Les ports ouverts de vos ${ips} serveur${ips > 1 ? "s" : ""}`, `The open ports of your ${ips} server${ips > 1 ? "s" : ""}`)
+              : tr("Les ports ouverts de vos serveurs", "The open ports of your servers")}
+          </li>
+          <li>{tr("Les vulnérabilités connues de vos sites web", "The known vulnerabilities of your websites")}</li>
+          <li>{tr("La suite : rien ne sera revérifié, ni vos corrections, ni les nouveaux problèmes", "What comes next: nothing is checked again, neither your fixes nor new problems")}</li>
         </ul>
       </div>
 
@@ -91,29 +99,33 @@ export function OffrePage() {
         ).map(([p, id, star]) =>
           p ? (
             <div key={id} className={"plan" + (star ? " star" : "")}>
-              {star && <span className="tagstar">Recommandé</span>}
+              {star && <span className="tagstar">{tr("Recommandé", "Recommended")}</span>}
               <h2>{p.name}</h2>
               <p className="price">
                 <b>{price(p, "mois")}</b>
-                <span>{trial ? "par mois, après 14 jours d’essai" : "par mois"}</span>
+                <span>{trial ? tr("par mois, après 14 jours d’essai", "per month, after a 14-day trial") : tr("par mois", "per month")}</span>
               </p>
               <ul>
                 {features(p).map((f) => (
                   <li key={f}>{f}</li>
                 ))}
-                <li>Vérification de chaque correction</li>
+                <li>{tr("Vérification de chaque correction", "Every fix verified")}</li>
               </ul>
               <Link className={"btn" + (star ? "" : " ghost")} to={pay(id)}>
-                {trial ? "Essayer 14 jours" : `Choisir ${p.name}`}
+                {trial ? tr("Essayer 14 jours", "Try 14 days") : tr(`Choisir ${p.name}`, `Choose ${p.name}`)}
               </Link>
             </div>
           ) : null,
         )}
       </div>
-      {trial && <p className="sub offer-note">Aucun prélèvement pendant 14 jours. Annulable en un clic avant la fin de l’essai. Carte ou PayPal.</p>}
+      {trial && (
+        <p className="sub offer-note">
+          {tr("Aucun prélèvement pendant 14 jours. Annulable en un clic avant la fin de l’essai. Carte ou PayPal.", "No charge for 14 days. Cancel in one click before the trial ends. Card or PayPal.")}
+        </p>
+      )}
       <p className="hint">
         <Link className="link" to={today}>
-          Plus tard, voir mes résultats
+          {tr("Plus tard, voir mes résultats", "Later, see my results")}
         </Link>
       </p>
     </>

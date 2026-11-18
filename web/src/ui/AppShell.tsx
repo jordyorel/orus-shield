@@ -2,6 +2,7 @@
 // the bottom tabs (phone) and the search palette (Ctrl K).
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { labeled, tr } from "../i18n";
 import { Link, navigate } from "../router";
 import { Logo, Moon, NavIcon, Search } from "./icons";
 import { initials } from "./model";
@@ -10,11 +11,11 @@ import { FindingSheet } from "./sheets";
 import { useUI } from "./ui";
 
 export const NAV: [string, string][] = [
-  ["aujourdhui", "Aujourd’hui"],
-  ["problemes", "Problèmes"],
-  ["actifs", "Actifs"],
-  ["rapports", "Rapports"],
-  ["reglages", "Réglages"],
+  labeled("aujourdhui", "Aujourd’hui", "Today"),
+  labeled("problemes", "Problèmes", "Problems"),
+  labeled("actifs", "Actifs", "Assets"),
+  labeled("rapports", "Rapports", "Reports"),
+  labeled("reglages", "Réglages", "Settings"),
 ];
 
 export const appPath = (orgId: string, view: string) => `/orgs/${encodeURIComponent(orgId)}/${view}`;
@@ -46,7 +47,7 @@ function OfferChip() {
   if (!sub.plan.monitoring) {
     return (
       <Link className="topchip free" to={appPath(org.org_id, "offre")}>
-        Gratuit · Essayer 14 jours
+        {tr("Gratuit · Essayer 14 jours", "Free · Try 14 days")}
       </Link>
     );
   }
@@ -54,7 +55,7 @@ function OfferChip() {
     const n = daysLeft(sub.until);
     return (
       <Link className="topchip" to={appPath(org.org_id, "reglages")}>
-        Essai {sub.plan.name} : {n} jour{n > 1 ? "s" : ""} restant{n > 1 ? "s" : ""}
+        {tr(`Essai ${sub.plan.name} : ${n} jour${n > 1 ? "s" : ""} restant${n > 1 ? "s" : ""}`, `${sub.plan.name} trial: ${n} day${n !== 1 ? "s" : ""} left`)}
       </Link>
     );
   }
@@ -86,32 +87,32 @@ export function AppShell({ view, children }: { view: string; children: ReactNode
     <>
       <div className="shell">
         <nav className="rail" aria-label="Navigation" id="rail">
-          <Link className="logo" to="/" aria-label="Orus Shield, aller à l’accueil">
+          <Link className="logo" to="/" aria-label={tr("Orus Shield, aller à l’accueil", "Orus Shield, go to the home page")}>
             <Logo size={30} />
           </Link>
           <NavLinks orgId={org.org_id} current={view} />
         </nav>
         <div>
           <header className="top">
-            <Link className="brand" to="/" aria-label="Orus Shield, aller à l’accueil">
+            <Link className="brand" to="/" aria-label={tr("Orus Shield, aller à l’accueil", "Orus Shield, go to the home page")}>
               <Logo />
               <span>Orus Shield</span>
             </Link>
             {scanning && (
               <span className="topchip scanning" role="status">
                 <span className="spin" aria-hidden="true" />
-                Scan en cours
+                {tr("Scan en cours", "Scan running")}
               </span>
             )}
             <OfferChip />
             <button className="search" id="open-pal" type="button" onClick={openPal}>
               <Search />
-              Rechercher <kbd>Ctrl K</kbd>
+              {tr("Rechercher", "Search")} <kbd>Ctrl K</kbd>
             </button>
-            <Link className="iconbtn avatar" to={appPath(org.org_id, "profil")} aria-label="Mon profil">
+            <Link className="iconbtn avatar" to={appPath(org.org_id, "profil")} aria-label={tr("Mon profil", "My profile")}>
               {initials(me.name, me.email)}
             </Link>
-            <button className="iconbtn" id="theme" type="button" aria-label="Changer de thème" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+            <button className="iconbtn" id="theme" type="button" aria-label={tr("Changer de thème", "Change theme")} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
               <Moon />
             </button>
           </header>
@@ -153,10 +154,10 @@ function Palette() {
 
   const all = useMemo<PalItem[]>(() => {
     const screens: [string, string, string][] = [
-      ...NAV.map(([k, l]): [string, string, string] => [appPath(org.org_id, k), l, "Écran"]),
-      [appPath(org.org_id, "profil"), "Mon profil", "Écran"],
-      ["/", "Site public", "Écran"],
-      ["/tarifs", "Tarifs", "Écran"],
+      ...NAV.map(([k, l]): [string, string, string] => [appPath(org.org_id, k), l, tr("Écran", "Screen")]),
+      [appPath(org.org_id, "profil"), tr("Mon profil", "My profile"), tr("Écran", "Screen")],
+      ["/", tr("Site public", "Public site"), tr("Écran", "Screen")],
+      ["/tarifs", tr("Tarifs", "Pricing"), tr("Écran", "Screen")],
     ];
     return [
       ...screens.map(([to, label, kind]) => ({ label, kind, go: () => navigate(to) })),
@@ -176,14 +177,14 @@ function Palette() {
   };
 
   return (
-    <div className={"pal" + (palOpen ? " on" : "")} id="pal" role="dialog" aria-modal="true" aria-label="Recherche" aria-hidden={!palOpen}>
+    <div className={"pal" + (palOpen ? " on" : "")} id="pal" role="dialog" aria-modal="true" aria-label={tr("Recherche", "Search")} aria-hidden={!palOpen}>
       <input
         ref={input}
         id="pal-in"
         type="text"
-        placeholder="Aller à un écran ou chercher un problème"
+        placeholder={tr("Aller à un écran ou chercher un problème", "Go to a screen or search for a problem")}
         autoComplete="off"
-        aria-label="Rechercher"
+        aria-label={tr("Rechercher", "Search")}
         value={q}
         onChange={(e) => {
           setQ(e.target.value);
@@ -213,7 +214,7 @@ function Palette() {
             </li>
           ))
         ) : (
-          <li style={{ padding: 14, color: "var(--ink2)" }}>Aucun résultat. Essayez « emails » ou « actifs ».</li>
+          <li style={{ padding: 14, color: "var(--ink2)" }}>{tr("Aucun résultat. Essayez « emails » ou « actifs ».", "No results. Try “email” or “assets”.")}</li>
         )}
       </ul>
     </div>

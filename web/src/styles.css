@@ -181,6 +181,9 @@ a.topchip:hover{border-color:var(--azur);color:var(--azur-ink)}
 .seg2{display:flex;background:var(--soft);border-radius:14px;padding:4px}
 .seg2 button{min-height:38px;padding:0 14px;border:0;background:none;border-radius:10px;font-weight:500;color:var(--ink2);transition:all .2s}
 .seg2 button[aria-pressed=true]{background:var(--surface);color:var(--ink);box-shadow:0 2px 8px -2px rgba(20,33,61,.25)}
+.langsw{border-radius:12px;padding:3px}
+.langsw button{min-height:34px;padding:0 10px;font-size:13px;font-weight:600;letter-spacing:.02em;border-radius:9px}
+.authtopr{display:flex;align-items:center;gap:14px}
 .chart .draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw 1.2s cubic-bezier(.4,0,.2,1) forwards}
 .chart .area{opacity:0;animation:fadeA .8s .7s forwards}
 .chart .pt{opacity:0;animation:pop .35s cubic-bezier(.3,1.6,.5,1) forwards;transform-box:fill-box;transform-origin:center}

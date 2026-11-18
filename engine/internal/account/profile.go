@@ -21,6 +21,11 @@ func (s *Service) SetName(ctx context.Context, sess store.Session, name string, 
 	return s.auth.SetName(ctx, sess.UserID, sess.Email, n, c.IP)
 }
 
+// SetLang changes the user's language ("fr" or "en").
+func (s *Service) SetLang(ctx context.Context, sess store.Session, lang string) error {
+	return s.auth.SetLang(ctx, sess.UserID, lang)
+}
+
 // Sessions lists the user's open sessions; token is the caller's own.
 func (s *Service) Sessions(ctx context.Context, sess store.Session, token string) ([]store.DeviceSession, error) {
 	return s.auth.Sessions(ctx, sess.UserID, token, s.cfg.SessionIdle)

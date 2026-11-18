@@ -3,6 +3,7 @@
 // (Aujourd'hui for every domain, Actifs for each one).
 
 import { api } from "../api/client";
+import { locale, tr } from "../i18n";
 import type { Target } from "../api/types";
 import { useOrg } from "./OrgData";
 import { isAuditUsed, UpsellSheet } from "./sheets";
@@ -12,13 +13,13 @@ import { useUI } from "./ui";
  * "samedi 22 novembre à 2:00". */
 export function when(iso: string, now = new Date()): string {
   const d = new Date(iso);
-  const time = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  const time = d.toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" });
   const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const diff = Math.round((day(d) - day(now)) / 86_400_000);
-  if (diff === 0) return `aujourd’hui à ${time}`;
-  if (diff === -1) return `hier à ${time}`;
-  if (diff === 1) return `demain à ${time}`;
-  return `${d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} à ${time}`;
+  if (diff === 0) return tr(`aujourd’hui à ${time}`, `today at ${time}`);
+  if (diff === -1) return tr(`hier à ${time}`, `yesterday at ${time}`);
+  if (diff === 1) return tr(`demain à ${time}`, `tomorrow at ${time}`);
+  return tr(`${d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} à ${time}`, `${d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })} at ${time}`);
 }
 
 /** useScanNow starts a full scan (the offer's modules) of verified domains. */
@@ -27,7 +28,7 @@ export function useScanNow() {
   const { toast, showSheet } = useUI();
   return async (targets: Target[]) => {
     if (!isAdmin) {
-      toast("Réservé aux administrateurs");
+      toast(tr("Réservé aux administrateurs", "Administrators only"));
       return;
     }
     if (data && !data.subscription.plan.monitoring) {
@@ -36,16 +37,20 @@ export function useScanNow() {
     }
     const verified = targets.filter((t) => t.verified && !t.internal);
     if (!verified.length) {
-      toast("Vérifiez d’abord votre domaine dans Actifs");
+      toast(tr("Vérifiez d’abord votre domaine dans Actifs", "Verify your domain in Assets first"));
       return;
     }
     try {
       for (const t of verified) await api.startScan(org.org_id, t.id);
-      toast(verified.length > 1 ? `Scan lancé sur ${verified.length} domaines` : `Scan lancé sur ${verified[0]!.domain}`);
+      toast(
+        verified.length > 1
+          ? tr(`Scan lancé sur ${verified.length} domaines`, `Scan started on ${verified.length} domains`)
+          : tr(`Scan lancé sur ${verified[0]!.domain}`, `Scan started on ${verified[0]!.domain}`),
+      );
       await reload();
     } catch (e) {
       if (isAuditUsed(e)) showSheet(<UpsellSheet what="scan" />);
-      else toast("Impossible de lancer le scan pour le moment");
+      else toast(tr("Impossible de lancer le scan pour le moment", "The scan cannot start right now"));
     }
   };
 }
@@ -69,12 +74,12 @@ export function ScanLine({ targets }: { targets: Target[] }) {
   return (
     <div className="scanline" role="status">
       <span>
-        {running ? "Scan en cours…" : last ? `Dernier scan : ${when(last)}` : "Pas encore scanné"}
+        {running ? tr("Scan en cours…", "Scan running…") : last ? tr(`Dernier scan : ${when(last)}`, `Last scan: ${when(last)}`) : tr("Pas encore scanné", "Not scanned yet")}
         {" · "}
-        {next ? `Prochain : ${when(next)}` : "Aucun scan planifié"}
+        {next ? tr(`Prochain : ${when(next)}`, `Next: ${when(next)}`) : tr("Aucun scan planifié", "No scan scheduled")}
       </span>
       <button className="link" type="button" disabled={running} onClick={() => void scanNow(targets)}>
-        {running ? "Scan en cours" : "Scanner maintenant"}
+        {running ? tr("Scan en cours", "Scan running") : tr("Scanner maintenant", "Scan now")}
       </button>
     </div>
   );

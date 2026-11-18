@@ -2,10 +2,11 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { api, ApiError } from "../../api/client";
 import type { DeclaredAPI, Member, OrgSettings, Plan, Role, Target, TestAccount } from "../../api/types";
 import { formatExclusions, parseExclusions } from "../../exclusions";
+import { tr } from "../../i18n";
 import { Link } from "../../router";
 import { MODS, ModIcon, Soon } from "../icons";
 import { CloseButton, SevTag, UpsellSheet } from "../sheets";
-import { DAYS, byPriority, sinceText } from "../model";
+import { byPriority, dayName, sinceText } from "../model";
 import { useOrg } from "../OrgData";
 import { useUI } from "../ui";
 
@@ -15,18 +16,22 @@ const fromApiDay = (d: number) => (d + 6) % 7;
 const FREQ: Record<string, string> = { jour: "daily", semaine: "weekly", mois: "monthly" };
 
 function schedText(s: OrgSettings): string {
-  if (!s.frequency) return "Aucun scan automatique pour l’instant : choisissez quand scanner.";
+  if (!s.frequency) return tr("Aucun scan automatique pour l’instant : choisissez quand scanner.", "No automatic scan for now: choose when to scan.");
   const h = String(s.hour).padStart(2, "0") + ":00";
-  const day = DAYS[fromApiDay(s.weekday)];
+  const day = dayName(fromApiDay(s.weekday));
   return s.frequency === "daily"
-    ? `Scan automatique chaque jour à ${h}`
+    ? tr(`Scan automatique chaque jour à ${h}`, `Automatic scan every day at ${h}`)
     : s.frequency === "weekly"
-      ? `Scan automatique chaque ${day} à ${h}`
-      : `Scan automatique le premier ${day} du mois à ${h}`;
+      ? tr(`Scan automatique chaque ${day} à ${h}`, `Automatic scan every ${day} at ${h}`)
+      : tr(`Scan automatique le premier ${day} du mois à ${h}`, `Automatic scan on the first ${day} of the month at ${h}`);
 }
 
 function rateHint(r: number): string {
-  return r <= 30 ? "Doux : pour les serveurs fragiles ou les connexions lentes." : r <= 100 ? "Équilibré : convient à la plupart des entreprises." : "Rapide : à réserver aux serveurs solides.";
+  return r <= 30
+    ? tr("Doux : pour les serveurs fragiles ou les connexions lentes.", "Gentle: for fragile servers or slow connections.")
+    : r <= 100
+      ? tr("Équilibré : convient à la plupart des entreprises.", "Balanced: suits most businesses.")
+      : tr("Rapide : à réserver aux serveurs solides.", "Fast: for robust servers only.");
 }
 
 /** The worker's rate when a target has none (ORUS default). */
@@ -36,23 +41,29 @@ const DEFAULT_RATE = 5;
 export function limitRows(plans: Plan[]): [string, ...string[]][] {
   const pick = ["discovery", "sme", "pro"].map((id) => plans.find((p) => p.id === id));
   const col = (f: (p: Plan) => string) => pick.map((p) => (p ? f(p) : ""));
-  const freq = { monthly: "Mensuelle", weekly: "Hebdomadaire", daily: "Quotidienne" };
-  const n = (v: number, unit: string) => (v === 0 ? "Illimité" : `${v.toLocaleString("fr-FR")} ${unit}`.trim());
+  const freq = { monthly: tr("Mensuelle", "Monthly"), weekly: tr("Hebdomadaire", "Weekly"), daily: tr("Quotidienne", "Daily") };
+  const n = (v: number, unit: string) => (v === 0 ? tr("Illimité", "Unlimited") : `${v.toLocaleString(tr("fr-FR", "en-GB"))} ${unit}`.trim());
+  const yes = tr("Oui", "Yes");
+  const no = tr("Non", "No");
+  const soon = tr("Bientôt", "Soon");
   return [
-    ["Domaines", ...col((p) => n(p.domains, ""))],
-    ["Actifs surveillés", ...col((p) => n(p.hosts_per_scan, "par domaine"))],
-    ["Membres de l’équipe", ...col((p) => n(p.members, ""))],
-    ["Fréquence des scans", ...col((p) => (p.max_frequency ? freq[p.max_frequency] : "Audit unique"))],
-    ["Ports vérifiés", ...col((p) => (p.active_modules ? "50 ports courants" : "Aucun"))],
-    ["Vulnérabilités connues", ...col((p) => (p.active_modules ? "Oui" : "Non"))],
-    ["Analyse des API", ...col((p) => (p.api_scans ? "Oui" : "Non"))],
-    ["Scan authentifié (compte de test)", ...col((p) => (p.auth_scans ? "Oui" : "Non"))],
-    ["Réseaux internes (agents)", ...col((p) => (p.agents ? "Oui" : "Sur devis"))],
-    ["Fuites de données", "Bientôt", "Bientôt", "Bientôt"],
-    ["Menaces émergentes", ...col((p) => (p.threats ? "Oui" : "Non"))],
-    ["Alertes email", ...col((p) => (p.alerts ? "Oui" : "Non"))],
-    ["Rapports PDF", ...col((p) => (p.reports ? "Direction et Technique" : "Non"))],
-    ["Profil approfondi", ...col((p) => (!p.deep_scans ? "Non" : p.deep_scans_per_month ? `${p.deep_scans_per_month} scans par mois` : "Illimité"))],
+    [tr("Domaines", "Domains"), ...col((p) => n(p.domains, ""))],
+    [tr("Actifs surveillés", "Monitored assets"), ...col((p) => n(p.hosts_per_scan, tr("par domaine", "per domain")))],
+    [tr("Membres de l’équipe", "Team members"), ...col((p) => n(p.members, ""))],
+    [tr("Fréquence des scans", "Scan frequency"), ...col((p) => (p.max_frequency ? freq[p.max_frequency] : tr("Audit unique", "Single audit")))],
+    [tr("Ports vérifiés", "Ports checked"), ...col((p) => (p.active_modules ? tr("50 ports courants", "50 common ports") : tr("Aucun", "None")))],
+    [tr("Vulnérabilités connues", "Known vulnerabilities"), ...col((p) => (p.active_modules ? yes : no))],
+    [tr("Analyse des API", "API testing"), ...col((p) => (p.api_scans ? yes : no))],
+    [tr("Scan authentifié (compte de test)", "Authenticated scan (test account)"), ...col((p) => (p.auth_scans ? yes : no))],
+    [tr("Réseaux internes (agents)", "Internal networks (agents)"), ...col((p) => (p.agents ? yes : tr("Sur devis", "Custom plan")))],
+    [tr("Fuites de données", "Data leaks"), soon, soon, soon],
+    [tr("Menaces émergentes", "Emerging threats"), ...col((p) => (p.threats ? yes : no))],
+    [tr("Alertes email", "Email alerts"), ...col((p) => (p.alerts ? yes : no))],
+    [tr("Rapports PDF", "PDF reports"), ...col((p) => (p.reports ? tr("Direction et Technique", "Executive and Technical") : no))],
+    [
+      tr("Profil approfondi", "Deep profile"),
+      ...col((p) => (!p.deep_scans ? no : p.deep_scans_per_month ? tr(`${p.deep_scans_per_month} scans par mois`, `${p.deep_scans_per_month} scans per month`) : tr("Illimité", "Unlimited"))),
+    ],
   ];
 }
 
@@ -80,7 +91,7 @@ export function ReglagesPage() {
   /** save stores the settings (after delay ms, for the sliders). */
   const save = (next: OrgSettings, delay = 0) => {
     if (!isAdmin) {
-      toast("Réservé aux administrateurs");
+      toast(tr("Réservé aux administrateurs", "Administrators only"));
       return;
     }
     // After the free audit no schedule runs: the trial offer instead.
@@ -100,8 +111,8 @@ export function ReglagesPage() {
           setDraft(prev);
           toast(
             e instanceof ApiError && e.code === "plan_limit"
-              ? "Cette fréquence n’est pas incluse dans votre offre. Changez d’offre plus bas."
-              : "Réglage non enregistré, réessayez",
+              ? tr("Cette fréquence n’est pas incluse dans votre offre. Changez d’offre plus bas.", "This frequency is not included in your plan. Change plans below.")
+              : tr("Réglage non enregistré, réessayez", "Setting not saved, try again"),
           );
         });
     }, delay);
@@ -115,18 +126,18 @@ export function ReglagesPage() {
   };
   const modStatus = (module: string | null): string => {
     if (module === null) return "";
-    if (!plan.active_modules && (module === "ports" || module === "vulns")) return `Non inclus dans l’offre ${plan.name}`;
+    if (!plan.active_modules && (module === "ports" || module === "vulns")) return tr(`Non inclus dans l’offre ${plan.name}`, `Not included in the ${plan.name} plan`);
     const cs = data.checks.filter((c) => c.module === module);
-    if (!cs.length) return "Pas encore vérifié";
+    if (!cs.length) return tr("Pas encore vérifié", "Not checked yet");
     const ids = new Set(cs.map((c) => c.id));
     const last = cs.reduce((a, c) => (c.evaluated_at > a ? c.evaluated_at : a), "");
-    return `${ids.size} contrôle${ids.size > 1 ? "s" : ""}, vérifiés ${sinceText(last, new Date())}`;
+    return tr(`${ids.size} contrôle${ids.size > 1 ? "s" : ""}, vérifiés ${sinceText(last, new Date())}`, `${ids.size} check${ids.size > 1 ? "s" : ""}, checked ${sinceText(last, new Date())}`);
   };
 
   const prof: [OrgSettings["profile"], string, number, string, string][] = [
-    ["quick", "Rapide", 1, "5 minutes", "Contrôles passifs et ports principaux"],
-    ["standard", "Standard", 2, "40 minutes", "Tous les contrôles, 50 ports courants"],
-    ["deep", "Approfondi", 3, "2 à 3 heures", "1 000 ports, versions et tests étendus"],
+    ["quick", tr("Rapide", "Quick"), 1, "5 minutes", tr("Contrôles passifs et ports principaux", "Passive checks and main ports")],
+    ["standard", "Standard", 2, "40 minutes", tr("Tous les contrôles, 50 ports courants", "Every check, 50 common ports")],
+    ["deep", tr("Approfondi", "Deep"), 3, tr("2 à 3 heures", "2 to 3 hours"), tr("1 000 ports, versions et tests étendus", "1,000 ports, versions and extended tests")],
   ];
   const freqKey = s.frequency === "daily" ? "jour" : s.frequency === "monthly" ? "mois" : s.frequency === "weekly" ? "semaine" : "";
   const day = fromApiDay(s.weekday);
@@ -135,32 +146,35 @@ export function ReglagesPage() {
   const top = issues.filter((i) => !i.fixed).sort(byPriority)[0];
   const showPreview = () => {
     const msg = top
-      ? `Objet : nouveau problème sur ${top.domain}. Le dernier scan a trouvé : ${top.title} (${top.host}). Voici comment le corriger, environ ${top.mins} minutes.`
-      : "Objet : rien de nouveau. Le dernier scan n’a trouvé aucun nouveau problème.";
+      ? tr(
+          `Objet : nouveau problème sur ${top.domain}. Le dernier scan a trouvé : ${top.title} (${top.host}). Voici comment le corriger, environ ${top.mins} minutes.`,
+          `Subject: new problem on ${top.domain}. The latest scan found: ${top.title} (${top.host}). Here is how to fix it, about ${top.mins} minutes.`,
+        )
+      : tr("Objet : rien de nouveau. Le dernier scan n’a trouvé aucun nouveau problème.", "Subject: nothing new. The latest scan found no new problem.");
     setPreview({ name: "Email", msg, typing: true });
     setTimeout(() => setPreview({ name: "Email", msg, typing: false }), 900);
   };
 
   const planCol = { discovery: 1, sme: 2, pro: 3, enterprise: 3 }[plan.id];
   const sub = data.subscription;
-  const until = sub.until ? new Date(sub.until).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) : "";
+  const until = sub.until ? new Date(sub.until).toLocaleDateString(tr("fr-FR", "en-GB"), { day: "numeric", month: "long", year: "numeric" }) : "";
   const price = plan.on_quote
-    ? "sur devis"
+    ? tr("sur devis", "on quote")
     : sub.period === "yearly"
-      ? `à ${plan.usd_yearly * 12} $ par an`
+      ? tr(`à ${plan.usd_yearly * 12} $ par an`, `at $${plan.usd_yearly * 12} per year`)
       : plan.usd_monthly
-        ? `à ${plan.usd_monthly} $ par mois`
-        : "gratuite";
+        ? tr(`à ${plan.usd_monthly} $ par mois`, `at $${plan.usd_monthly} per month`)
+        : tr("gratuite", "free");
   const subLine =
     sub.status === "trialing" && until
-      ? ` ${price}. Essai gratuit jusqu’au ${until}.`
+      ? tr(` ${price}. Essai gratuit jusqu’au ${until}.`, ` ${price}. Free trial until ${until}.`)
       : sub.status === "canceled" && until && !sub.lapsed
-        ? ` ${price}. Abonnement annulé : il se termine le ${until}, sans nouveau prélèvement.`
+        ? tr(` ${price}. Abonnement annulé : il se termine le ${until}, sans nouveau prélèvement.`, ` ${price}. Subscription cancelled: it ends on ${until}, with no further charge.`)
         : sub.in_grace && until
-        ? ` ${price}. Paiement attendu avant le ${until}.`
-        : until
-          ? ` ${price}. Prochaine échéance le ${until}.`
-          : ` ${price}.`;
+          ? tr(` ${price}. Paiement attendu avant le ${until}.`, ` ${price}. Payment expected before ${until}.`)
+          : until
+            ? tr(` ${price}. Prochaine échéance le ${until}.`, ` ${price}. Next renewal on ${until}.`)
+            : ` ${price}.`;
   const monthStart = new Date();
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
@@ -168,23 +182,23 @@ export function ReglagesPage() {
   const assetsCap = plan.hosts_per_scan * Math.max(1, data.targets.length);
   const hostCount = data.assets.filter((a) => a.kind === "hostname" && !a.gone_at).length;
   const prog: [string, number, number][] = [
-    ["Domaines", sub.usage.domains, plan.domains],
-    ["Actifs surveillés", hostCount, assetsCap],
-    ["Scans ce mois-ci", scansThisMonth, 0],
+    [tr("Domaines", "Domains"), sub.usage.domains, plan.domains],
+    [tr("Actifs surveillés", "Monitored assets"), hostCount, assetsCap],
+    [tr("Scans ce mois-ci", "Scans this month"), scansThisMonth, 0],
   ];
-  if (plan.deep_scans) prog.push(["Scans approfondis ce mois-ci", sub.usage.deep_scans, plan.deep_scans_per_month]);
+  if (plan.deep_scans) prog.push([tr("Scans approfondis ce mois-ci", "Deep scans this month"), sub.usage.deep_scans, plan.deep_scans_per_month]);
 
   return (
     <>
       <div className="rtop">
         <h1 className="hello" style={{ margin: 0, fontFamily: "inherit", fontWeight: 400, letterSpacing: 0 }}>
-          Réglages
+          {tr("Réglages", "Settings")}
         </h1>
       </div>
       <div className="cover">
         <div className="covernum">
           <b id="cov-n">{active}</b>
-          <span>vérifications actives sur {MODS.length}</span>
+          <span>{tr(`vérifications actives sur ${MODS.length}`, `of ${MODS.length} checks active`)}</span>
         </div>
         <div className="covertrack">
           {MODS.map((m) => (
@@ -195,7 +209,7 @@ export function ReglagesPage() {
       </div>
 
       <div className="section">
-        <h2>Ce qu’on vérifie</h2>
+        <h2>{tr("Ce qu’on vérifie", "What we check")}</h2>
         <div className="mods">
           {MODS.map((m) => {
             const on = modOn(m);
@@ -223,8 +237,8 @@ export function ReglagesPage() {
       </div>
 
       <div className="section">
-        <h2>Profondeur du scan</h2>
-        <div className="profs" role="group" aria-label="Profil de scan">
+        <h2>{tr("Profondeur du scan", "Scan depth")}</h2>
+        <div className="profs" role="group" aria-label={tr("Profil de scan", "Scan profile")}>
           {prof.map(([k, l, lvl, dur, d]) => (
             <button
               key={k}
@@ -234,8 +248,8 @@ export function ReglagesPage() {
               aria-disabled={(k === "deep" && !plan.deep_scans) || undefined}
               onClick={() => {
                 if (k !== "deep") save({ ...s, profile: k });
-                else if (!isAdmin) toast("Réservé aux administrateurs");
-                else if (!plan.deep_scans) toast(`Le profil approfondi est inclus dans l’offre Pro. Changez d’offre plus bas.`);
+                else if (!isAdmin) toast(tr("Réservé aux administrateurs", "Administrators only"));
+                else if (!plan.deep_scans) toast(tr("Le profil approfondi est inclus dans l’offre Pro. Changez d’offre plus bas.", "The deep profile is included in the Pro plan. Change plans below."));
                 else if (s.profile !== "deep")
                   showSheet(
                     <ConsentSheet
@@ -245,7 +259,7 @@ export function ReglagesPage() {
                         setDraft(saved);
                         setSettings(saved);
                         closeAll();
-                        toast("Profil approfondi activé");
+                        toast(tr("Profil approfondi activé", "Deep profile turned on"));
                       }}
                     />,
                   );
@@ -265,14 +279,14 @@ export function ReglagesPage() {
       </div>
 
       <div className="section">
-        <h2>Quand scanner</h2>
+        <h2>{tr("Quand scanner", "When to scan")}</h2>
         <div className="rpanel" style={{ marginTop: 12 }}>
-          <div className="seg2" role="group" aria-label="Fréquence">
+          <div className="seg2" role="group" aria-label={tr("Fréquence", "Frequency")}>
             {(
               [
-                ["jour", "Chaque jour"],
-                ["semaine", "Chaque semaine"],
-                ["mois", "Chaque mois"],
+                ["jour", tr("Chaque jour", "Every day")],
+                ["semaine", tr("Chaque semaine", "Every week")],
+                ["mois", tr("Chaque mois", "Every month")],
               ] as const
             ).map(([k, l]) => (
               <button key={k} type="button" aria-pressed={freqKey === k} onClick={() => save({ ...s, frequency: FREQ[k] as OrgSettings["frequency"] })}>
@@ -280,15 +294,15 @@ export function ReglagesPage() {
               </button>
             ))}
           </div>
-          <div className={"days" + (s.frequency === "daily" ? " mute" : "")} role="group" aria-label="Jour">
-            {["L", "M", "M", "J", "V", "S", "D"].map((d, i) => (
-              <button key={i} type="button" aria-pressed={day === i} aria-label={DAYS[i]} onClick={() => save({ ...s, weekday: toApiDay(i), frequency: s.frequency || "weekly" })}>
+          <div className={"days" + (s.frequency === "daily" ? " mute" : "")} role="group" aria-label={tr("Jour", "Day")}>
+            {(tr("L M M J V S D", "M T W T F S S").split(" ")).map((d, i) => (
+              <button key={i} type="button" aria-pressed={day === i} aria-label={dayName(i)} onClick={() => save({ ...s, weekday: toApiDay(i), frequency: s.frequency || "weekly" })}>
                 {d}
               </button>
             ))}
           </div>
           <div className="slide">
-            <label htmlFor="hour">Heure de départ</label>
+            <label htmlFor="hour">{tr("Heure de départ", "Start time")}</label>
             <output id="hour-out" htmlFor="hour">
               {String(s.hour).padStart(2, "0")}:00
             </output>
@@ -298,12 +312,12 @@ export function ReglagesPage() {
                 <i key={h} className={(h === s.hour ? "on" : "") + (h < 6 || h >= 20 ? " night" : "")} />
               ))}
             </div>
-            <small>Les heures foncées sont la nuit : c’est là que le scan gêne le moins.</small>
+            <small>{tr("Les heures foncées sont la nuit : c’est là que le scan gêne le moins.", "The dark hours are night time: that is when the scan disturbs least.")}</small>
           </div>
           <div className="slide">
-            <label htmlFor="rate">Vitesse du scan</label>
+            <label htmlFor="rate">{tr("Vitesse du scan", "Scan speed")}</label>
             <output id="rate-out" htmlFor="rate">
-              {rate} requêtes par seconde
+              {tr(`${rate} requêtes par seconde`, `${rate} requests per second`)}
             </output>
             <input id="rate" type="range" min="5" max="200" step="5" value={rate} onChange={(e) => save({ ...s, rate_per_sec: Number(e.target.value) }, 600)} />
             <div className="pulse" id="pulse" aria-hidden="true" style={{ "--spd": (3.2 - rate / 80).toFixed(2) + "s" } as CSSProperties}>
@@ -317,17 +331,17 @@ export function ReglagesPage() {
       </div>
 
       <div className="section">
-        <h2>Comment on vous prévient</h2>
+        <h2>{tr("Comment on vous prévient", "How we alert you")}</h2>
         <div className="rpanel" style={{ marginTop: 12 }}>
           <p className="sub" style={{ margin: "0 0 8px" }}>
-            À partir de quelle gravité
+            {tr("À partir de quelle gravité", "From which severity")}
           </p>
-          <div className="seg2" role="group" aria-label="Seuil d'alerte">
+          <div className="seg2" role="group" aria-label={tr("Seuil d'alerte", "Alert threshold")}>
             {(
               [
-                ["critical", "Critique seulement"],
-                ["high", "Élevé et plus"],
-                ["all", "Tout"],
+                ["critical", tr("Critique seulement", "Critical only")],
+                ["high", tr("Élevé et plus", "High and above")],
+                ["all", tr("Tout", "Everything")],
               ] as const
             ).map(([k, l]) => (
               <button key={k} type="button" aria-pressed={s.alert_level === k} onClick={() => save({ ...s, alert_level: k })}>
@@ -342,41 +356,41 @@ export function ReglagesPage() {
                   WhatsApp
                   <Soon />
                 </p>
-                <p className="md">Tout de suite, sur votre téléphone</p>
+                <p className="md">{tr("Tout de suite, sur votre téléphone", "Right away, on your phone")}</p>
               </div>
-              <button className="link" type="button" aria-disabled="true" onClick={() => toast("WhatsApp : bientôt disponible")}>
-                Envoyer un test
+              <button className="link" type="button" aria-disabled="true" onClick={() => toast(tr("WhatsApp : bientôt disponible", "WhatsApp: coming soon"))}>
+                {tr("Envoyer un test", "Send a test")}
               </button>
               <Switch on={false} label="WhatsApp" disabled />
             </div>
             <div className={"chan" + (s.email_alerts && plan.alerts ? "" : " off")}>
               <div>
                 <p className="mt">Email</p>
-                <p className="md">{plan.alerts ? "Avec le détail et les étapes" : `Non inclus dans l’offre ${plan.name}`}</p>
+                <p className="md">{plan.alerts ? tr("Avec le détail et les étapes", "With the details and the steps") : tr(`Non inclus dans l’offre ${plan.name}`, `Not included in the ${plan.name} plan`)}</p>
               </div>
               <button className="link" type="button" onClick={showPreview}>
-                Envoyer un test
+                {tr("Envoyer un test", "Send a test")}
               </button>
               <Switch on={s.email_alerts && plan.alerts} label="Email" disabled={!plan.alerts} onClick={() => save({ ...s, email_alerts: !s.email_alerts })} />
             </div>
             <div className="chan off is-soon">
               <div>
                 <p className="mt">
-                  Résumé du lundi
+                  {tr("Résumé du lundi", "Monday summary")}
                   <Soon />
                 </p>
-                <p className="md">Le score et les actions de la semaine</p>
+                <p className="md">{tr("Le score et les actions de la semaine", "The score and the week's actions")}</p>
               </div>
-              <button className="link" type="button" aria-disabled="true" onClick={() => toast("Résumé du lundi : bientôt disponible")}>
-                Envoyer un test
+              <button className="link" type="button" aria-disabled="true" onClick={() => toast(tr("Résumé du lundi : bientôt disponible", "Monday summary: coming soon"))}>
+                {tr("Envoyer un test", "Send a test")}
               </button>
-              <Switch on={false} label="Résumé du lundi" disabled />
+              <Switch on={false} label={tr("Résumé du lundi", "Monday summary")} disabled />
             </div>
           </div>
           <div className="preview" id="preview" aria-live="polite">
             {preview && (
               <>
-                <p className="pfrom">Aperçu du message, {preview.name}</p>
+                <p className="pfrom">{tr(`Aperçu du message, ${preview.name}`, `Message preview, ${preview.name}`)}</p>
                 <div className={"bubble" + (preview.typing ? "" : " in")}>
                   {preview.typing ? (
                     <span className="typing">
@@ -395,12 +409,12 @@ export function ReglagesPage() {
       </div>
 
       <div className="section">
-        <h2>Apparence</h2>
-        <div className="themes" role="group" aria-label="Thème">
+        <h2>{tr("Apparence", "Appearance")}</h2>
+        <div className="themes" role="group" aria-label={tr("Thème", "Theme")}>
           {(
             [
-              ["light", "Clair", "#F4F6FB", "#FFFFFF", "#14213D"],
-              ["dark", "Sombre", "#0D1526", "#162036", "#E8EDF7"],
+              ["light", tr("Clair", "Light"), "#F4F6FB", "#FFFFFF", "#14213D"],
+              ["dark", tr("Sombre", "Dark"), "#0D1526", "#162036", "#E8EDF7"],
             ] as const
           ).map(([k, l, bg, sf, ink]) => (
             <button key={k} type="button" aria-pressed={theme === k} onClick={() => setTheme(k)}>
@@ -420,10 +434,10 @@ export function ReglagesPage() {
       <ScanHistory />
 
       <div className="section">
-        <h2>Abonnement</h2>
+        <h2>{tr("Abonnement", "Subscription")}</h2>
         <div className="rpanel" style={{ marginTop: 12 }}>
           <p>
-            <b style={{ fontFamily: "'Bricolage Grotesque Variable',sans-serif", fontSize: 22 }}>Offre {plan.name}</b>
+            <b style={{ fontFamily: "'Bricolage Grotesque Variable',sans-serif", fontSize: 22 }}>{tr(`Offre ${plan.name}`, `${plan.name} plan`)}</b>
             <span style={{ color: "var(--ink2)" }}>{subLine}</span>
           </p>
           <div className="prog" style={{ marginTop: 16 }}>
@@ -431,7 +445,7 @@ export function ReglagesPage() {
               <div key={n}>
                 <div>
                   <span>{n}</span>
-                  <span style={{ color: "var(--ink2)" }}>{b ? `${a} sur ${b}` : `${a}, sans limite`}</span>
+                  <span style={{ color: "var(--ink2)" }}>{b ? tr(`${a} sur ${b}`, `${a} of ${b}`) : tr(`${a}, sans limite`, `${a}, no limit`)}</span>
                 </div>
                 <div className="bar" style={{ marginTop: 6, height: 4 }}>
                   <b style={{ width: (b ? Math.min(100, (a / b) * 100) : 0) + "%", background: "var(--azur)" }} />
@@ -441,7 +455,7 @@ export function ReglagesPage() {
           </div>
           <div className="actions">
             <Link className="btn" to={`/paiement?offre=${plan.id === "pro" ? "pro" : "sme"}&org=${encodeURIComponent(org.org_id)}`}>
-              Changer d’offre
+              {tr("Changer d’offre", "Change plan")}
             </Link>
             <button
               className="btn ghost"
@@ -452,27 +466,27 @@ export function ReglagesPage() {
                   (e: unknown) =>
                     toast(
                       e instanceof ApiError && e.status === 404
-                        ? "Pas encore de facture : vous ne payez pas en ligne pour l’instant"
+                        ? tr("Pas encore de facture : vous ne payez pas en ligne pour l’instant", "No invoice yet: you are not paying online for now")
                         : e instanceof ApiError && e.status === 403
-                          ? "Réservé aux administrateurs"
-                          : "Factures indisponibles pour le moment",
+                          ? tr("Réservé aux administrateurs", "Administrators only")
+                          : tr("Factures indisponibles pour le moment", "Invoices unavailable right now"),
                     ),
                 )
               }
             >
-              Voir les factures
+              {tr("Voir les factures", "See the invoices")}
             </button>
           </div>
           <p className="sub" style={{ marginTop: 14 }}>
-            Paiement par carte ou PayPal, avec Paddle.
+            {tr("Paiement par carte ou PayPal, avec Paddle.", "Payment by card or PayPal, with Paddle.")}
           </p>
           <div style={{ overflowX: "auto", marginTop: 18 }}>
             <table className={"limits plan" + planCol}>
               <thead>
                 <tr>
-                  <th scope="col">Comparer les offres</th>
-                  <th scope="col">Gratuit</th>
-                  <th scope="col">Essentiel</th>
+                  <th scope="col">{tr("Comparer les offres", "Compare the plans")}</th>
+                  <th scope="col">{tr("Gratuit", "Free")}</th>
+                  <th scope="col">{tr("Essentiel", "Essential")}</th>
                   <th scope="col">Pro</th>
                 </tr>
               </thead>
@@ -509,43 +523,44 @@ function Domains({ targets }: { targets: Target[] }) {
   const saveEx = async (t: Target) => {
     const { value, errors } = parseExclusions(text);
     if (errors.length) {
-      setErr(`Lignes non comprises : ${errors.join(", ")}`);
+      setErr(tr(`Lignes non comprises : ${errors.join(", ")}`, `Lines not understood: ${errors.join(", ")}`));
       return;
     }
     try {
       await api.updateTarget(org.org_id, t.id, { exclusions: value });
       setOpen(null);
-      toast("Exclusions enregistrées");
+      toast(tr("Exclusions enregistrées", "Exclusions saved"));
       void reload();
     } catch {
-      setErr("Exclusions non enregistrées, réessayez.");
+      setErr(tr("Exclusions non enregistrées, réessayez.", "Exclusions not saved, try again."));
     }
   };
   return (
     <div className="section">
-      <h2>Domaines et exclusions</h2>
-      <p className="hint">Ce qu’on ne touche jamais : une adresse, un port, un chemin ou un nom par ligne.</p>
+      <h2>{tr("Domaines et exclusions", "Domains and exclusions")}</h2>
+      <p className="hint">{tr("Ce qu’on ne touche jamais : une adresse, un port, un chemin ou un nom par ligne.", "What we never touch: one address, port, path or name per line.")}</p>
       <div className="rpanel" style={{ marginTop: 12 }}>
-        {targets.length === 0 && <p className="md">Aucun domaine pour l’instant : ajoutez-en un dans Actifs.</p>}
+        {targets.length === 0 && <p className="md">{tr("Aucun domaine pour l’instant : ajoutez-en un dans Actifs.", "No domain yet: add one in Assets.")}</p>}
         {targets.map((t) => (
           <div key={t.id} className="set" style={{ display: "block" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
               <div>
                 <p className="mt">{t.domain}</p>
                 <p className="md">
-                  {t.verified ? "Propriété prouvée" : "Propriété à prouver"} · {formatExclusions(t.exclusions).split("\n").filter(Boolean).length} exclusion(s)
+                  {t.verified ? tr("Propriété prouvée", "Ownership proven") : tr("Propriété à prouver", "Ownership to prove")} ·{" "}
+                  {tr(`${formatExclusions(t.exclusions).split("\n").filter(Boolean).length} exclusion(s)`, `${formatExclusions(t.exclusions).split("\n").filter(Boolean).length} exclusion(s)`)}
                 </p>
               </div>
               {isAdmin && (
                 <button className="link" type="button" onClick={() => edit(t)}>
-                  {open === t.id ? "Annuler" : "Modifier"}
+                  {open === t.id ? tr("Annuler", "Cancel") : tr("Modifier", "Edit")}
                 </button>
               )}
             </div>
             {open === t.id && (
               <div className="pwbox">
                 <label className="md" htmlFor={"ex-" + t.id}>
-                  Exclusions de {t.domain}
+                  {tr(`Exclusions de ${t.domain}`, `Exclusions of ${t.domain}`)}
                 </label>
                 <textarea
                   id={"ex-" + t.id}
@@ -559,7 +574,7 @@ function Domains({ targets }: { targets: Target[] }) {
                   {err}
                 </p>
                 <button className="btn" type="button" onClick={() => void saveEx(t)}>
-                  Enregistrer
+                  {tr("Enregistrer", "Save")}
                 </button>
               </div>
             )}
@@ -602,7 +617,7 @@ function TargetAPIs({ target }: { target: Target }) {
   const pickFile = async (f: File | undefined) => {
     if (!f) return;
     if (f.size > MAX_SPEC) {
-      setErr("Ce fichier dépasse 900 Ko : donnez plutôt l’adresse de la spécification.");
+      setErr(tr("Ce fichier dépasse 900 Ko : donnez plutôt l’adresse de la spécification.", "This file is over 900 KB: give the address of the specification instead."));
       return;
     }
     setSpec({ name: f.name, text: await f.text() });
@@ -623,28 +638,31 @@ function TargetAPIs({ target }: { target: Target }) {
       setBase("");
       setSpecURL("");
       setSpec(null);
-      toast("API ajoutée : elle sera analysée au prochain scan");
+      toast(tr("API ajoutée : elle sera analysée au prochain scan", "API added: it will be tested at the next scan"));
       void load();
     } catch (e) {
       setErr(
         e instanceof ApiError && e.status === 409
-          ? "Une API avec cette adresse est déjà déclarée."
+          ? tr("Une API avec cette adresse est déjà déclarée.", "An API with this address is already declared.")
           : e instanceof ApiError && e.code === "plan_limit"
-            ? "L’analyse des API est incluse dans l’offre Pro."
+            ? tr("L’analyse des API est incluse dans l’offre Pro.", "API testing is included in the Pro plan.")
             : e instanceof ApiError && e.status === 400
-              ? `Vérifiez les adresses : elles doivent être sur ${target.domain} ou un de ses sous-domaines, et une API OpenAPI a besoin de sa spécification.`
-              : "API non enregistrée, réessayez.",
+              ? tr(
+                  `Vérifiez les adresses : elles doivent être sur ${target.domain} ou un de ses sous-domaines, et une API OpenAPI a besoin de sa spécification.`,
+                  `Check the addresses: they must be on ${target.domain} or one of its subdomains, and an OpenAPI API needs its specification.`,
+                )
+              : tr("API non enregistrée, réessayez.", "API not saved, try again."),
       );
     }
   };
   const remove = async (a: DeclaredAPI) => {
-    if (!window.confirm(`Retirer l’API ${a.name} ?`)) return;
+    if (!window.confirm(tr(`Retirer l’API ${a.name} ?`, `Remove the API ${a.name}?`))) return;
     try {
       await api.deleteAPI(org.org_id, target.id, a.id);
-      toast("API retirée");
+      toast(tr("API retirée", "API removed"));
       void load();
     } catch {
-      toast("Suppression impossible pour le moment");
+      toast(tr("Suppression impossible pour le moment", "Removal is not possible right now"));
     }
   };
   const field = { height: 44, borderRadius: 14, border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", font: "inherit", padding: "0 14px" };
@@ -653,12 +671,13 @@ function TargetAPIs({ target }: { target: Target }) {
     <div style={{ marginTop: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
         <p className="md">
-          API de {target.domain} : {apis.length ? apis.length : "aucune"}
-          {!included && <span className="soon">Offre Pro</span>}
+          {tr(`API de ${target.domain} : `, `APIs of ${target.domain}: `)}
+          {apis.length ? apis.length : tr("aucune", "none")}
+          {!included && <span className="soon">{tr("Offre Pro", "Pro plan")}</span>}
         </p>
         {isAdmin && included && (
           <button className="link" type="button" onClick={() => setAdding(!adding)}>
-            {adding ? "Annuler" : "Ajouter une API"}
+            {adding ? tr("Annuler", "Cancel") : tr("Ajouter une API", "Add an API")}
           </button>
         )}
       </div>
@@ -671,13 +690,13 @@ function TargetAPIs({ target }: { target: Target }) {
                 {a.name}
                 {isAdmin && (
                   <button className="link" type="button" style={{ minHeight: 0, marginLeft: 10, fontSize: 13 }} onClick={() => void remove(a)}>
-                    Retirer
+                    {tr("Retirer", "Remove")}
                   </button>
                 )}
               </span>
               <small>
                 {a.base_url}
-                {a.spec_url ? ` · spécification ${a.spec_url}` : a.spec_size ? " · spécification envoyée" : ""}
+                {a.spec_url ? tr(` · spécification ${a.spec_url}`, ` · specification ${a.spec_url}`) : a.spec_size ? tr(" · spécification envoyée", " · specification uploaded") : ""}
               </small>
             </li>
           ))}
@@ -686,10 +705,10 @@ function TargetAPIs({ target }: { target: Target }) {
       {adding && (
         <div className="pwbox">
           <label className="md" htmlFor={"api-name-" + target.id}>
-            Nom
+            {tr("Nom", "Name")}
           </label>
-          <input id={"api-name-" + target.id} style={field} value={name} placeholder="API clients" onChange={(e) => setName(e.target.value)} />
-          <div className="seg2" role="group" aria-label="Type d’API" style={{ display: "inline-flex" }}>
+          <input id={"api-name-" + target.id} style={field} value={name} placeholder={tr("API clients", "Customer API")} onChange={(e) => setName(e.target.value)} />
+          <div className="seg2" role="group" aria-label={tr("Type d’API", "API type")} style={{ display: "inline-flex" }}>
             {(
               [
                 ["openapi", "OpenAPI (REST)"],
@@ -702,11 +721,13 @@ function TargetAPIs({ target }: { target: Target }) {
             ))}
           </div>
           <label className="md" htmlFor={"api-base-" + target.id}>
-            {kind === "graphql" ? "Adresse de l’API GraphQL" : "Adresse de base de l’API"}
+            {kind === "graphql" ? tr("Adresse de l’API GraphQL", "Address of the GraphQL API") : tr("Adresse de base de l’API", "Base address of the API")}
           </label>
           <input id={"api-base-" + target.id} style={field} value={base} placeholder={`https://api.${target.domain}/v1`} onChange={(e) => setBase(e.target.value)} />
           <label className="md" htmlFor={"api-spec-" + target.id}>
-            {kind === "graphql" ? "Schéma (facultatif : sinon l’API est interrogée)" : "Adresse de la spécification OpenAPI, ou un fichier ci-dessous"}
+            {kind === "graphql"
+              ? tr("Schéma (facultatif : sinon l’API est interrogée)", "Schema (optional: otherwise the API is queried)")
+              : tr("Adresse de la spécification OpenAPI, ou un fichier ci-dessous", "Address of the OpenAPI specification, or a file below")}
           </label>
           <input
             id={"api-spec-" + target.id}
@@ -715,14 +736,14 @@ function TargetAPIs({ target }: { target: Target }) {
             placeholder={`https://api.${target.domain}/openapi.json`}
             onChange={(e) => setSpecURL(e.target.value)}
           />
-          <input type="file" accept=".json,.yaml,.yml,.graphql,.gql,application/json" aria-label="Fichier de spécification" onChange={(e) => void pickFile(e.target.files?.[0])} />
-          {spec && <p className="md">Fichier : {spec.name}</p>}
-          <p className="md">L’analyse envoie des requêtes de test à cette API : utilisez si possible un environnement de test.</p>
+          <input type="file" accept=".json,.yaml,.yml,.graphql,.gql,application/json" aria-label={tr("Fichier de spécification", "Specification file")} onChange={(e) => void pickFile(e.target.files?.[0])} />
+          {spec && <p className="md">{tr(`Fichier : ${spec.name}`, `File: ${spec.name}`)}</p>}
+          <p className="md">{tr("L’analyse envoie des requêtes de test à cette API : utilisez si possible un environnement de test.", "Testing sends test requests to this API: use a test environment if you can.")}</p>
           <p className="err" role="alert">
             {err}
           </p>
           <button className="btn" type="button" onClick={() => void add()}>
-            Ajouter
+            {tr("Ajouter", "Add")}
           </button>
         </div>
       )}
@@ -757,7 +778,7 @@ function TestAccountPanel({ target }: { target: Target }) {
   const field = { height: 44, borderRadius: 14, border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", font: "inherit", padding: "0 14px" };
   const save = async () => {
     if (!consent) {
-      setErr("Cochez la case pour confirmer qu’il s’agit d’un compte de test.");
+      setErr(tr("Cochez la case pour confirmer qu’il s’agit d’un compte de test.", "Tick the box to confirm it is a test account."));
       return;
     }
     setErr("");
@@ -782,27 +803,30 @@ function TestAccountPanel({ target }: { target: Target }) {
       setHeaderValue("");
       setPassword("");
       setConsent(false);
-      toast("Compte de test enregistré : il servira au prochain scan approfondi et aux scans d’API");
+      toast(tr("Compte de test enregistré : il servira au prochain scan approfondi et aux scans d’API", "Test account saved: it will be used at the next deep scan and API scans"));
     } catch (e) {
       setErr(
         e instanceof ApiError && e.code === "plan_limit"
-          ? "Le scan authentifié est inclus dans l’offre Pro."
+          ? tr("Le scan authentifié est inclus dans l’offre Pro.", "The authenticated scan is included in the Pro plan.")
           : e instanceof ApiError && e.status === 503
-            ? "Les comptes de test ne sont pas encore activés sur ce serveur."
+            ? tr("Les comptes de test ne sont pas encore activés sur ce serveur.", "Test accounts are not enabled on this server yet.")
             : e instanceof ApiError && e.status === 400
-              ? `Vérifiez les champs : l’adresse de connexion doit être sur ${target.domain}, et les valeurs tenir sur une ligne.`
-              : "Compte de test non enregistré, réessayez.",
+              ? tr(
+                  `Vérifiez les champs : l’adresse de connexion doit être sur ${target.domain}, et les valeurs tenir sur une ligne.`,
+                  `Check the fields: the sign-in address must be on ${target.domain}, and the values must fit on one line.`,
+                )
+              : tr("Compte de test non enregistré, réessayez.", "Test account not saved, try again."),
       );
     }
   };
   const remove = async () => {
-    if (!window.confirm("Supprimer le compte de test ? Les scans ne se connecteront plus.")) return;
+    if (!window.confirm(tr("Supprimer le compte de test ? Les scans ne se connecteront plus.", "Delete the test account? Scans will no longer sign in."))) return;
     try {
       await api.deleteTestAccount(org.org_id, target.id);
       setAccount(null);
-      toast("Compte de test supprimé");
+      toast(tr("Compte de test supprimé", "Test account deleted"));
     } catch {
-      toast("Suppression impossible pour le moment");
+      toast(tr("Suppression impossible pour le moment", "Deletion is not possible right now"));
     }
   };
 
@@ -810,31 +834,40 @@ function TestAccountPanel({ target }: { target: Target }) {
     <div style={{ marginTop: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
         <p className="md">
-          Compte de test :{" "}
-          {account ? (account.kind === "header" ? `en-tête ${account.header_name ?? ""}` : `formulaire, ${account.username ?? ""} sur ${account.login_url ?? ""}`) : "aucun"}
-          {!included && <span className="soon">Offre Pro</span>}
+          {tr("Compte de test : ", "Test account: ")}
+          {account
+            ? account.kind === "header"
+              ? tr(`en-tête ${account.header_name ?? ""}`, `header ${account.header_name ?? ""}`)
+              : tr(`formulaire, ${account.username ?? ""} sur ${account.login_url ?? ""}`, `form, ${account.username ?? ""} on ${account.login_url ?? ""}`)
+            : tr("aucun", "none")}
+          {!included && <span className="soon">{tr("Offre Pro", "Pro plan")}</span>}
         </p>
         {included && (
           <span style={{ display: "flex", gap: 12 }}>
             {account && (
               <button className="link" type="button" onClick={() => void remove()}>
-                Supprimer
+                {tr("Supprimer", "Delete")}
               </button>
             )}
             <button className="link" type="button" onClick={() => setEditing(!editing)}>
-              {editing ? "Annuler" : account ? "Remplacer" : "Ajouter un compte de test"}
+              {editing ? tr("Annuler", "Cancel") : account ? tr("Remplacer", "Replace") : tr("Ajouter un compte de test", "Add a test account")}
             </button>
           </span>
         )}
       </div>
       {editing && (
         <div className="pwbox">
-          <p className="md">Les scans approfondis et d’API se connectent avec ce compte pour tester ce qui est derrière la connexion. Utilisez un compte de test, jamais celui d’un administrateur. Le secret est chiffré et ne sera plus jamais affiché.</p>
-          <div className="seg2" role="group" aria-label="Type de compte" style={{ display: "inline-flex" }}>
+          <p className="md">
+            {tr(
+              "Les scans approfondis et d’API se connectent avec ce compte pour tester ce qui est derrière la connexion. Utilisez un compte de test, jamais celui d’un administrateur. Le secret est chiffré et ne sera plus jamais affiché.",
+              "Deep and API scans sign in with this account to test what is behind the sign-in. Use a test account, never an administrator's. The secret is encrypted and will never be shown again.",
+            )}
+          </p>
+          <div className="seg2" role="group" aria-label={tr("Type de compte", "Account type")} style={{ display: "inline-flex" }}>
             {(
               [
-                ["header", "Jeton ou clé d’API"],
-                ["form", "Formulaire de connexion"],
+                ["header", tr("Jeton ou clé d’API", "Token or API key")],
+                ["form", tr("Formulaire de connexion", "Sign-in form")],
               ] as const
             ).map(([k, l]) => (
               <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)}>
@@ -845,46 +878,46 @@ function TestAccountPanel({ target }: { target: Target }) {
           {kind === "header" ? (
             <>
               <label className="md" htmlFor={"ta-hn-" + target.id}>
-                Nom de l’en-tête
+                {tr("Nom de l’en-tête", "Header name")}
               </label>
               <input id={"ta-hn-" + target.id} style={field} value={headerName} onChange={(e) => setHeaderName(e.target.value)} />
               <label className="md" htmlFor={"ta-hv-" + target.id}>
-                Valeur (par exemple : Bearer …)
+                {tr("Valeur (par exemple : Bearer …)", "Value (for example: Bearer …)")}
               </label>
               <input id={"ta-hv-" + target.id} style={field} type="password" autoComplete="off" value={headerValue} onChange={(e) => setHeaderValue(e.target.value)} />
             </>
           ) : (
             <>
               <label className="md" htmlFor={"ta-lu-" + target.id}>
-                Adresse de la page de connexion
+                {tr("Adresse de la page de connexion", "Address of the sign-in page")}
               </label>
               <input id={"ta-lu-" + target.id} style={field} value={loginURL} placeholder={`https://${target.domain}/login`} onChange={(e) => setLoginURL(e.target.value)} />
               <label className="md" htmlFor={"ta-un-" + target.id}>
-                Identifiant du compte de test
+                {tr("Identifiant du compte de test", "Test account username")}
               </label>
               <input id={"ta-un-" + target.id} style={field} autoComplete="off" value={username} onChange={(e) => setUsername(e.target.value)} />
               <label className="md" htmlFor={"ta-pw-" + target.id}>
-                Mot de passe du compte de test
+                {tr("Mot de passe du compte de test", "Test account password")}
               </label>
               <input id={"ta-pw-" + target.id} style={field} type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
               <label className="md" htmlFor={"ta-uf-" + target.id}>
-                Noms des champs, si ce ne sont pas « username » et « password » (facultatif)
+                {tr("Noms des champs, si ce ne sont pas « username » et « password » (facultatif)", "Field names, if not “username” and “password” (optional)")}
               </label>
               <span style={{ display: "flex", gap: 8 }}>
                 <input id={"ta-uf-" + target.id} style={{ ...field, flex: 1, minWidth: 0 }} placeholder="username" value={userField} onChange={(e) => setUserField(e.target.value)} />
-                <input aria-label="Nom du champ mot de passe" style={{ ...field, flex: 1, minWidth: 0 }} placeholder="password" value={passField} onChange={(e) => setPassField(e.target.value)} />
+                <input aria-label={tr("Nom du champ mot de passe", "Password field name")} style={{ ...field, flex: 1, minWidth: 0 }} placeholder="password" value={passField} onChange={(e) => setPassField(e.target.value)} />
               </span>
             </>
           )}
           <label className="consent small">
             <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-            <span>Je confirme que c’est un compte de test, que les scans peuvent utiliser.</span>
+            <span>{tr("Je confirme que c’est un compte de test, que les scans peuvent utiliser.", "I confirm this is a test account that scans may use.")}</span>
           </label>
           <p className="err" role="alert">
             {err}
           </p>
           <button className="btn" type="button" onClick={() => void save()}>
-            Enregistrer le compte de test
+            {tr("Enregistrer le compte de test", "Save the test account")}
           </button>
         </div>
       )}
@@ -918,7 +951,7 @@ function Team() {
       toast(ok);
       void load();
     } catch (e) {
-      toast(e instanceof ApiError && e.status === 409 ? "Il faut garder au moins un administrateur" : "Action impossible pour le moment");
+      toast(e instanceof ApiError && e.status === 409 ? tr("Il faut garder au moins un administrateur", "At least one administrator must remain") : tr("Action impossible pour le moment", "This action is not possible right now"));
     }
   };
   const invite = async () => {
@@ -927,22 +960,22 @@ function Team() {
       const inv = await api.invite(org.org_id, email.trim(), role);
       setEmail("");
       setCode(inv.setup_token ? { email: inv.member.email, token: inv.setup_token } : null);
-      toast(inv.emailed ? "Invitation envoyée" : "Membre ajouté");
+      toast(inv.emailed ? tr("Invitation envoyée", "Invitation sent") : tr("Membre ajouté", "Member added"));
       void load();
     } catch (e) {
       setErr(
         e instanceof ApiError && e.code === "plan_limit"
-          ? `L’offre ${data?.subscription.plan.name ?? ""} ne permet pas d’autre membre.`
+          ? tr(`L’offre ${data?.subscription.plan.name ?? ""} ne permet pas d’autre membre.`, `The ${data?.subscription.plan.name ?? ""} plan allows no other member.`)
           : e instanceof ApiError && e.status === 400
-            ? "Cette adresse email n’est pas valide."
-            : "Invitation impossible pour le moment.",
+            ? tr("Cette adresse email n’est pas valide.", "This email address is not valid.")
+            : tr("Invitation impossible pour le moment.", "The invitation is not possible right now."),
       );
     }
   };
 
   return (
     <div className="section">
-      <h2>Équipe</h2>
+      <h2>{tr("Équipe", "Team")}</h2>
       <ul className="sess">
         {(members ?? []).map((m) => (
           <li key={m.user_id}>
@@ -952,9 +985,9 @@ function Team() {
             <div>
               <p className="mt">{m.email}</p>
               <p className="md">
-                {m.role === "admin" ? "Administrateur" : "Lecteur"}
-                {m.activated ? "" : " · invitation en attente"}
-                {m.mfa_enabled ? " · double authentification active" : ""}
+                {m.role === "admin" ? tr("Administrateur", "Administrator") : tr("Lecteur", "Viewer")}
+                {m.activated ? "" : tr(" · invitation en attente", " · invitation pending")}
+                {m.mfa_enabled ? tr(" · double authentification active", " · two-factor authentication on") : ""}
               </p>
             </div>
             {isAdmin && m.user_id !== me.user_id ? (
@@ -962,9 +995,9 @@ function Team() {
                 <button
                   className="link"
                   type="button"
-                  onClick={() => void act(() => api.setMemberRole(org.org_id, m.user_id, m.role === "admin" ? "viewer" : "admin"), "Rôle modifié")}
+                  onClick={() => void act(() => api.setMemberRole(org.org_id, m.user_id, m.role === "admin" ? "viewer" : "admin"), tr("Rôle modifié", "Role changed"))}
                 >
-                  {m.role === "admin" ? "Passer lecteur" : "Passer admin"}
+                  {m.role === "admin" ? tr("Passer lecteur", "Make viewer") : tr("Passer admin", "Make admin")}
                 </button>
                 {!m.activated && (
                   <button
@@ -974,20 +1007,21 @@ function Team() {
                       void api
                         .newSetupToken(org.org_id, m.user_id)
                         .then((r) => setCode({ email: m.email, token: r.setup_token }))
-                        .catch(() => toast("Action impossible pour le moment"))
+                        .catch(() => toast(tr("Action impossible pour le moment", "This action is not possible right now")))
                     }
                   >
-                    Nouveau code
+                    {tr("Nouveau code", "New code")}
                   </button>
                 )}
                 <button
                   className="link"
                   type="button"
                   onClick={() => {
-                    if (window.confirm(`Retirer ${m.email} de ${org.org_name} ?`)) void act(() => api.removeMember(org.org_id, m.user_id), "Membre retiré");
+                    if (window.confirm(tr(`Retirer ${m.email} de ${org.org_name} ?`, `Remove ${m.email} from ${org.org_name}?`)))
+                      void act(() => api.removeMember(org.org_id, m.user_id), tr("Membre retiré", "Member removed"));
                   }}
                 >
-                  Retirer
+                  {tr("Retirer", "Remove")}
                 </button>
               </span>
             ) : (
@@ -998,17 +1032,17 @@ function Team() {
       </ul>
       {isAdmin && (
         <div className="rpanel" style={{ marginTop: 12 }}>
-          <p className="mt">Inviter quelqu’un</p>
+          <p className="mt">{tr("Inviter quelqu’un", "Invite someone")}</p>
           <div className="addrow">
             <label className="vh" htmlFor="inv-email">
-              Adresse email
+              {tr("Adresse email", "Email address")}
             </label>
-            <input id="inv-email" type="email" autoComplete="off" placeholder="collegue@entreprise.cg" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <div className="seg2" role="group" aria-label="Rôle">
+            <input id="inv-email" type="email" autoComplete="off" placeholder={tr("collegue@entreprise.cg", "colleague@company.com")} value={email} onChange={(e) => setEmail(e.target.value)} />
+            <div className="seg2" role="group" aria-label={tr("Rôle", "Role")}>
               {(
                 [
-                  ["viewer", "Lecteur"],
-                  ["admin", "Administrateur"],
+                  ["viewer", tr("Lecteur", "Viewer")],
+                  ["admin", tr("Administrateur", "Administrator")],
                 ] as const
               ).map(([k, l]) => (
                 <button key={k} type="button" aria-pressed={role === k} onClick={() => setRole(k)}>
@@ -1017,7 +1051,7 @@ function Team() {
               ))}
             </div>
             <button className="btn" type="button" onClick={() => void invite()}>
-              Inviter
+              {tr("Inviter", "Invite")}
             </button>
           </div>
           <p className="err" role="alert">
@@ -1026,7 +1060,12 @@ function Team() {
           {code && (
             <div className="record">
               <div>
-                <small>Code d’activation pour {code.email}, à transmettre si l’email n’arrive pas (affiché une seule fois)</small>
+                <small>
+                  {tr(
+                    `Code d’activation pour ${code.email}, à transmettre si l’email n’arrive pas (affiché une seule fois)`,
+                    `Activation code for ${code.email}, to pass on if the email does not arrive (shown only once)`,
+                  )}
+                </small>
                 <b>{code.token}</b>
               </div>
             </div>
@@ -1041,27 +1080,32 @@ function Team() {
 function ScanHistory() {
   const { data } = useOrg();
   if (!data) return null;
-  const label = { queued: "En attente", running: "En cours", done: "Terminé", failed: "Échoué" };
+  const label = { queued: tr("En attente", "Queued"), running: tr("En cours", "Running"), done: tr("Terminé", "Done"), failed: tr("Échoué", "Failed") };
   const now = new Date();
   return (
     <div className="section">
-      <h2>Derniers scans</h2>
+      <h2>{tr("Derniers scans", "Latest scans")}</h2>
       {data.scans.length ? (
         <ul className="feed">
           {data.scans.slice(0, 8).map((sc) => (
             <li key={sc.id} className={sc.status === "failed" ? "f-crit" : sc.status === "done" ? "f-ok" : ""}>
               <time dateTime={sc.created_at}>
-                {new Date(sc.created_at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {sinceText(sc.created_at, now)}
+                {new Date(sc.created_at).toLocaleString(tr("fr-FR", "en-GB"), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {sinceText(sc.created_at, now)}
               </time>
               <span>
-                {label[sc.status]} sur <b>{sc.domain}</b>
-                {sc.status === "done" && sc.new_findings !== undefined ? ` : ${sc.new_findings} nouveau(x), ${sc.fixed_findings ?? 0} corrigé(s)` : ""}.
+                {label[sc.status]}
+                {tr(" sur ", " on ")}
+                <b>{sc.domain}</b>
+                {sc.status === "done" && sc.new_findings !== undefined
+                  ? tr(` : ${sc.new_findings} nouveau(x), ${sc.fixed_findings ?? 0} corrigé(s)`, `: ${sc.new_findings} new, ${sc.fixed_findings ?? 0} fixed`)
+                  : ""}
+                .
               </span>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="hint">Aucun scan pour l’instant.</p>
+        <p className="hint">{tr("Aucun scan pour l’instant.", "No scan yet.")}</p>
       )}
     </div>
   );
@@ -1075,14 +1119,14 @@ function ConsentSheet({ onConfirm }: { onConfirm: () => Promise<void> }) {
   const [busy, setBusy] = useState(false);
   const confirm = async () => {
     if (!checked) {
-      setErr("Cochez la case pour confirmer votre autorisation.");
+      setErr(tr("Cochez la case pour confirmer votre autorisation.", "Tick the box to confirm your authorization."));
       return;
     }
     setBusy(true);
     try {
       await onConfirm();
     } catch {
-      setErr("Profil non enregistré, réessayez.");
+      setErr(tr("Profil non enregistré, réessayez.", "Profile not saved, try again."));
     } finally {
       setBusy(false);
     }
@@ -1090,36 +1134,46 @@ function ConsentSheet({ onConfirm }: { onConfirm: () => Promise<void> }) {
   return (
     <>
       <div className="shead">
-        <SevTag s="high" label="À lire avant d’activer" />
+        <SevTag s="high" label={tr("À lire avant d’activer", "Read before turning on")} />
         <CloseButton />
       </div>
-      <h2 id="sheet-title">Le profil approfondi teste vos serveurs plus fort</h2>
-      <p className="why">Il vérifie 1 000 ports, identifie la version de chaque service et lance des tests applicatifs étendus.</p>
-      <h3>Ce que cela implique</h3>
+      <h2 id="sheet-title">{tr("Le profil approfondi teste vos serveurs plus fort", "The deep profile tests your servers harder")}</h2>
+      <p className="why">
+        {tr(
+          "Il vérifie 1 000 ports, identifie la version de chaque service et lance des tests applicatifs étendus.",
+          "It checks 1,000 ports, identifies the version of each service and runs extended application tests.",
+        )}
+      </p>
+      <h3>{tr("Ce que cela implique", "What this means")}</h3>
       <ul className="steps plain">
         <li>
-          <span>Le scan peut durer 2 à 3 heures.</span>
+          <span>{tr("Le scan peut durer 2 à 3 heures.", "The scan can take 2 to 3 hours.")}</span>
         </li>
         <li>
-          <span>Un serveur ancien ou fragile peut ralentir pendant le test.</span>
+          <span>{tr("Un serveur ancien ou fragile peut ralentir pendant le test.", "An old or fragile server may slow down during the test.")}</span>
         </li>
         <li>
-          <span>Votre hébergeur peut voir ce trafic comme une attaque : prévenez-le si son contrat l’exige.</span>
+          <span>
+            {tr(
+              "Votre hébergeur peut voir ce trafic comme une attaque : prévenez-le si son contrat l’exige.",
+              "Your host may see this traffic as an attack: tell them if their contract requires it.",
+            )}
+          </span>
         </li>
       </ul>
       <label className="consent">
         <input type="checkbox" id="consent-box" checked={checked} onChange={(e) => setChecked(e.target.checked)} />
-        <span>Je confirme être autorisé à faire tester ces serveurs, et j’accepte ces risques.</span>
+        <span>{tr("Je confirme être autorisé à faire tester ces serveurs, et j’accepte ces risques.", "I confirm I am authorized to have these servers tested, and I accept these risks.")}</span>
       </label>
       <p id="consent-err" role="alert" className="err">
         {err}
       </p>
       <div className="actions sticky">
         <button className="btn" type="button" disabled={busy} onClick={() => void confirm()}>
-          Activer le profil approfondi
+          {tr("Activer le profil approfondi", "Turn on the deep profile")}
         </button>
         <button className="btn ghost" type="button" onClick={closeAll}>
-          Annuler
+          {tr("Annuler", "Cancel")}
         </button>
       </div>
     </>

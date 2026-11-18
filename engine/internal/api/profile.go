@@ -11,6 +11,7 @@ import (
 
 type updateMeRequest struct {
 	Name *string `json:"name"`
+	Lang *string `json:"lang"` // "fr" or "en"
 }
 
 // updateMe changes the signed-in user's profile (Profil > Modifier) and
@@ -24,6 +25,17 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request, sess store.Ses
 		err := s.acct.SetName(r.Context(), sess, *req.Name, account.ClientFrom(r))
 		if errors.Is(err, store.ErrInvalidName) {
 			writeError(w, http.StatusBadRequest, "name must be at most 100 characters, without control characters")
+			return
+		}
+		if err != nil {
+			s.internalError(w, r, err)
+			return
+		}
+	}
+	if req.Lang != nil {
+		err := s.acct.SetLang(r.Context(), sess, *req.Lang)
+		if errors.Is(err, store.ErrInvalidLang) {
+			writeError(w, http.StatusBadRequest, "lang must be fr or en")
 			return
 		}
 		if err != nil {

@@ -7,6 +7,7 @@ import { api, ApiError } from "../api/client";
 import type { Scan } from "../api/types";
 import { Close, Expand, NavIcon, Shrink, Tick } from "./icons";
 import { CATS, RANK, SEV, STATE_LABEL, catState, evaluatedCats, worst, type Issue, type SevOrOk } from "./model";
+import { tr } from "../i18n";
 import { Link } from "../router";
 import { useOrg } from "./OrgData";
 import { useUI } from "./ui";
@@ -26,14 +27,20 @@ export function isAuditUsed(e: unknown): boolean {
   return e instanceof ApiError && e.code === "audit_used";
 }
 
-const UPSELL: Record<"fix" | "scan", [string, string]> = {
-  fix: [
-    "Faisons vérifier votre correction",
-    "Votre audit gratuit est terminé. Pour qu’un nouveau scan confirme votre correction et que votre score remonte, activez l’essai de l’offre Essentiel.",
+const UPSELL: Record<"fix" | "scan", () => [string, string]> = {
+  fix: () => [
+    tr("Faisons vérifier votre correction", "Let us verify your fix"),
+    tr(
+      "Votre audit gratuit est terminé. Pour qu’un nouveau scan confirme votre correction et que votre score remonte, activez l’essai de l’offre Essentiel.",
+      "Your free audit is over. To have a new scan confirm your fix and raise your score, start the Essential trial.",
+    ),
   ],
-  scan: [
-    "Relancez le scan avec l’essai",
-    "Votre audit gratuit est terminé. Pour scanner à nouveau, chaque semaine, ports et vulnérabilités connues compris, activez l’essai de l’offre Essentiel.",
+  scan: () => [
+    tr("Relancez le scan avec l’essai", "Scan again with the trial"),
+    tr(
+      "Votre audit gratuit est terminé. Pour scanner à nouveau, chaque semaine, ports et vulnérabilités connues compris, activez l’essai de l’offre Essentiel.",
+      "Your free audit is over. To scan again every week, ports and known vulnerabilities included, start the Essential trial.",
+    ),
   ],
 };
 
@@ -42,7 +49,7 @@ const UPSELL: Record<"fix" | "scan", [string, string]> = {
 export function UpsellSheet({ what }: { what: "fix" | "scan" }) {
   const { org, data } = useOrg();
   const { closeAll } = useUI();
-  const [title, text] = UPSELL[what];
+  const [title, text] = UPSELL[what]();
   const trial = data?.subscription.trial_available ?? true;
   return (
     <>
@@ -53,14 +60,18 @@ export function UpsellSheet({ what }: { what: "fix" | "scan" }) {
       <h2 id="sheet-title">{title}</h2>
       <p className="sub">{text}</p>
       <ul className="upsell">
-        <li>Un scan complet chaque semaine</li>
-        <li>La vérification de chaque correction</li>
-        <li>Les alertes par email et les rapports PDF</li>
+        <li>{tr("Un scan complet chaque semaine", "A full scan every week")}</li>
+        <li>{tr("La vérification de chaque correction", "Every fix verified")}</li>
+        <li>{tr("Les alertes par email et les rapports PDF", "Email alerts and PDF reports")}</li>
       </ul>
-      {trial && <p className="sub">14 jours d’essai : aucun prélèvement avant la fin, annulable en un clic.</p>}
+      {trial && (
+        <p className="sub">
+          {tr("14 jours d’essai : aucun prélèvement avant la fin, annulable en un clic.", "14-day trial: no charge before it ends, cancel in one click.")}
+        </p>
+      )}
       <div className="actions">
         <Link className="btn" to={`/orgs/${encodeURIComponent(org.org_id)}/offre`} onClick={closeAll}>
-          {trial ? "Essayer 14 jours" : "Choisir une offre"}
+          {trial ? tr("Essayer 14 jours", "Try 14 days") : tr("Choisir une offre", "Choose a plan")}
         </Link>
       </div>
     </>
@@ -72,10 +83,10 @@ export function CloseButton() {
   const { closeAll, wide, toggleWide } = useUI();
   return (
     <span className="sheetbtns">
-      <button className="iconbtn" type="button" aria-pressed={wide} aria-label={wide ? "Réduire" : "Agrandir"} title={wide ? "Réduire" : "Agrandir"} onClick={toggleWide}>
+      <button className="iconbtn" type="button" aria-pressed={wide} aria-label={wide ? tr("Réduire", "Shrink") : tr("Agrandir", "Expand")} title={wide ? tr("Réduire", "Shrink") : tr("Agrandir", "Expand")} onClick={toggleWide}>
         {wide ? <Shrink /> : <Expand />}
       </button>
-      <button className="iconbtn" type="button" data-close aria-label="Fermer" onClick={closeAll}>
+      <button className="iconbtn" type="button" data-close aria-label={tr("Fermer", "Close")} onClick={closeAll}>
         <Close />
       </button>
     </span>
@@ -106,7 +117,7 @@ export function useFix() {
   return async (target: Issue | Issue[]) => {
     const all = Array.isArray(target) ? target : [target];
     if (!isAdmin) {
-      toast("Réservé aux administrateurs");
+      toast(tr("Réservé aux administrateurs", "Administrators only"));
       return;
     }
     const fixing = !all.every((i) => i.fixed);
@@ -119,14 +130,14 @@ export function useFix() {
     // risk stays the customer's decision, reopened from its own sheet).
     const list = all.filter((i) => (fixing ? !i.fixed : i.fixed && !i.accepted));
     const gain = list.reduce((s, i) => s + i.gain, 0);
-    toast(fixing ? `Marqué comme corrigé : +${gain} points, vérification en cours` : "Rouvert");
+    toast(fixing ? tr(`Marqué comme corrigé : +${gain} points, vérification en cours`, `Marked as fixed: +${gain} points, checking`) : tr("Rouvert", "Reopened"));
     try {
       for (const i of list) await setStatus(i, fixing ? "fixed" : "open");
       if (fixing) watchFixes(list);
       else forgetVerdicts(list);
     } catch (e) {
       if (isAuditUsed(e)) showSheet(<UpsellSheet what="fix" />);
-      else toast(e instanceof ApiError && e.status === 403 ? "Réservé aux administrateurs" : "Impossible pour le moment, réessayez");
+      else toast(e instanceof ApiError && e.status === 403 ? tr("Réservé aux administrateurs", "Administrators only") : tr("Impossible pour le moment, réessayez", "Not possible right now, try again"));
     }
   };
 }
@@ -146,7 +157,7 @@ export function FindingSheet({ id, targetId }: { id: string; targetId: string })
           <span />
           <CloseButton />
         </div>
-        <h2 id="sheet-title">Ce problème n’existe plus</h2>
+        <h2 id="sheet-title">{tr("Ce problème n’existe plus", "This problem no longer exists")}</h2>
       </>
     );
   }
@@ -159,16 +170,16 @@ export function FindingSheet({ id, targetId }: { id: string; targetId: string })
   const copy = (v: string) => {
     try {
       navigator.clipboard.writeText(v).then(
-        () => toast("Copié"),
-        () => toast("Copie impossible ici"),
+        () => toast(tr("Copié", "Copied")),
+        () => toast(tr("Copie impossible ici", "Copying is not possible here")),
       );
     } catch {
-      toast("Copie impossible ici");
+      toast(tr("Copie impossible ici", "Copying is not possible here"));
     }
   };
   const recheck = async () => {
     if (!isAdmin) {
-      toast("Réservé aux administrateurs");
+      toast(tr("Réservé aux administrateurs", "Administrators only"));
       return;
     }
     setChecking(true);
@@ -176,16 +187,21 @@ export function FindingSheet({ id, targetId }: { id: string; targetId: string })
       const sc = await api.startScan(org.org_id, i.targetId, [i.moduleId]);
       const end = await waitScan(org.org_id, sc.id);
       await reload();
-      if (!end) toast("Vérification en cours : le résultat arrivera ici");
-      else if (end.status === "failed") toast("La vérification a échoué, réessayez plus tard");
+      if (!end) toast(tr("Vérification en cours : le résultat arrivera ici", "Checking: the result will appear here"));
+      else if (end.status === "failed") toast(tr("La vérification a échoué, réessayez plus tard", "The check failed, try again later"));
       else {
         const f = await api.findings(org.org_id);
         const now = f.items.find((x) => x.id === i.id && x.target_id === i.targetId);
-        toast(now && now.status === "open" ? "Toujours présent au dernier contrôle" : "Confirmé : le problème a disparu");
+        toast(now && now.status === "open" ? tr("Toujours présent au dernier contrôle", "Still there at the latest check") : tr("Confirmé : le problème a disparu", "Confirmed: the problem is gone"));
       }
     } catch (e) {
       if (isAuditUsed(e)) showSheet(<UpsellSheet what="scan" />);
-      else toast(e instanceof ApiError && e.code === "plan_limit" ? "Ce contrôle n’est pas inclus dans votre offre" : "Impossible de vérifier pour le moment");
+      else
+        toast(
+          e instanceof ApiError && e.code === "plan_limit"
+            ? tr("Ce contrôle n’est pas inclus dans votre offre", "This check is not included in your plan")
+            : tr("Impossible de vérifier pour le moment", "The check cannot run right now"),
+        );
     } finally {
       setChecking(false);
     }
@@ -194,7 +210,7 @@ export function FindingSheet({ id, targetId }: { id: string; targetId: string })
   return (
     <>
       <div className="shead">
-        <SevTag s={i.fixed ? "ok" : i.sev} label={i.accepted ? "Risque accepté" : undefined} />
+        <SevTag s={i.fixed ? "ok" : i.sev} label={i.accepted ? tr("Risque accepté", "Risk accepted") : undefined} />
         <CloseButton />
       </div>
       <h2 id="sheet-title">{i.title}</h2>
@@ -204,43 +220,45 @@ export function FindingSheet({ id, targetId }: { id: string; targetId: string })
       </button>
       <div className="stats3">
         <div>
-          <small>Gravité</small>
+          <small>{tr("Gravité", "Severity")}</small>
           <b>{SEV[i.sev][0]}</b>
         </div>
         <div>
-          <small>Temps</small>
+          <small>{tr("Temps", "Time")}</small>
           <b>{i.mins} min</b>
         </div>
         <div>
-          <small>Gain</small>
-          <b>+{i.gain} points</b>
+          <small>{tr("Gain", "Gain")}</small>
+          <b>{tr(`+${i.gain} points`, `+${i.gain} points`)}</b>
         </div>
       </div>
       {cve && (
         <div className="cve">
           <div>
-            <small>Référence</small>
-            <b>{cve.id ?? "Sans CVE"}</b>
+            <small>{tr("Référence", "Reference")}</small>
+            <b>{cve.id ?? tr("Sans CVE", "No CVE")}</b>
             {cve.name && <small>{cve.name}</small>}
           </div>
           <div>
-            <small>Gravité CVSS</small>
-            <b>{cve.cvss !== undefined ? `${cve.cvss.toLocaleString("fr-FR")} sur 10` : "Non publiée"}</b>
+            <small>{tr("Gravité CVSS", "CVSS severity")}</small>
+            <b>{cve.cvss !== undefined ? tr(`${cve.cvss.toLocaleString("fr-FR")} sur 10`, `${cve.cvss.toLocaleString("en-GB")} out of 10`) : tr("Non publiée", "Not published")}</b>
           </div>
           <div>
-            <small>Probabilité EPSS</small>
-            <b>{cve.epss !== undefined ? `${(cve.epss * 100).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} %` : "Non publiée"}</b>
+            <small>{tr("Probabilité EPSS", "EPSS probability")}</small>
+            <b>
+              {cve.epss !== undefined
+                ? tr(`${(cve.epss * 100).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} %`, `${(cve.epss * 100).toLocaleString("en-GB", { maximumFractionDigits: 1 })}%`)
+                : tr("Non publiée", "Not published")}
+            </b>
           </div>
-          {cve.kev && <p className="kev">Exploitée activement par des attaquants</p>}
+          {cve.kev && <p className="kev">{tr("Exploitée activement par des attaquants", "Actively exploited by attackers")}</p>}
         </div>
       )}
-      <h3>Pourquoi c’est important</h3>
+      <h3>{tr("Pourquoi c’est important", "Why it matters")}</h3>
       <p className="why">{i.why}</p>
       <h3>
-        Comment corriger
-        <span id="step-count">
-          {done} sur {st.length}
-        </span>
+        {tr("Comment corriger", "How to fix it")}
+        <span id="step-count">{tr(`${done} sur ${st.length}`, `${done} of ${st.length}`)}</span>
       </h3>
       <div className="stepline">
         <b id="step-bar" style={{ width: (st.length ? (done / st.length) * 100 : 0) + "%" }} />
@@ -257,14 +275,21 @@ export function FindingSheet({ id, targetId }: { id: string; targetId: string })
           </li>
         ))}
       </ul>
-      <h3>Preuve technique</h3>
+      <h3>{tr("Preuve technique", "Technical evidence")}</h3>
       <div className="proof">
         <pre>{i.proof}</pre>
         <button className="link" type="button" onClick={() => copy(i.proof)}>
-          Copier
+          {tr("Copier", "Copy")}
         </button>
       </div>
-      {!i.fixed && <p className="hint">Une fois corrigé, dites-le-nous : un contrôle part aussitôt pour le confirmer, et votre score se met à jour.</p>}
+      {!i.fixed && (
+        <p className="hint">
+          {tr(
+            "Une fois corrigé, dites-le-nous : un contrôle part aussitôt pour le confirmer, et votre score se met à jour.",
+            "Once fixed, let us know: a check starts at once to confirm it, and your score is updated.",
+          )}
+        </p>
+      )}
       <div className="actions sticky">
         <button
           className={"btn" + (st.length && done === st.length && !i.fixed ? " ready" : "")}
@@ -275,16 +300,16 @@ export function FindingSheet({ id, targetId }: { id: string; targetId: string })
             void fix(i);
           }}
         >
-          {i.fixed ? "Rouvrir" : "J’ai corrigé : vérifier"}
+          {i.fixed ? tr("Rouvrir", "Reopen") : tr("J’ai corrigé : vérifier", "I fixed it: check")}
         </button>
         <button className="btn ghost" type="button" disabled={checking} onClick={() => void recheck()}>
           {checking ? (
             <>
               <span className="spin" />
-              Vérification
+              {tr("Vérification", "Checking")}
             </>
           ) : (
-            "Revérifier"
+            tr("Revérifier", "Check again")
           )}
         </button>
       </div>
@@ -309,14 +334,14 @@ export function AssetSheet({ n }: { n: string }) {
         </div>
         <h2 id="sheet-title">{n}</h2>
         <p className="why" style={{ color: "var(--ink2)" }}>
-          Cet actif n’est plus dans l’inventaire.
+          {tr("Cet actif n’est plus dans l’inventaire.", "This asset is no longer in the inventory.")}
         </p>
       </>
     );
   }
   const scan = async () => {
     if (!isAdmin) {
-      toast("Réservé aux administrateurs");
+      toast(tr("Réservé aux administrateurs", "Administrators only"));
       return;
     }
     setScanning(true);
@@ -324,16 +349,20 @@ export function AssetSheet({ n }: { n: string }) {
       const sc = await api.startScan(org.org_id, a.targetId);
       const end = await waitScan(org.org_id, sc.id);
       await reload();
-      if (!end) toast("Scan en cours : les résultats arriveront ici");
-      else if (end.status === "failed") toast("Le scan a échoué, réessayez plus tard");
+      if (!end) toast(tr("Scan en cours : les résultats arriveront ici", "Scan running: the results will appear here"));
+      else if (end.status === "failed") toast(tr("Le scan a échoué, réessayez plus tard", "The scan failed, try again later"));
       else {
         const done = (await api.scans(org.org_id)).items.find((x) => x.id === sc.id);
         const fresh = done?.new_findings ?? 0;
-        toast(fresh ? `Scan terminé : ${fresh} nouveau${fresh > 1 ? "x" : ""} problème${fresh > 1 ? "s" : ""}` : "Scan terminé : rien de nouveau");
+        toast(
+          fresh
+            ? tr(`Scan terminé : ${fresh} nouveau${fresh > 1 ? "x" : ""} problème${fresh > 1 ? "s" : ""}`, `Scan finished: ${fresh} new problem${fresh > 1 ? "s" : ""}`)
+            : tr("Scan terminé : rien de nouveau", "Scan finished: nothing new"),
+        );
       }
     } catch (e) {
       if (isAuditUsed(e)) showSheet(<UpsellSheet what="scan" />);
-      else toast("Impossible de lancer le scan pour le moment");
+      else toast(tr("Impossible de lancer le scan pour le moment", "The scan cannot start right now"));
     } finally {
       setScanning(false);
     }
@@ -341,14 +370,14 @@ export function AssetSheet({ n }: { n: string }) {
   return (
     <>
       <div className="shead">
-        <SevTag s={w} label={w === "ok" ? "Protégé" : undefined} />
+        <SevTag s={w} label={w === "ok" ? tr("Protégé", "Protected") : undefined} />
         <CloseButton />
       </div>
       <h2 id="sheet-title">{n}</h2>
       <p className="why" style={{ color: "var(--ink2)" }}>
         {a.k}
       </p>
-      <h3>État par contrôle</h3>
+      <h3>{tr("État par contrôle", "Status by check")}</h3>
       <div className="cats">
         {CATS.map(([c, l]) => {
           const s = catState(a, c, issues, evaluated);
@@ -361,7 +390,7 @@ export function AssetSheet({ n }: { n: string }) {
           );
         })}
       </div>
-      <h3>Technologies détectées</h3>
+      <h3>{tr("Technologies détectées", "Detected technologies")}</h3>
       {a.tech.length ? (
         <div className="tags">
           {a.tech.map((x) => (
@@ -370,10 +399,10 @@ export function AssetSheet({ n }: { n: string }) {
         </div>
       ) : (
         <p className="why" style={{ color: "var(--ink2)" }}>
-          Aucune technologie détectée pour l’instant.
+          {tr("Aucune technologie détectée pour l’instant.", "No technology detected yet.")}
         </p>
       )}
-      <h3>Services exposés</h3>
+      <h3>{tr("Services exposés", "Exposed services")}</h3>
       {a.svc.length ? (
         <ul className="svc">
           {a.svc.map((s) => (
@@ -386,11 +415,11 @@ export function AssetSheet({ n }: { n: string }) {
         </ul>
       ) : (
         <p className="why" style={{ color: "var(--ink2)" }}>
-          Aucun service réseau détecté sur cet actif.
+          {tr("Aucun service réseau détecté sur cet actif.", "No network service detected on this asset.")}
         </p>
       )}
       <h3>
-        Problèmes ouverts<span>{open.length}</span>
+        {tr("Problèmes ouverts", "Open problems")}<span>{open.length}</span>
       </h3>
       {open.length ? (
         <ul className="rows2 insheet">
@@ -409,7 +438,7 @@ export function AssetSheet({ n }: { n: string }) {
         </ul>
       ) : (
         <p className="why" style={{ color: "var(--ink2)" }}>
-          Aucun problème ouvert.
+          {tr("Aucun problème ouvert.", "No open problem.")}
         </p>
       )}
       <div className="scanbar" id="asset-scan" hidden={!scanning}>
@@ -417,7 +446,7 @@ export function AssetSheet({ n }: { n: string }) {
       </div>
       <div className="actions sticky">
         <button className="btn" type="button" disabled={scanning} onClick={() => void scan()}>
-          {scanning ? "Scan en cours" : "Lancer un scan"}
+          {scanning ? tr("Scan en cours", "Scan running") : tr("Lancer un scan", "Start a scan")}
         </button>
       </div>
     </>

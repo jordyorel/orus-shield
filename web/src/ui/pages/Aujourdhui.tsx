@@ -4,6 +4,7 @@ import { Link, navigate } from "../../router";
 import { appPath } from "../AppShell";
 import { Tick } from "../icons";
 import { COLOR, DIST, byPriority, feedDay, groupIssues, groupVerdict, hostsText, verdictText, worst, type AssetView, type Issue, type IssueGroup } from "../model";
+import { tr } from "../../i18n";
 import { localTitle } from "../lang";
 import { useOrg } from "../OrgData";
 import { AssetSheet, FindingSheet, useFix } from "../sheets";
@@ -86,15 +87,15 @@ export function Radar({ assets, issues, score }: { assets: AssetView[]; issues: 
 
   return (
     <div className="radar" ref={host}>
-      <svg id="radar" className={hot ? "hot" : ""} viewBox="0 0 300 300" role="group" aria-label="Carte de votre périmètre : plus un point est loin du centre, plus l'actif est exposé">
+      <svg id="radar" className={hot ? "hot" : ""} viewBox="0 0 300 300" role="group" aria-label={tr("Carte de votre périmètre : plus un point est loin du centre, plus l'actif est exposé", "Map of your perimeter: the further a dot is from the centre, the more exposed the asset")}>
         <circle cx="150" cy="150" r="128" fill="none" stroke="var(--ring)" strokeWidth="1.8" strokeDasharray="3 6" strokeLinecap="round" />
         <circle cx="150" cy="150" r="100" fill="none" stroke="var(--ring)" strokeWidth="1.8" />
         <circle cx="150" cy="150" r="74" fill="none" stroke="var(--ring)" strokeWidth="1.8" />
         <line x1="22" x2="278" y1="150" y2="150" stroke="var(--ring)" strokeWidth="1" strokeDasharray="1 5" />
         <line x1="150" x2="150" y1="22" y2="278" stroke="var(--ring)" strokeWidth="1" strokeDasharray="1 5" />
-        {ringLabel(128, "En danger")}
-        {ringLabel(100, "Exposé")}
-        {ringLabel(74, "À surveiller")}
+        {ringLabel(128, tr("En danger", "At risk"))}
+        {ringLabel(100, tr("Exposé", "Exposed"))}
+        {ringLabel(74, tr("À surveiller", "To watch"))}
         <line
           id="rd-line"
           x1="150"
@@ -111,7 +112,7 @@ export function Radar({ assets, issues, score }: { assets: AssetView[]; issues: 
           {score === null ? "–" : shown}
         </text>
         <text x="150" y="172" textAnchor="middle" fontSize="10" fill="var(--ink2)">
-          sur 100
+          {tr("sur 100", "out of 100")}
         </text>
         {assets.map((a) => {
           const o = openOf(a.n);
@@ -125,7 +126,7 @@ export function Radar({ assets, issues, score }: { assets: AssetView[]; issues: 
               style={{ transform: `translate(${x.toFixed(1)}px,${y.toFixed(1)}px)` }}
               tabIndex={0}
               role="button"
-              aria-label={`${a.n} : ${o.length} problème(s) ouvert(s)`}
+              aria-label={tr(`${a.n} : ${o.length} problème(s) ouvert(s)`, `${a.n}: ${o.length} open problem(s)`)}
               onMouseEnter={(e) => over(a, e.currentTarget)}
               onMouseLeave={out}
               onFocus={(e) => over(a, e.currentTarget)}
@@ -166,10 +167,10 @@ export function Radar({ assets, issues, score }: { assets: AssetView[]; issues: 
             ) : (
               <span>
                 <i style={{ background: "var(--lagon)" }} />
-                Protégé, aucun problème ouvert.
+                {tr("Protégé, aucun problème ouvert.", "Protected, no open problem.")}
               </span>
             )}
-            <em>Cliquez pour ouvrir l’actif</em>
+            <em>{tr("Cliquez pour ouvrir l’actif", "Click to open the asset")}</em>
           </>
         )}
       </div>
@@ -183,27 +184,41 @@ function FeedLine({ a, now }: { a: Activity; now: Date }) {
   if (a.kind === "scan") {
     text = (
       <span>
-        Scan terminé sur <b>{a.domain}</b> : {a.assets ?? 0} actif{(a.assets ?? 0) > 1 ? "s" : ""} vérifié{(a.assets ?? 0) > 1 ? "s" : ""}.
+        {tr("Scan terminé sur ", "Scan finished on ")}
+        <b>{a.domain}</b>
+        {tr(
+          ` : ${a.assets ?? 0} actif${(a.assets ?? 0) > 1 ? "s" : ""} vérifié${(a.assets ?? 0) > 1 ? "s" : ""}.`,
+          `: ${a.assets ?? 0} asset${(a.assets ?? 0) > 1 ? "s" : ""} checked.`,
+        )}
       </span>
     );
   } else if (a.to === "fixed") {
     cls = "f-ok";
     text = (
       <span>
-        Corrigé sur <b>{a.asset}</b> : {localTitle(a.title, a.title_fr)}.
+        {tr("Corrigé sur ", "Fixed on ")}
+        <b>{a.asset}</b>
+        {tr(" : ", ": ")}
+        {localTitle(a.title, a.title_fr)}.
       </span>
     );
   } else if (a.to === "accepted_risk") {
     text = (
       <span>
-        Risque accepté sur <b>{a.asset}</b> : {localTitle(a.title, a.title_fr)}.
+        {tr("Risque accepté sur ", "Risk accepted on ")}
+        <b>{a.asset}</b>
+        {tr(" : ", ": ")}
+        {localTitle(a.title, a.title_fr)}.
       </span>
     );
   } else {
     if (a.severity === "critical" || a.severity === "high") cls = "f-crit";
     text = (
       <span>
-        {a.from === "fixed" ? "Revenu" : "Nouveau problème"} sur <b>{a.asset}</b> : {localTitle(a.title, a.title_fr)}.
+        {a.from === "fixed" ? tr("Revenu sur ", "Back on ") : tr("Nouveau problème sur ", "New problem on ")}
+        <b>{a.asset}</b>
+        {tr(" : ", ": ")}
+        {localTitle(a.title, a.title_fr)}.
       </span>
     );
   }
@@ -219,8 +234,11 @@ type StepState = "done" | "cur" | "todo";
 
 /** summaryOf words the first scan's figures for the closing screen. */
 function summaryOf(score: number | null, open: number): string {
-  const sc = score === null ? "" : `Score de sécurité : ${score}/100. `;
-  const pb = open === 0 ? "Aucun problème à corriger pour le moment." : `${open} problème${open > 1 ? "s" : ""} à corriger, du plus urgent au moins urgent.`;
+  const sc = score === null ? "" : tr(`Score de sécurité : ${score}/100. `, `Security score: ${score}/100. `);
+  const pb =
+    open === 0
+      ? tr("Aucun problème à corriger pour le moment.", "Nothing to fix for now.")
+      : tr(`${open} problème${open > 1 ? "s" : ""} à corriger, du plus urgent au moins urgent.`, `${open} problem${open > 1 ? "s" : ""} to fix, most urgent first.`);
   return sc + pb;
 }
 
@@ -273,18 +291,26 @@ function Onboarding({ finished = false, onDone }: { finished?: boolean; onDone?:
   const verified = domains.some((t) => t.verified);
   const state = (done: boolean, before: boolean): StepState => (done ? "done" : before ? "cur" : "todo");
   const steps: { title: string; hint: string; s: StepState }[] = [
-    { title: "Compte créé et protégé", hint: "Mot de passe et double authentification.", s: "done" },
-    { title: "Ajoutez votre domaine", hint: "Celui de votre site ou de vos emails : nous trouvons ses sous-domaines et ses serveurs.", s: state(added, true) },
-    { title: "Prouvez qu’il est à vous", hint: "Un enregistrement TXT à ajouter dans sa zone DNS. Nous n’analysons que ce qui vous appartient.", s: state(verified, added) },
+    { title: tr("Compte créé et protégé", "Account created and protected"), hint: tr("Mot de passe et double authentification.", "Password and two-factor authentication."), s: "done" },
     {
-      title: "Premier scan",
+      title: tr("Ajoutez votre domaine", "Add your domain"),
+      hint: tr("Celui de votre site ou de vos emails : nous trouvons ses sous-domaines et ses serveurs.", "The one of your website or your email: we find its subdomains and servers."),
+      s: state(added, true),
+    },
+    {
+      title: tr("Prouvez qu’il est à vous", "Prove it is yours"),
+      hint: tr("Un enregistrement TXT à ajouter dans sa zone DNS. Nous n’analysons que ce qui vous appartient.", "A TXT record to add to its DNS zone. We only analyse what belongs to you."),
+      s: state(verified, added),
+    },
+    {
+      title: tr("Premier scan", "First scan"),
       hint: finished
-        ? "Terminé. Le résumé vous attend aussi par email."
+        ? tr("Terminé. Le résumé vous attend aussi par email.", "Done. The summary is also waiting in your inbox.")
         : scanning
-          ? "En cours, volontairement léger : cet écran se remplit dès qu’il est terminé, et vous recevez un résumé par email."
+          ? tr("En cours, volontairement léger : cet écran se remplit dès qu’il est terminé, et vous recevez un résumé par email.", "Running, deliberately light: this screen fills in as soon as it is done, and you get a summary by email.")
           : failed
-            ? "Le scan n’a pas abouti. Relancez-le depuis Actifs."
-            : "Il démarre dès que le domaine est vérifié.",
+            ? tr("Le scan n’a pas abouti. Relancez-le depuis Actifs.", "The scan did not complete. Start it again from Assets.")
+            : tr("Il démarre dès que le domaine est vérifié.", "It starts as soon as the domain is verified."),
       s: state(finished, verified),
     },
   ];
@@ -292,8 +318,12 @@ function Onboarding({ finished = false, onDone }: { finished?: boolean; onDone?:
   return (
     <div className="section onboard">
       <div className="rhead">
-        <h2>Premiers pas</h2>
-        <span className="dots big3" role="img" aria-label={`${done} étape${done > 1 ? "s" : ""} faite${done > 1 ? "s" : ""} sur ${steps.length}`}>
+        <h2>{tr("Premiers pas", "Getting started")}</h2>
+        <span
+          className="dots big3"
+          role="img"
+          aria-label={tr(`${done} étape${done > 1 ? "s" : ""} faite${done > 1 ? "s" : ""} sur ${steps.length}`, `${done} of ${steps.length} steps done`)}
+        >
           {steps.map((x) => (
             <i key={x.title} className={x.s === "done" ? "on" : ""} />
           ))}
@@ -319,7 +349,7 @@ function Onboarding({ finished = false, onDone }: { finished?: boolean; onDone?:
           </p>
           <div className="actions">
             <button className="btn" type="button" onClick={onDone}>
-              Voir mes résultats
+              {tr("Voir mes résultats", "See my results")}
             </button>
           </div>
         </>
@@ -331,19 +361,20 @@ function Onboarding({ finished = false, onDone }: { finished?: boolean; onDone?:
             <AddPanel resume />
           </div>
         ) : (
-          <p className="hint">Un administrateur de l’organisation ajoute et vérifie le domaine.</p>
+          <p className="hint">{tr("Un administrateur de l’organisation ajoute et vérifie le domaine.", "An administrator of the organization adds and verifies the domain.")}</p>
         ))}
       {failed && (
         <p className="hint">
           <Link className="link" to={appPath(org.org_id, "actifs")}>
-            Ouvrir Actifs
+            {tr("Ouvrir Actifs", "Open Assets")}
           </Link>
         </p>
       )}
       <p className="hint">
-        {finished ? "Et maintenant" : "Ensuite"} : qui reçoit les alertes, et votre équipe, dans{" "}
+        {finished ? tr("Et maintenant", "Now") : tr("Ensuite", "Next")}
+        {tr(" : qui reçoit les alertes, et votre équipe, dans ", ": who receives the alerts, and your team, in ")}
         <Link className="link" to={appPath(org.org_id, "reglages")}>
-          Réglages
+          {tr("Réglages", "Settings")}
         </Link>
         .
       </p>
@@ -360,16 +391,20 @@ function FreeBand() {
     .filter((s) => s.status === "done" && s.finished_at)
     .map((s) => s.finished_at as string)
     .sort()[0];
-  const when = done ? ` du ${new Date(done).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}` : "";
+  const when = done
+    ? tr(` du ${new Date(done).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}`, ` of ${new Date(done).toLocaleDateString("en-GB", { day: "numeric", month: "long" })}`)
+    : "";
   const trial = data.subscription.trial_available;
   return (
     <div className="rpanel freeband" role="note">
       <p>
-        <b>Offre Gratuit : audit unique{when}.</b> Plus rien n’est revérifié. {trial ? "Activez l’essai de 14 jours" : "Choisissez une offre"} pour un scan chaque
-        semaine et la vérification de vos corrections.
+        <b>{tr(`Offre Gratuit : audit unique${when}.`, `Free plan: single audit${when}.`)}</b>{" "}
+        {tr("Plus rien n’est revérifié. ", "Nothing is checked again. ")}
+        {trial ? tr("Activez l’essai de 14 jours", "Start the 14-day trial") : tr("Choisissez une offre", "Choose a plan")}
+        {tr(" pour un scan chaque semaine et la vérification de vos corrections.", " for a scan every week and every fix verified.")}
       </p>
       <Link className="btn" to={appPath(org.org_id, "offre")}>
-        {trial ? "Essayer 14 jours" : "Voir les offres"}
+        {trial ? tr("Essayer 14 jours", "Try 14 days") : tr("Voir les offres", "See the plans")}
       </Link>
     </div>
   );
@@ -407,12 +442,12 @@ export function AujourdhuiPage() {
   const left = top.filter((g) => !g.fixed).length;
   const head =
     top.length === 0
-      ? "Rien à corriger pour l’instant."
+      ? tr("Rien à corriger pour l’instant.", "Nothing to fix for now.")
       : left === 0
-        ? "Tout est fait pour aujourd’hui."
+        ? tr("Tout est fait pour aujourd’hui.", "All done for today.")
         : left === 1
-          ? "Plus qu’une action pour aujourd’hui."
-          : `${left} actions vous séparent d’un périmètre plus sûr.`;
+          ? tr("Plus qu’une action pour aujourd’hui.", "Just one action left for today.")
+          : tr(`${left} actions vous séparent d’un périmètre plus sûr.`, `${left} actions stand between you and a safer perimeter.`);
   const first = me.name.split(/\s+/)[0];
   const score = data.overview.score;
   // The first scan just finished under the customer's eyes: the card's
@@ -420,8 +455,8 @@ export function AujourdhuiPage() {
   if (!beforeFirstScan && onboard === "shown") {
     return (
       <>
-        <p className="hello">{first ? `Bonjour ${first}` : "Bonjour"}</p>
-        <h1 className="lead">Votre premier scan est terminé.</h1>
+        <p className="hello">{first ? tr(`Bonjour ${first}`, `Hello ${first}`) : tr("Bonjour", "Hello")}</p>
+        <h1 className="lead">{tr("Votre premier scan est terminé.", "Your first scan is done.")}</h1>
         <Onboarding
           finished
           onDone={() => {
@@ -440,17 +475,17 @@ export function AujourdhuiPage() {
     const { scanning, failed } = firstScan(data);
     return (
       <>
-        <p className="hello">{first ? `Bonjour ${first}` : "Bonjour"}</p>
+        <p className="hello">{first ? tr(`Bonjour ${first}`, `Hello ${first}`) : tr("Bonjour", "Hello")}</p>
         <h1 className="lead">
           {!domains.length
-            ? "Bienvenue. Voyons ce que vous exposez sur internet."
+            ? tr("Bienvenue. Voyons ce que vous exposez sur internet.", "Welcome. Let us see what you expose on the internet.")
             : scanning
-              ? "Votre premier scan est lancé."
+              ? tr("Votre premier scan est lancé.", "Your first scan has started.")
               : failed
-                ? "Votre premier scan n’a pas abouti."
+                ? tr("Votre premier scan n’a pas abouti.", "Your first scan did not complete.")
                 : domains.some((t) => t.verified)
-                  ? "Votre domaine est vérifié."
-                  : "Plus qu’une étape avant votre premier scan."}
+                  ? tr("Votre domaine est vérifié.", "Your domain is verified.")
+                  : tr("Plus qu’une étape avant votre premier scan.", "One step left before your first scan.")}
         </h1>
         <Onboarding />
       </>
@@ -462,34 +497,40 @@ export function AujourdhuiPage() {
       {!data.subscription.plan.monitoring && <FreeBand />}
       <div className="today">
         <div>
-          <p className="hello">{first ? `Bonjour ${first}` : "Bonjour"}</p>
+          <p className="hello">{first ? tr(`Bonjour ${first}`, `Hello ${first}`) : tr("Bonjour", "Hello")}</p>
           <h1 className="lead">{head}</h1>
           <ScanLine targets={data.targets.filter((t) => !t.internal)} />
           <div className="section">
             <div className="rhead">
-              <h2>À faire aujourd’hui</h2>
-              <span className="dots big3" id="todo-prog" role="img" aria-label={`${top.length - left} actions faites sur ${top.length}`}>
+              <h2>{tr("À faire aujourd’hui", "To do today")}</h2>
+              <span className="dots big3" id="todo-prog" role="img" aria-label={tr(`${top.length - left} actions faites sur ${top.length}`, `${top.length - left} of ${top.length} actions done`)}>
                 {top.map((g) => (
                   <i key={g.key} className={g.fixed ? "on" : ""} />
                 ))}
               </span>
             </div>
-            <p className="hint">Classé par ce qui vous protège le plus, le plus vite. Cochez quand c’est corrigé : nous vérifions aussitôt.</p>
+            <p className="hint">
+              {tr(
+                "Classé par ce qui vous protège le plus, le plus vite. Cochez quand c’est corrigé : nous vérifions aussitôt.",
+                "Ranked by what protects you most, fastest. Tick when it is fixed: we check at once.",
+              )}
+            </p>
             <ul className="todo">
               {top.map((g) => {
                 const i = g.lead;
                 const v = groupVerdict(g.members, verdicts);
                 return (
                   <li key={g.key} className={g.fixed ? "done" : ""}>
-                    <button className="check" type="button" aria-pressed={g.fixed} aria-label={`Marquer « ${i.title} » comme fait`} onClick={() => void fix(g.members)}>
+                    <button className="check" type="button" aria-pressed={g.fixed} aria-label={tr(`Marquer « ${i.title} » comme fait`, `Mark “${i.title}” as done`)} onClick={() => void fix(g.members)}>
                       <Tick size={20} width={3} />
                     </button>
                     <div>
                       <p className="t">{i.title}</p>
                       <p className="m">
-                        {hostsText(g.hosts)}, environ {i.mins} min ·{" "}
+                        {hostsText(g.hosts)}
+                        {tr(`, environ ${i.mins} min · `, `, about ${i.mins} min · `)}
                         <button className="link" type="button" style={{ minHeight: 0 }} onClick={() => showSheet(<FindingSheet id={i.id} targetId={i.targetId} />)}>
-                          Comment faire
+                          {tr("Comment faire", "How to")}
                         </button>
                       </p>
                       {v && <p className={"verdict v-" + v.state}>{verdictText(v)}</p>}
@@ -506,7 +547,7 @@ export function AujourdhuiPage() {
         </div>
       </div>
       <div className="section">
-        <h2>Depuis votre dernière visite</h2>
+        <h2>{tr("Depuis votre dernière visite", "Since your last visit")}</h2>
         {data.activity.length ? (
           <ul className="feed">
             {data.activity.slice(0, 5).map((a, k) => (
@@ -514,7 +555,7 @@ export function AujourdhuiPage() {
             ))}
           </ul>
         ) : (
-          <p className="hint">Rien de nouveau ces sept derniers jours.</p>
+          <p className="hint">{tr("Rien de nouveau ces sept derniers jours.", "Nothing new in the last seven days.")}</p>
         )}
       </div>
     </>

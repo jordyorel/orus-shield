@@ -5,6 +5,7 @@ import { Tick } from "../icons";
 import { CATS, DOMAIN_RE, RANK, catState, evaluatedCats, worst } from "../model";
 import { useOrg } from "../OrgData";
 import { AssetSheet, SevTag } from "../sheets";
+import { tr } from "../../i18n";
 import { ScanLine } from "../ScanLine";
 import { useUI } from "../ui";
 
@@ -49,11 +50,15 @@ export function AddPanel({ resume = false }: { resume?: boolean }) {
   const next = async () => {
     const v = ad.domain.trim().toLowerCase();
     if (!DOMAIN_RE.test(v)) {
-      setAd({ step: 0, domain: v, err: v ? "Ce nom de domaine n’est pas valide. Exemple : votre-entreprise.cg" : "Saisissez un nom de domaine." });
+      setAd({
+        step: 0,
+        domain: v,
+        err: v ? tr("Ce nom de domaine n’est pas valide. Exemple : votre-entreprise.cg", "This domain name is not valid. Example: your-company.com") : tr("Saisissez un nom de domaine.", "Enter a domain name."),
+      });
       return;
     }
     if (!isAdmin) {
-      setAd({ step: 0, domain: v, err: "Seul un administrateur peut ajouter un domaine." });
+      setAd({ step: 0, domain: v, err: tr("Seul un administrateur peut ajouter un domaine.", "Only an administrator can add a domain.") });
       return;
     }
     setBusy(true);
@@ -64,10 +69,10 @@ export function AddPanel({ resume = false }: { resume?: boolean }) {
     } catch (e) {
       const err =
         e instanceof ApiError && e.status === 409
-          ? "Ce domaine est déjà dans votre espace."
+          ? tr("Ce domaine est déjà dans votre espace.", "This domain is already in your workspace.")
           : e instanceof ApiError && e.code === "plan_limit"
-            ? "Votre offre ne permet pas d’ajouter un autre domaine. Changez d’offre dans Réglages."
-            : "Impossible d’ajouter ce domaine pour le moment.";
+            ? tr("Votre offre ne permet pas d’ajouter un autre domaine. Changez d’offre dans Réglages.", "Your plan does not allow another domain. Change plans in Settings.")
+            : tr("Impossible d’ajouter ce domaine pour le moment.", "This domain cannot be added right now.");
       setAd({ step: 0, domain: v, err });
     } finally {
       setBusy(false);
@@ -93,8 +98,8 @@ export function AddPanel({ resume = false }: { resume?: boolean }) {
     } catch (e) {
       const missing = e instanceof ApiError && e.status === 422;
       const err = missing
-        ? "L’enregistrement n’est pas encore visible. Les changements DNS peuvent prendre quelques minutes."
-        : "Vérification impossible pour le moment.";
+        ? tr("L’enregistrement n’est pas encore visible. Les changements DNS peuvent prendre quelques minutes.", "The record is not visible yet. DNS changes can take a few minutes.")
+        : tr("Vérification impossible pour le moment.", "Verification is not possible right now.");
       setAd({ step: 1, domain: target.domain, err, target, rec });
       setRetries((n) => (missing ? n + 1 : RETRY_MAX + 1));
     }
@@ -110,29 +115,29 @@ export function AddPanel({ resume = false }: { resume?: boolean }) {
   const copy = (v: string) => {
     try {
       navigator.clipboard.writeText(v).then(
-        () => toast("Copié"),
-        () => toast("Copie impossible ici"),
+        () => toast(tr("Copié", "Copied")),
+        () => toast(tr("Copie impossible ici", "Copying is not possible here")),
       );
     } catch {
-      toast("Copie impossible ici");
+      toast(tr("Copie impossible ici", "Copying is not possible here"));
     }
   };
 
   if (ad.step === 0) {
     return (
       <>
-        <h2>Ajouter un domaine</h2>
-        <p className="sub">Vous prouvez qu’il vous appartient, puis un premier scan léger démarre.</p>
+        <h2>{tr("Ajouter un domaine", "Add a domain")}</h2>
+        <p className="sub">{tr("Vous prouvez qu’il vous appartient, puis un premier scan léger démarre.", "You prove it is yours, then a light first scan starts.")}</p>
         <div className="addrow">
           <label className="vh" htmlFor="add-in">
-            Nom de domaine
+            {tr("Nom de domaine", "Domain name")}
           </label>
           <input
             id="add-in"
             type="text"
             inputMode="url"
             autoComplete="off"
-            placeholder="votre-entreprise.cg"
+            placeholder={tr("votre-entreprise.cg", "your-company.com")}
             value={ad.domain}
             onChange={(e) => setAd({ ...ad, domain: e.target.value })}
             onKeyDown={(e) => {
@@ -140,7 +145,7 @@ export function AddPanel({ resume = false }: { resume?: boolean }) {
             }}
           />
           <button className="btn" type="button" disabled={busy} onClick={() => void next()}>
-            Ajouter
+            {tr("Ajouter", "Add")}
           </button>
         </div>
         <p className="err" role="alert">
@@ -148,9 +153,9 @@ export function AddPanel({ resume = false }: { resume?: boolean }) {
         </p>
         {pending && isAdmin && (
           <p className="sub">
-            {pending.domain} attend sa vérification.{" "}
+            {tr(`${pending.domain} attend sa vérification.`, `${pending.domain} is waiting for its verification.`)}{" "}
             <button className="link" type="button" style={{ minHeight: 0 }} onClick={() => void showRecord(pending)}>
-              Reprendre
+              {tr("Reprendre", "Resume")}
             </button>
           </p>
         )}
@@ -160,39 +165,40 @@ export function AddPanel({ resume = false }: { resume?: boolean }) {
   if (ad.step === 1) {
     return (
       <>
-        <h2>Prouvez que {ad.domain} est à vous</h2>
-        <p className="sub">Ajoutez cet enregistrement dans la zone DNS du domaine.</p>
+        <h2>{tr(`Prouvez que ${ad.domain} est à vous`, `Prove that ${ad.domain} is yours`)}</h2>
+        <p className="sub">{tr("Ajoutez cet enregistrement dans la zone DNS du domaine.", "Add this record to the domain's DNS zone.")}</p>
         <div className="record">
           <div>
             <small>Type</small>
             <b>TXT</b>
           </div>
           <div>
-            <small>Nom</small>
+            <small>{tr("Nom", "Name")}</small>
             <b>{ad.rec.record_name}</b>
           </div>
           <div>
-            <small>Valeur</small>
+            <small>{tr("Valeur", "Value")}</small>
             <b>{ad.rec.record_value}</b>
           </div>
         </div>
         <p className="sub">
-          Chez la plupart des hébergeurs, le champ Nom (ou Host) attend seulement <b>{hostPart(ad.rec.record_name, ad.domain)}</b> : ils
-          ajoutent eux-mêmes .{ad.domain}.
+          {tr("Chez la plupart des hébergeurs, le champ Nom (ou Host) attend seulement ", "Most DNS providers expect only ")}
+          <b>{hostPart(ad.rec.record_name, ad.domain)}</b>
+          {tr(` : ils ajoutent eux-mêmes .${ad.domain}.`, ` in the Name (or Host) field: they add .${ad.domain} themselves.`)}
         </p>
         <p className="err" role="alert">
           {ad.err}
         </p>
-        {waiting && <p className="sub">Nous réessayons automatiquement toutes les 30 secondes.</p>}
+        {waiting && <p className="sub">{tr("Nous réessayons automatiquement toutes les 30 secondes.", "We try again automatically every 30 seconds.")}</p>}
         <div className="actions">
           <button className="btn" type="button" onClick={() => void verify()}>
-            Vérifier maintenant
+            {tr("Vérifier maintenant", "Verify now")}
           </button>
           <button className="btn ghost" type="button" onClick={() => copy(ad.rec.record_value)}>
-            Copier la valeur
+            {tr("Copier la valeur", "Copy the value")}
           </button>
           <button className="btn ghost" type="button" onClick={() => setAd({ step: 0, domain: "", err: "" })}>
-            Annuler
+            {tr("Annuler", "Cancel")}
           </button>
         </div>
       </>
@@ -201,8 +207,8 @@ export function AddPanel({ resume = false }: { resume?: boolean }) {
   if (ad.step === 2) {
     return (
       <>
-        <h2>Vérification en cours</h2>
-        <p className="sub">Lecture de la zone DNS de {ad.domain}.</p>
+        <h2>{tr("Vérification en cours", "Verifying")}</h2>
+        <p className="sub">{tr(`Lecture de la zone DNS de ${ad.domain}.`, `Reading the DNS zone of ${ad.domain}.`)}</p>
         <div className="scanbar">
           <b />
         </div>
@@ -214,11 +220,11 @@ export function AddPanel({ resume = false }: { resume?: boolean }) {
       <div className="okmark" aria-hidden="true">
         <Tick size={28} width={3} />
       </div>
-      <h2>{ad.domain} est vérifié</h2>
-      <p className="sub">Le premier scan vient de démarrer.</p>
+      <h2>{tr(`${ad.domain} est vérifié`, `${ad.domain} is verified`)}</h2>
+      <p className="sub">{tr("Le premier scan vient de démarrer.", "The first scan has just started.")}</p>
       <div className="actions">
         <button className="btn ghost" type="button" onClick={() => setAd({ step: 0, domain: "", err: "" })}>
-          Ajouter un autre domaine
+          {tr("Ajouter un autre domaine", "Add another domain")}
         </button>
       </div>
     </>
@@ -243,36 +249,37 @@ export function ActifsPage() {
     <>
       <div className="rtop">
         <h1 className="hello" style={{ margin: 0, fontFamily: "inherit", fontWeight: 400, letterSpacing: 0 }}>
-          Actifs
+          {tr("Actifs", "Assets")}
         </h1>
       </div>
       <p className="pagehead">
-        <b>{assets.length}</b> actifs surveillés<span>{nPb} avec un problème ouvert</span>
+        <b>{assets.length}</b> {tr("actifs surveillés", "monitored assets")}
+        <span>{tr(`${nPb} avec un problème ouvert`, `${nPb} with an open problem`)}</span>
       </p>
-      <div className="meter" role="img" aria-label={`${assets.length} actifs sur ${cap} inclus dans l'offre ${p.name}`}>
+      <div className="meter" role="img" aria-label={tr(`${assets.length} actifs sur ${cap} inclus dans l'offre ${p.name}`, `${assets.length} of ${cap} assets included in the ${p.name} plan`)}>
         <div>
           <b style={{ width: Math.min(100, (assets.length / cap) * 100) + "%" }} />
         </div>
         <span>
-          {assets.length} sur {cap} inclus dans l’offre {p.name}
+          {tr(`${assets.length} sur ${cap} inclus dans l’offre ${p.name}`, `${assets.length} of ${cap} included in the ${p.name} plan`)}
         </span>
       </div>
-      <ul className="domlines" aria-label="Vos domaines">
+      <ul className="domlines" aria-label={tr("Vos domaines", "Your domains")}>
         {data.targets
           .filter((t) => !t.internal)
           .map((t) => (
             <li key={t.id}>
               <b>{t.domain}</b>
-              {t.verified ? <ScanLine targets={[t]} /> : <span className="hint">À vérifier : ajoutez son enregistrement TXT plus bas.</span>}
+              {t.verified ? <ScanLine targets={[t]} /> : <span className="hint">{tr("À vérifier : ajoutez son enregistrement TXT plus bas.", "To verify: add its TXT record below.")}</span>}
             </li>
           ))}
       </ul>
-      <div className="filters" role="group" aria-label="Filtrer les actifs">
+      <div className="filters" role="group" aria-label={tr("Filtrer les actifs", "Filter the assets")}>
         {(
           [
-            ["all", "Tous"],
-            ["pb", "Avec un problème"],
-            ["ok", "Protégés"],
+            ["all", tr("Tous", "All")],
+            ["pb", tr("Avec un problème", "With a problem")],
+            ["ok", tr("Protégés", "Protected")],
           ] as const
         ).map(([k, l]) => (
           <button key={k} className="pill" type="button" aria-pressed={af === k} onClick={() => setAf(k)}>
@@ -288,11 +295,11 @@ export function ActifsPage() {
             <button key={a.n} className="acard" type="button" style={{ animationDelay: (k * 0.04).toFixed(2) + "s" }} onClick={() => showSheet(<AssetSheet n={a.n} />)}>
               <span className="atop">
                 <span className="n">{a.n}</span>
-                <SevTag s={w} label={w === "ok" ? "Protégé" : undefined} />
+                <SevTag s={w} label={w === "ok" ? tr("Protégé", "Protected") : undefined} />
               </span>
               <span className="k">
                 {a.k}
-                {o.length ? `, ${o.length} problème${o.length > 1 ? "s" : ""}` : ""}
+                {o.length ? tr(`, ${o.length} problème${o.length > 1 ? "s" : ""}`, `, ${o.length} problem${o.length > 1 ? "s" : ""}`) : ""}
               </span>
               <span className="strip" aria-hidden="true">
                 {CATS.map(([c]) => (
@@ -308,7 +315,7 @@ export function ActifsPage() {
           );
         })}
       </div>
-      <p className="striphelp">Les cinq cases de chaque carte : Emails, TLS, Ports, Fuites, Menaces.</p>
+      <p className="striphelp">{tr("Les cinq cases de chaque carte : Emails, TLS, Ports, Fuites, Menaces.", "The five boxes of each card: Email, TLS, Ports, Leaks, Threats.")}</p>
       <div className="rpanel addpanel">
         <AddPanel />
       </div>
@@ -319,10 +326,10 @@ export function ActifsPage() {
 
 /** online: an agent seen in the last few minutes (it polls every 30 s). */
 function agentState(a: Agent, now: Date): [string, "ok" | "high" | "med" | "crit"] {
-  if (a.revoked_at) return ["Révoqué", "crit"];
-  if (!a.enrolled_at) return ["En attente d’installation", "med"];
-  if (a.last_seen_at && now.getTime() - new Date(a.last_seen_at).getTime() < 5 * 60_000) return ["En ligne", "ok"];
-  return ["Hors ligne", "high"];
+  if (a.revoked_at) return [tr("Révoqué", "Revoked"), "crit"];
+  if (!a.enrolled_at) return [tr("En attente d’installation", "Waiting for installation"), "med"];
+  if (a.last_seen_at && now.getTime() - new Date(a.last_seen_at).getTime() < 5 * 60_000) return [tr("En ligne", "Online"), "ok"];
+  return [tr("Hors ligne", "Offline"), "high"];
 }
 
 /** InternalNetworks manages the agents of the organization (step J). */
@@ -364,10 +371,13 @@ function InternalNetworks() {
     } catch (e) {
       setErr(
         e instanceof ApiError && e.code === "plan_limit"
-          ? "Les réseaux internes sont inclus dans l’offre sur devis."
+          ? tr("Les réseaux internes sont inclus dans l’offre sur devis.", "Internal networks are included in the custom plan.")
           : e instanceof ApiError && e.status === 400
-            ? "Vérifiez les plages : des réseaux privés (10.x, 172.16-31.x, 192.168.x), au plus un /20, par exemple 192.168.1.0/24."
-            : "Agent non créé, réessayez.",
+            ? tr(
+                "Vérifiez les plages : des réseaux privés (10.x, 172.16-31.x, 192.168.x), au plus un /20, par exemple 192.168.1.0/24.",
+                "Check the ranges: private networks (10.x, 172.16-31.x, 192.168.x), at most a /20, for example 192.168.1.0/24.",
+              )
+            : tr("Agent non créé, réessayez.", "Agent not created, try again."),
       );
     }
   };
@@ -377,26 +387,26 @@ function InternalNetworks() {
       setCode({ name: a.name, code: r.enrolment_code });
       void load();
     } catch {
-      toast("Code impossible pour le moment");
+      toast(tr("Code impossible pour le moment", "No code can be issued right now"));
     }
   };
   const revoke = async (a: Agent) => {
-    if (!window.confirm(`Révoquer l’agent ${a.name} ? Il ne pourra plus rien scanner ni envoyer.`)) return;
+    if (!window.confirm(tr(`Révoquer l’agent ${a.name} ? Il ne pourra plus rien scanner ni envoyer.`, `Revoke the agent ${a.name}? It will no longer scan or send anything.`))) return;
     try {
       await api.revokeAgent(org.org_id, a.id);
-      toast("Agent révoqué");
+      toast(tr("Agent révoqué", "Agent revoked"));
       void load();
     } catch {
-      toast("Révocation impossible pour le moment");
+      toast(tr("Révocation impossible pour le moment", "Revocation is not possible right now"));
     }
   };
   const scan = async (a: Agent) => {
     try {
       await api.startScan(org.org_id, a.target_id, ["ports"]);
-      toast("Scan demandé : l’agent le lancera à son prochain passage (30 secondes au plus)");
+      toast(tr("Scan demandé : l’agent le lancera à son prochain passage (30 secondes au plus)", "Scan requested: the agent starts it at its next check-in (30 seconds at most)"));
       void reload();
     } catch {
-      toast("Scan impossible pour le moment");
+      toast(tr("Scan impossible pour le moment", "The scan is not possible right now"));
     }
   };
   const now = new Date();
@@ -406,10 +416,15 @@ function InternalNetworks() {
   return (
     <div className="rpanel addpanel">
       <h2>
-        Réseaux internes
-        {!included && <span className="soon">Offre sur devis</span>}
+        {tr("Réseaux internes", "Internal networks")}
+        {!included && <span className="soon">{tr("Offre sur devis", "Custom plan")}</span>}
       </h2>
-      <p className="sub">Un petit agent, installé sur une machine de votre réseau, analyse vos adresses privées. Il ne fait que des appels sortants : aucun port à ouvrir chez vous.</p>
+      <p className="sub">
+        {tr(
+          "Un petit agent, installé sur une machine de votre réseau, analyse vos adresses privées. Il ne fait que des appels sortants : aucun port à ouvrir chez vous.",
+          "A small agent, installed on a machine of your network, analyses your private addresses. It only makes outgoing calls: no port to open on your side.",
+        )}
+      </p>
       {agents.length > 0 && (
         <ul className="sess">
           {agents.map((a) => {
@@ -431,21 +446,21 @@ function InternalNetworks() {
                     </span>
                     {a.hostname ? ` · ${a.hostname}` : ""}
                     {a.version ? ` · version ${a.version}` : ""}
-                    {` · ${open} problème${open > 1 ? "s" : ""} ouvert${open > 1 ? "s" : ""}`}
+                    {tr(` · ${open} problème${open > 1 ? "s" : ""} ouvert${open > 1 ? "s" : ""}`, ` · ${open} open problem${open > 1 ? "s" : ""}`)}
                   </p>
                 </div>
                 {isAdmin && !a.revoked_at ? (
                   <span style={{ display: "flex", gap: 12 }}>
                     {a.enrolled_at && (
                       <button className="link" type="button" onClick={() => void scan(a)}>
-                        Scanner
+                        {tr("Scanner", "Scan")}
                       </button>
                     )}
                     <button className="link" type="button" onClick={() => void newCode(a)}>
-                      Nouveau code
+                      {tr("Nouveau code", "New code")}
                     </button>
                     <button className="link" type="button" onClick={() => void revoke(a)}>
-                      Révoquer
+                      {tr("Révoquer", "Revoke")}
                     </button>
                   </span>
                 ) : (
@@ -459,15 +474,15 @@ function InternalNetworks() {
       {code && (
         <div className="record" style={{ marginTop: 14 }}>
           <div>
-            <small>Code d’installation de {code.name}, valable 24 heures, affiché une seule fois</small>
+            <small>{tr(`Code d’installation de ${code.name}, valable 24 heures, affiché une seule fois`, `Installation code for ${code.name}, valid 24 hours, shown only once`)}</small>
             <b>{code.code}</b>
           </div>
           <div>
-            <small>Linux (en root)</small>
+            <small>{tr("Linux (en root)", "Linux (as root)")}</small>
             <b>orus-agent enroll -api {origin} -code {code.code} &amp;&amp; systemctl enable --now orus-agent</b>
           </div>
           <div>
-            <small>Windows (PowerShell en administrateur)</small>
+            <small>{tr("Windows (PowerShell en administrateur)", "Windows (PowerShell as administrator)")}</small>
             <b>.\orus-agent.exe enroll -api {origin} -code {code.code}</b>
           </div>
         </div>
@@ -475,18 +490,18 @@ function InternalNetworks() {
       {isAdmin && included && !adding && (
         <div className="actions">
           <button className="btn ghost" type="button" onClick={() => setAdding(true)}>
-            Ajouter un réseau interne
+            {tr("Ajouter un réseau interne", "Add an internal network")}
           </button>
         </div>
       )}
       {adding && (
         <div className="pwbox">
           <label className="md" htmlFor="agent-name">
-            Nom (le site ou le bureau)
+            {tr("Nom (le site ou le bureau)", "Name (the site or office)")}
           </label>
-          <input id="agent-name" style={field} value={name} placeholder="Siège, Brazzaville" onChange={(e) => setName(e.target.value)} />
+          <input id="agent-name" style={field} value={name} placeholder={tr("Siège, Brazzaville", "Head office, Nairobi")} onChange={(e) => setName(e.target.value)} />
           <label className="md" htmlFor="agent-ranges">
-            Plages d’adresses privées, séparées par des espaces
+            {tr("Plages d’adresses privées, séparées par des espaces", "Private address ranges, separated by spaces")}
           </label>
           <input id="agent-ranges" style={field} value={ranges} placeholder="192.168.1.0/24 10.0.0.0/24" onChange={(e) => setRanges(e.target.value)} />
           <p className="err" role="alert">
@@ -494,10 +509,10 @@ function InternalNetworks() {
           </p>
           <div className="actions" style={{ marginTop: 0 }}>
             <button className="btn" type="button" onClick={() => void create()}>
-              Créer et obtenir le code
+              {tr("Créer et obtenir le code", "Create and get the code")}
             </button>
             <button className="btn ghost" type="button" onClick={() => setAdding(false)}>
-              Annuler
+              {tr("Annuler", "Cancel")}
             </button>
           </div>
         </div>

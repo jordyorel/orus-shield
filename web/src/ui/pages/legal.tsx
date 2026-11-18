@@ -2,13 +2,22 @@
 // data processing agreement (traitement-des-donnees). Drafts written from
 // what the platform really does; what is not decided yet stays in
 // [brackets]. They must be reviewed by a lawyer before the launch.
+//
+// Each page is written in French and in English, as whole texts side by
+// side rather than sentence by sentence: legal wording reads as a whole.
+// The French text prevails; the English one says so.
 
 import type { ReactNode } from "react";
+import { tr, useLang } from "../../i18n";
 import { Link } from "../../router";
 import { useBodyClass } from "../ui";
 import { PubFoot, PubHead } from "./public";
 
-const VERSION = "Version de travail du 12 novembre 2026, à faire valider par un juriste avant toute mise en service.";
+const version = () =>
+  tr(
+    "Version de travail du 12 novembre 2026, à faire valider par un juriste avant toute mise en service.",
+    "Working draft of 12 November 2026, to be reviewed by a lawyer before the service opens. This English version is a translation: in case of difference, the French text prevails.",
+  );
 
 function LegalPage({ title, intro, children }: { title: string; intro: string; children: ReactNode }) {
   useBodyClass(["public"]);
@@ -20,7 +29,7 @@ function LegalPage({ title, intro, children }: { title: string; intro: string; c
           <h1>{title}</h1>
           <p className="herosub">{intro}</p>
           <p className="sub" style={{ marginTop: 12 }}>
-            {VERSION}
+            {version()}
           </p>
         </section>
         <div className="faq" style={{ maxWidth: 760 }}>
@@ -41,7 +50,7 @@ function Article({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-export function ConditionsPage() {
+function ConditionsFR() {
   return (
     <LegalPage
       title="Conditions d’utilisation"
@@ -125,7 +134,7 @@ export function ConditionsPage() {
   );
 }
 
-export function ConfidentialitePage() {
+function ConfidentialiteFR() {
   return (
     <LegalPage title="Politique de confidentialité" intro="Quelles données Orus Shield traite, pourquoi, combien de temps, et vos droits.">
       <Article title="1. Responsable du traitement">
@@ -180,7 +189,7 @@ export function ConfidentialitePage() {
       </Article>
       <Article title="6. Cookies et stockage">
         <p>
-          Un seul cookie : celui de votre session, indispensable pour rester connecté. Votre navigateur garde aussi votre choix de thème (clair ou sombre).
+          Un seul cookie : celui de votre session, indispensable pour rester connecté. Votre navigateur garde aussi votre choix de thème (clair ou sombre) et de langue.
           Pas de cookie publicitaire ni de mesure d’audience ; les polices sont servies par nos serveurs, sans appel à un service tiers.
         </p>
       </Article>
@@ -200,7 +209,7 @@ export function ConfidentialitePage() {
   );
 }
 
-export function TraitementPage() {
+function TraitementFR() {
   return (
     <LegalPage
       title="Accord de traitement des données"
@@ -236,6 +245,209 @@ export function TraitementPage() {
       </Article>
       <Article title="5. Audits">
         <p>[Modalités d’audit et de documentation à préciser.]</p>
+      </Article>
+    </LegalPage>
+  );
+}
+
+export function ConditionsPage() {
+  return useLang().lang === "en" ? <ConditionsEN /> : <ConditionsFR />;
+}
+
+export function ConfidentialitePage() {
+  return useLang().lang === "en" ? <ConfidentialiteEN /> : <ConfidentialiteFR />;
+}
+
+export function TraitementPage() {
+  return useLang().lang === "en" ? <TraitementEN /> : <TraitementFR />;
+}
+
+function ConditionsEN() {
+  return (
+    <LegalPage title="Terms of use" intro="The rules for using Orus Shield, the service that monitors the security of what your business exposes on the internet.">
+      <Article title="1. Who provides the service">
+        <p>
+          Orus Shield is published by [company name], [legal form] with a share capital of [amount], registered under number [number] with [registry], whose
+          registered office is at [address]. Contact: [contact email address].
+        </p>
+      </Article>
+      <Article title="2. What the service does">
+        <p>
+          Orus Shield discovers the domain names, subdomains, servers and services your business exposes on the internet, checks them, and tells you the
+          problems found, how serious they are and how to fix them. Depending on your plan, it performs:
+        </p>
+        <ul>
+          <li>passive checks, based on public information (DNS, certificates, website responses);</li>
+          <li>
+            active checks, which send requests to your servers: searching for open ports and services, known vulnerabilities and, with the deep profile,
+            application tests of your websites and APIs;
+          </li>
+          <li>authenticated scans, if you provide a test account;</li>
+          <li>scans of your internal networks, if you install an agent.</li>
+        </ul>
+        <p>The service is a security aid. It does not guarantee the absence of flaws and does not replace your business’s other security measures.</p>
+      </Article>
+      <Article title="3. You only test what belongs to you">
+        <p>
+          You may only have domains, servers, applications and networks scanned that you own or are authorized to have tested. Before any active check,
+          Orus Shield asks you to prove that the domain is yours (a DNS record) and checks that every server tested really belongs to that domain. You remain
+          responsible for holding the necessary authorizations, in particular from your hosting provider if its contract requires it.
+        </p>
+        <p>
+          The deep profile and authenticated scans require your explicit consent. Tests can slow down an old or fragile server: where possible, use a test
+          environment and test accounts, never administrator accounts.
+        </p>
+      </Article>
+      <Article title="4. Your account">
+        <p>
+          You are responsible for access to your workspace: choose a strong password, turn on two-factor authentication (mandatory for administrators) and
+          remove access for people who leave your business. Every scan is recorded in a log: who started it, on what, and when.
+        </p>
+      </Article>
+      <Article title="5. Plans, trial and payment">
+        <p>
+          Plans and their limits are described on the <Link to="/tarifs">Pricing</Link> page. The Free plan is a single audit of one domain: one scan, whose
+          results remain available; later scans, including the verification of fixes, require a paid plan. The Essential and Pro plans start with a 14-day
+          free trial, once per organization: a payment method is requested at the start of the trial, and the first charge takes place at its end, unless
+          cancelled before. Paid subscriptions are sold and collected by Paddle (Paddle.com Market Limited), our authorized reseller: the order, payment by
+          card or PayPal, taxes and invoices are handled by Paddle, under its own terms. Orus Shield never sees or keeps your card number. The subscription
+          has no commitment: it ends at the end of the paid period; you manage it from the Paddle portal (Settings, Subscription). [Refund terms to be
+          specified.]
+        </p>
+      </Article>
+      <Article title="6. Availability and liability">
+        <p>
+          We make our best efforts to keep the service available and its results accurate, without being able to guarantee this at all times. [Possible
+          availability commitment, limitation of liability and cap to be specified.]
+        </p>
+      </Article>
+      <Article title="7. Data">
+        <p>
+          The processing of your data is described in the <Link to="/confidentialite">privacy policy</Link> and, for the data of your systems we process on
+          your behalf, in the <Link to="/traitement-des-donnees">data processing agreement</Link>.
+        </p>
+      </Article>
+      <Article title="8. End of the contract">
+        <p>
+          You can stop at any time. We may suspend an account that uses the service to test systems without authorization. At the end of the contract, your
+          data is deleted within the periods stated in the privacy policy. [Export terms to be specified.]
+        </p>
+      </Article>
+      <Article title="9. Governing law">
+        <p>[Governing law and competent courts to be specified according to the company’s country.]</p>
+      </Article>
+    </LegalPage>
+  );
+}
+
+function ConfidentialiteEN() {
+  return (
+    <LegalPage title="Privacy policy" intro="What data Orus Shield processes, why, for how long, and your rights.">
+      <Article title="1. Data controller">
+        <p>
+          [Company name], [address], is the controller of your account data. For the data of your systems we scan on your behalf, your business is the
+          controller and we act as processor (see the <Link to="/traitement-des-donnees">data processing agreement</Link>). Contact: [email address of the
+          data protection officer or data contact].
+        </p>
+      </Article>
+      <Article title="2. The data we process">
+        <ul>
+          <li>Account: email address, name if you provide it, role, organization.</li>
+          <li>Account security: hashed password (never in clear text), encrypted two-factor secret, hashed recovery codes.</li>
+          <li>Sign-ins: sessions, IP address, browser, log of sign-ins and security actions.</li>
+          <li>Audit log: who started which scan, on which domain, and when; changes to settings.</li>
+          <li>
+            Scan results: domain names, subdomains, IP addresses, ports, services, detected technologies and versions, certificates, problems found and their
+            technical evidence.
+          </li>
+          <li>Test accounts you provide: encrypted with a dedicated key, never shown again, used only during scans.</li>
+          <li>Payment: handled by Paddle, our reseller; we receive the state of your subscription and a customer identifier, never your card number.</li>
+        </ul>
+      </Article>
+      <Article title="3. Why">
+        <ul>
+          <li>To provide the service you asked for (performance of the contract).</li>
+          <li>To protect accounts and the platform, and keep a record of scans (legitimate interest, security obligations).</li>
+          <li>To send you the service’s emails: alerts, invitations, password resets.</li>
+          <li>To invoice (legal obligations).</li>
+        </ul>
+        <p>We do not sell your data and do not use it for advertising.</p>
+      </Article>
+      <Article title="4. Who receives it">
+        <ul>
+          <li>[Hosting provider], which hosts the platform, [country].</li>
+          <li>[Email relay], which delivers the service’s emails.</li>
+          <li>Paddle (Paddle.com Market Limited), reseller of the subscriptions: order, payment, taxes and invoices.</li>
+          <li>
+            crt.sh, the public certificate log service: to discover your subdomains, the names of your domains are searched there. No other data is sent to
+            it.
+          </li>
+        </ul>
+        <p>[Transfers outside the country or the European Union and safeguards to be specified.]</p>
+      </Article>
+      <Article title="5. How long">
+        <ul>
+          <li>Account and results: as long as your subscription is active, then [period] after it ends.</li>
+          <li>Audit log and sign-in log: [period].</li>
+          <li>Test accounts: until you delete them, or with the domain concerned.</li>
+          <li>Invoices: the period required by law, [period].</li>
+        </ul>
+      </Article>
+      <Article title="6. Cookies and storage">
+        <p>
+          A single cookie: your session cookie, needed to stay signed in. Your browser also keeps your choice of theme (light or dark) and of language. No
+          advertising cookie and no audience measurement; fonts are served by our servers, without calling a third-party service.
+        </p>
+      </Article>
+      <Article title="7. Security">
+        <p>
+          Isolation of each organization’s data at the database level, hashed passwords (argon2id), encrypted secrets (AES-256-GCM), two-factor
+          authentication, audit log, scans subject to proof of ownership, to your exclusions and to a rate limit.
+        </p>
+      </Article>
+      <Article title="8. Your rights">
+        <p>
+          You can access your data, correct it, delete it, receive it in a readable format, and object to certain processing, by writing to [email address].
+          You can also contact [competent data protection authority].
+        </p>
+      </Article>
+    </LegalPage>
+  );
+}
+
+function TraitementEN() {
+  return (
+    <LegalPage title="Data processing agreement" intro="What we do, as processor, with the data of your systems we scan on your behalf.">
+      <Article title="1. Purpose">
+        <p>
+          Your business (the customer) is the controller of the data of its systems. [Company name] (Orus Shield) processes it on the customer’s behalf, as
+          processor, for the sole purpose of providing the service described in the <Link to="/conditions">terms of use</Link>.
+        </p>
+      </Article>
+      <Article title="2. Data and duration">
+        <p>
+          Technical data of your domains, servers, applications, APIs and internal networks, evidence of the problems found (which may contain extracts of
+          your systems’ responses), test accounts provided. Duration: that of the contract, then [period] before deletion.
+        </p>
+      </Article>
+      <Article title="3. Our commitments">
+        <ul>
+          <li>Process this data only on your instructions, that is, to run the scans you configure.</li>
+          <li>Limit access to the people who need it, bound by confidentiality.</li>
+          <li>Apply the security measures described in the privacy policy.</li>
+          <li>Inform you of any data breach concerning you within [period] hours of becoming aware of it.</li>
+          <li>Help you answer requests from data subjects and audits, within reason.</li>
+          <li>Delete or return the data to you at the end of the contract, as you choose.</li>
+        </ul>
+      </Article>
+      <Article title="4. Sub-processors">
+        <p>
+          [Hosting provider] (hosting), [email relay] (service emails). We inform you before adding a new one; you may object. [List and procedure to be
+          specified.]
+        </p>
+      </Article>
+      <Article title="5. Audits">
+        <p>[Audit and documentation terms to be specified.]</p>
       </Article>
     </LegalPage>
   );

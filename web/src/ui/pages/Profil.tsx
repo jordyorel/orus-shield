@@ -2,32 +2,59 @@ import { useEffect, useState } from "react";
 import { api, ApiError } from "../../api/client";
 import type { AuthActivity, DeviceSession } from "../../api/types";
 import { useAuth } from "../../auth";
+import { locale, tr, useLang, type Lang } from "../../i18n";
+import { useChooseLang } from "../LangSwitch";
 import { Link, navigate } from "../../router";
 import { Device, Soon } from "../icons";
 import { device, feedDay, initials, pwScore, sinceText, whenActive } from "../model";
 import { useOrg } from "../OrgData";
 import { useUI } from "../ui";
 
-const ACTIONS: Record<string, [string, string]> = {
-  "login.ok": ["f-ok", "Connexion"],
-  "login.failed": ["f-crit", "Échec de connexion"],
-  logout: ["", "Déconnexion"],
-  "password.set": ["", "Mot de passe modifié"],
-  password_reset: ["", "Mot de passe réinitialisé"],
-  "mfa.enabled": ["f-ok", "Double authentification activée"],
-  "mfa.disabled": ["f-crit", "Double authentification désactivée"],
-  "mfa.reset": ["f-crit", "Double authentification réinitialisée"],
-  "session.ended": ["", "Appareil déconnecté"],
-  "profile.name_changed": ["", "Nom modifié"],
-  "signup.completed": ["f-ok", "Compte créé"],
-};
+/** actionLabel: the CSS class and the label of an account event. */
+function actionLabel(action: string): [string, string] {
+  switch (action) {
+    case "login.ok":
+      return ["f-ok", tr("Connexion", "Sign-in")];
+    case "login.failed":
+      return ["f-crit", tr("Échec de connexion", "Failed sign-in")];
+    case "logout":
+      return ["", tr("Déconnexion", "Sign-out")];
+    case "password.set":
+      return ["", tr("Mot de passe modifié", "Password changed")];
+    case "password_reset":
+      return ["", tr("Mot de passe réinitialisé", "Password reset")];
+    case "mfa.enabled":
+      return ["f-ok", tr("Double authentification activée", "Two-factor authentication turned on")];
+    case "mfa.disabled":
+      return ["f-crit", tr("Double authentification désactivée", "Two-factor authentication turned off")];
+    case "mfa.reset":
+      return ["f-crit", tr("Double authentification réinitialisée", "Two-factor authentication reset")];
+    case "session.ended":
+      return ["", tr("Appareil déconnecté", "Device signed out")];
+    case "profile.name_changed":
+      return ["", tr("Nom modifié", "Name changed")];
+    case "signup.completed":
+      return ["f-ok", tr("Compte créé", "Account created")];
+  }
+  return ["", action];
+}
 
-const PW_HINTS = ["Trop court.", "Faible.", "Moyen : ajoutez des symboles ou allongez-le.", "Bon.", "Très solide."];
+function pwHint(score: number): string {
+  return [
+    tr("Trop court.", "Too short."),
+    tr("Faible.", "Weak."),
+    tr("Moyen : ajoutez des symboles ou allongez-le.", "Fair: add symbols or make it longer."),
+    tr("Bon.", "Good."),
+    tr("Très solide.", "Very strong."),
+  ][score] ?? "";
+}
 
 export function ProfilPage() {
   const { me, org } = useOrg();
   const { refresh, signOut } = useAuth();
   const { toast } = useUI();
+  const { lang } = useLang();
+  const choose = useChooseLang();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(me.name);
   const [nameErr, setNameErr] = useState("");
@@ -38,7 +65,6 @@ export function ProfilPage() {
   const [sessions, setSessions] = useState<DeviceSession[]>([]);
   const [gone, setGone] = useState<string | null>(null);
   const [activity, setActivity] = useState<AuthActivity[]>([]);
-  const [lang, setLang] = useState<"fr" | "en">("fr");
 
   useEffect(() => {
     api.sessions().then((r) => setSessions(r.items), () => setSessions([]));
@@ -49,21 +75,21 @@ export function ProfilPage() {
   const saveName = async () => {
     const v = name.trim();
     if (v.length < 2) {
-      setNameErr("Saisissez votre nom.");
+      setNameErr(tr("Saisissez votre nom.", "Enter your name."));
       return;
     }
     try {
       await api.updateMe(v);
       await refresh();
       setEditing(false);
-      toast("Nom enregistré");
+      toast(tr("Nom enregistré", "Name saved"));
     } catch {
-      setNameErr("Nom non enregistré, réessayez.");
+      setNameErr(tr("Nom non enregistré, réessayez.", "Name not saved, try again."));
     }
   };
   const savePw = async () => {
     if (pwScore(pw) < 3 || pw.length < 12) {
-      setPwErr("Ce mot de passe est trop faible. Allongez-le ou ajoutez des chiffres et des symboles.");
+      setPwErr(tr("Ce mot de passe est trop faible. Allongez-le ou ajoutez des chiffres et des symboles.", "This password is too weak. Make it longer or add numbers and symbols."));
       return;
     }
     try {
@@ -71,10 +97,14 @@ export function ProfilPage() {
       setPwOpen(false);
       setCur("");
       setPw("");
-      toast("Mot de passe mis à jour");
+      toast(tr("Mot de passe mis à jour", "Password updated"));
       void refresh();
     } catch (e) {
-      setPwErr(e instanceof ApiError && (e.status === 403 || e.status === 401) ? "Mot de passe actuel incorrect." : "Mot de passe non modifié, réessayez.");
+      setPwErr(
+        e instanceof ApiError && (e.status === 403 || e.status === 401)
+          ? tr("Mot de passe actuel incorrect.", "Incorrect current password.")
+          : tr("Mot de passe non modifié, réessayez.", "Password not changed, try again."),
+      );
     }
   };
   const revoke = (id: string) => {
@@ -82,13 +112,23 @@ export function ProfilPage() {
     api.endSession(id).then(
       () => {
         setTimeout(() => setSessions((s) => s.filter((x) => x.id !== id)), 380);
-        toast("Appareil déconnecté");
+        toast(tr("Appareil déconnecté", "Device signed out"));
       },
       () => {
         setGone(null);
-        toast("Impossible de déconnecter cet appareil");
+        toast(tr("Impossible de déconnecter cet appareil", "This device cannot be signed out"));
       },
     );
+  };
+  // The language is kept on the account, so every device and the emails
+  // follow it; the whole interface then switches.
+  const chooseLang = async (l: Lang) => {
+    if (l === lang) return;
+    try {
+      await choose(l);
+    } catch {
+      toast(tr("Langue non enregistrée, réessayez", "Language not saved, try again"));
+    }
   };
   const logout = async () => {
     await signOut();
@@ -100,7 +140,7 @@ export function ProfilPage() {
     <>
       <div className="rtop">
         <h1 className="hello" style={{ margin: 0, fontFamily: "inherit", fontWeight: 400, letterSpacing: 0 }}>
-          Mon profil
+          {tr("Mon profil", "My profile")}
         </h1>
       </div>
       <div className="idcard">
@@ -112,11 +152,11 @@ export function ProfilPage() {
             <>
               <div className="addrow" style={{ margin: 0 }}>
                 <label className="vh" htmlFor="name-in">
-                  Nom
+                  {tr("Nom", "Name")}
                 </label>
                 <input id="name-in" type="text" value={name} autoComplete="name" autoFocus onChange={(e) => setName(e.target.value)} />
                 <button className="btn" type="button" onClick={() => void saveName()}>
-                  Enregistrer
+                  {tr("Enregistrer", "Save")}
                 </button>
               </div>
               <p className="err" id="name-err" role="alert">
@@ -125,9 +165,9 @@ export function ProfilPage() {
             </>
           ) : (
             <p className="idname">
-              {me.name || "Votre nom"}
+              {me.name || tr("Votre nom", "Your name")}
               <button className="link" type="button" style={{ minHeight: 0, fontSize: 14, marginLeft: 10 }} onClick={() => setEditing(true)}>
-                Modifier
+                {tr("Modifier", "Edit")}
               </button>
             </p>
           )}
@@ -135,39 +175,43 @@ export function ProfilPage() {
             {me.email}
           </p>
           <p className="idrole">
-            <span>{org.role === "admin" ? "Administrateur" : "Lecteur"}</span>
+            <span>{org.role === "admin" ? tr("Administrateur", "Administrator") : tr("Lecteur", "Viewer")}</span>
             <span>{org.org_name}</span>
           </p>
         </div>
       </div>
 
       <div className="section">
-        <h2>Sécurité du compte</h2>
+        <h2>{tr("Sécurité du compte", "Account security")}</h2>
         <div className="rpanel" style={{ marginTop: 12 }}>
           <div className="set" style={{ borderTop: 0, paddingTop: 0 }}>
             <div>
-              <p className="mt">Double authentification</p>
-              <p className="md">{me.mfa_enabled ? "Activée avec une application. Obligatoire pour les administrateurs." : "Pas encore activée. Obligatoire pour les administrateurs."}</p>
+              <p className="mt">{tr("Double authentification", "Two-factor authentication")}</p>
+              <p className="md">
+                {me.mfa_enabled
+                  ? tr("Activée avec une application. Obligatoire pour les administrateurs.", "On, with an app. Required for administrators.")
+                  : tr("Pas encore activée. Obligatoire pour les administrateurs.", "Not on yet. Required for administrators.")}
+              </p>
             </div>
             {me.mfa_enabled ? (
               <span className="sev s-ok">
                 <i />
-                Active
+                {tr("Active", "On")}
               </span>
             ) : (
               <Link className="link" to="/mfa/setup">
-                Activer
+                {tr("Activer", "Turn on")}
               </Link>
             )}
           </div>
           {me.mfa_enabled && (
             <div className="set">
               <div>
-                <p className="mt">Codes de secours</p>
-                <p className="md">{me.recovery_codes_left} codes restants sur 10.</p>
+                <p className="mt">{tr("Codes de secours", "Recovery codes")}</p>
+                <p className="md">{tr(`${me.recovery_codes_left} codes restants sur 10.`, `${me.recovery_codes_left} of 10 codes left.`)}</p>
               </div>
-              <button className="link" type="button" aria-disabled="true" onClick={() => toast("Regénérer les codes : bientôt disponible")}>
-                Regénérer
+              <button className="link" type="button" aria-disabled="true" onClick={() => toast(tr("Regénérer les codes : bientôt disponible", "Regenerating codes: coming soon"))}>
+                {tr("Regénérer", "Regenerate")}
                 <Soon />
               </button>
             </div>
@@ -175,21 +219,25 @@ export function ProfilPage() {
           <div className="set" style={{ display: "block" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
               <div>
-                <p className="mt">Mot de passe</p>
-                <p className="md">{me.password_changed_at ? `Modifié ${sinceText(me.password_changed_at, now)}.` : "Jamais modifié."}</p>
+                <p className="mt">{tr("Mot de passe", "Password")}</p>
+                <p className="md">
+                  {me.password_changed_at
+                    ? tr(`Modifié ${sinceText(me.password_changed_at, now)}.`, `Changed ${sinceText(me.password_changed_at, now)}.`)
+                    : tr("Jamais modifié.", "Never changed.")}
+                </p>
               </div>
               <button className="link" type="button" onClick={() => setPwOpen(!pwOpen)}>
-                {pwOpen ? "Annuler" : "Changer"}
+                {pwOpen ? tr("Annuler", "Cancel") : tr("Changer", "Change")}
               </button>
             </div>
             {pwOpen && (
               <div className="pwbox">
                 <label htmlFor="pw-cur" className="md">
-                  Mot de passe actuel
+                  {tr("Mot de passe actuel", "Current password")}
                 </label>
                 <input id="pw-cur" type="password" autoComplete="current-password" value={cur} onChange={(e) => setCur(e.target.value)} />
                 <label htmlFor="pw" className="md">
-                  Nouveau mot de passe
+                  {tr("Nouveau mot de passe", "New password")}
                 </label>
                 <input
                   id="pw"
@@ -208,13 +256,13 @@ export function ProfilPage() {
                   <i />
                 </div>
                 <p className="md" id="pwhint" aria-live="polite">
-                  {pw ? PW_HINTS[score] : "12 caractères au moins, avec des chiffres et des symboles."}
+                  {pw ? pwHint(score) : tr("12 caractères au moins, avec des chiffres et des symboles.", "At least 12 characters, with numbers and symbols.")}
                 </p>
                 <p className="err" id="pw-err" role="alert">
                   {pwErr}
                 </p>
                 <button className="btn" type="button" onClick={() => void savePw()}>
-                  Mettre à jour
+                  {tr("Mettre à jour", "Update")}
                 </button>
               </div>
             )}
@@ -223,7 +271,7 @@ export function ProfilPage() {
       </div>
 
       <div className="section">
-        <h2>Appareils connectés</h2>
+        <h2>{tr("Appareils connectés", "Signed-in devices")}</h2>
         <ul className="sess">
           {sessions.map((s) => (
             <li key={s.id} className={gone === s.id ? "gone" : ""}>
@@ -231,17 +279,21 @@ export function ProfilPage() {
                 <Device />
               </span>
               <div>
-                <p className="mt">{s.current ? `Cet appareil, ${device(s.user_agent).split(", ")[1] ?? device(s.user_agent)}` : device(s.user_agent)}</p>
-                <p className="md">{s.current ? "Session actuelle" : whenActive(s.last_seen_at, now)}</p>
+                <p className="mt">
+                  {s.current
+                    ? tr(`Cet appareil, ${device(s.user_agent).split(", ")[1] ?? device(s.user_agent)}`, `This device, ${device(s.user_agent).split(", ")[1] ?? device(s.user_agent)}`)
+                    : device(s.user_agent)}
+                </p>
+                <p className="md">{s.current ? tr("Session actuelle", "Current session") : whenActive(s.last_seen_at, now)}</p>
               </div>
               {s.current ? (
                 <span className="sev s-ok">
                   <i />
-                  Ici
+                  {tr("Ici", "Here")}
                 </span>
               ) : (
                 <button className="link" type="button" onClick={() => revoke(s.id)}>
-                  Déconnecter
+                  {tr("Déconnecter", "Sign out")}
                 </button>
               )}
             </li>
@@ -250,32 +302,21 @@ export function ProfilPage() {
       </div>
 
       <div className="section">
-        <h2>Préférences</h2>
+        <h2>{tr("Préférences", "Preferences")}</h2>
         <div className="rpanel" style={{ marginTop: 12 }}>
           <div className="set" style={{ borderTop: 0, padding: 0 }}>
             <div>
-              <p className="mt">Langue de l’interface</p>
-              <p className="md">Les textes techniques des problèmes restent en anglais pour l’instant.</p>
+              <p className="mt">{tr("Langue", "Language")}</p>
+              <p className="md">{tr("Tout le site, vos rapports et vos emails.", "The whole site, your reports and your emails.")}</p>
             </div>
-            <div className="seg2" role="group" aria-label="Langue">
+            <div className="seg2" role="group" aria-label={tr("Langue", "Language")}>
               {(
                 [
                   ["fr", "Français"],
                   ["en", "English"],
                 ] as const
               ).map(([k, l]) => (
-                <button
-                  key={k}
-                  type="button"
-                  aria-pressed={lang === k}
-                  onClick={() => {
-                    if (k === "en") toast("Anglais : bientôt disponible");
-                    else {
-                      setLang("fr");
-                      toast("Interface en français");
-                    }
-                  }}
-                >
+                <button key={k} type="button" aria-pressed={lang === k} lang={k} onClick={() => void chooseLang(k)}>
                   {l}
                 </button>
               ))}
@@ -285,39 +326,39 @@ export function ProfilPage() {
       </div>
 
       <div className="section">
-        <h2>Activité récente</h2>
+        <h2>{tr("Activité récente", "Recent activity")}</h2>
         {activity.length ? (
           <ul className="feed">
             {activity.slice(0, 6).map((a, k) => {
-              const [cls, label] = ACTIONS[a.action] ?? ["", a.action];
+              const [cls, label] = actionLabel(a.action);
               return (
                 <li key={k} className={cls}>
                   <time dateTime={a.at}>
-                    {feedDay(a.at, now)}, {new Date(a.at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                    {feedDay(a.at, now)}, {new Date(a.at).toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" })}
                   </time>
                   <span>
                     {label}
-                    {a.ip ? ` depuis ${a.ip}` : ""}.
+                    {a.ip ? tr(` depuis ${a.ip}`, ` from ${a.ip}`) : ""}.
                   </span>
                 </li>
               );
             })}
           </ul>
         ) : (
-          <p className="hint">Aucune activité récente.</p>
+          <p className="hint">{tr("Aucune activité récente.", "No recent activity.")}</p>
         )}
       </div>
 
       <div className="section">
         <div className="actions">
           <Link className="btn ghost" to="/">
-            Voir le site public
+            {tr("Voir le site public", "See the public site")}
           </Link>
           <button className="btn ghost" type="button" onClick={() => void logout()}>
-            Se déconnecter
+            {tr("Se déconnecter", "Sign out")}
           </button>
-          <button className="btn ghost danger" type="button" aria-disabled="true" onClick={() => toast("Suppression du compte : bientôt disponible")}>
-            Supprimer mon compte
+          <button className="btn ghost danger" type="button" aria-disabled="true" onClick={() => toast(tr("Suppression du compte : bientôt disponible", "Account deletion: coming soon"))}>
+            {tr("Supprimer mon compte", "Delete my account")}
             <Soon />
           </button>
         </div>

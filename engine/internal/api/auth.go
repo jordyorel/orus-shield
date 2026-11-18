@@ -43,6 +43,8 @@ type meResponse struct {
 	Name              string     `json:"name"`
 	PasswordChangedAt *time.Time `json:"password_changed_at"`
 	RecoveryCodesLeft int        `json:"recovery_codes_left"`
+	// Lang: "fr" or "en", "" until the user chooses one in Profil.
+	Lang string `json:"lang"`
 }
 
 // accountError answers an error of package account. badCredentials is the
@@ -134,7 +136,7 @@ func (s *Server) writeMe(w http.ResponseWriter, r *http.Request, sess store.Sess
 		return
 	}
 	resp := meResponse{UserID: sess.UserID, Email: sess.Email, MFAEnabled: sess.MFAEnabled, MFASession: sess.MFA, Orgs: []membershipJSON{},
-		Name: prof.Name, PasswordChangedAt: prof.PasswordChangedAt, RecoveryCodesLeft: prof.RecoveryCodesLeft}
+		Name: prof.Name, PasswordChangedAt: prof.PasswordChangedAt, RecoveryCodesLeft: prof.RecoveryCodesLeft, Lang: prof.Lang}
 	for _, m := range ms {
 		resp.Orgs = append(resp.Orgs, membershipJSON{OrgID: m.OrgID, OrgName: m.OrgName, Role: m.Role})
 	}

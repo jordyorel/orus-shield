@@ -35,6 +35,18 @@ func TestProfileAndSessions(t *testing.T) {
 	if r := e.do("PATCH", "/api/v1/auth/me", first, updateMeRequest{Name: ptrTo("a\x00b")}); r.status != http.StatusBadRequest {
 		t.Errorf("control character = %d, want 400", r.status)
 	}
+	// The language: none until chosen, then fr or en only.
+	if me.Lang != "" {
+		t.Errorf("language before choosing = %q", me.Lang)
+	}
+	r = e.do("PATCH", "/api/v1/auth/me", first, updateMeRequest{Lang: ptrTo("en")})
+	r.json(t, &me)
+	if r.status != http.StatusOK || me.Lang != "en" || me.Name != "Alice Martin" {
+		t.Errorf("set language = %d %+v", r.status, me)
+	}
+	if r := e.do("PATCH", "/api/v1/auth/me", first, updateMeRequest{Lang: ptrTo("de")}); r.status != http.StatusBadRequest {
+		t.Errorf("unknown language = %d, want 400", r.status)
+	}
 
 	var sessions list[sessionJSON]
 	e.do("GET", "/api/v1/auth/sessions", first, nil).json(t, &sessions)

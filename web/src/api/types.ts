@@ -25,6 +25,8 @@ export interface Me {
   name: string;
   password_changed_at: string | null;
   recovery_codes_left: number;
+  /** "fr" or "en"; "" until the user chooses one in Profil. */
+  lang: "fr" | "en" | "";
 }
 
 /** mfaChallengeResponse: correct password, a code is expected next. */

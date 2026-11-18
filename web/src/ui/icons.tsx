@@ -1,6 +1,7 @@
 // The mockup's inline SVG icons, as components. The shield of the mockup
 // is replaced by the project's falcon logo (public/logo-mark.png).
 
+import { tr } from "../i18n";
 import type { ReactNode } from "react";
 
 const paths: Record<string, ReactNode> = {
@@ -121,8 +122,10 @@ export const MODS: { key: "emails" | "tls" | "ports" | "fuites" | "menaces"; mod
   {
     key: "emails",
     module: "email",
-    title: "Emails",
-    desc: "SPF, DKIM et DMARC",
+    get title() {
+      return tr("Emails", "Email");
+    },
+    desc: "SPF, DKIM, DMARC",
     icon: (
       <>
         <path d="M3 6h18v12H3z" />
@@ -133,8 +136,12 @@ export const MODS: { key: "emails" | "tls" | "ports" | "fuites" | "menaces"; mod
   {
     key: "tls",
     module: "tls",
-    title: "Chiffrement",
-    desc: "Certificats et versions de TLS",
+    get title() {
+      return tr("Chiffrement", "Encryption");
+    },
+    get desc() {
+      return tr("Certificats et versions de TLS", "Certificates and TLS versions");
+    },
     icon: (
       <>
         <rect x="5" y="11" width="14" height="9" rx="2" />
@@ -145,8 +152,12 @@ export const MODS: { key: "emails" | "tls" | "ports" | "fuites" | "menaces"; mod
   {
     key: "ports",
     module: "ports",
-    title: "Ports et services",
-    desc: "Sur les serveurs dont la propriété est prouvée",
+    get title() {
+      return tr("Ports et services", "Ports and services");
+    },
+    get desc() {
+      return tr("Sur les serveurs dont la propriété est prouvée", "On servers whose ownership is proven");
+    },
     icon: (
       <>
         <circle cx="12" cy="12" r="9" />
@@ -157,15 +168,23 @@ export const MODS: { key: "emails" | "tls" | "ports" | "fuites" | "menaces"; mod
   {
     key: "fuites",
     module: null,
-    title: "Fuites de données",
-    desc: "Vos adresses dans les fuites connues",
+    get title() {
+      return tr("Fuites de données", "Data leaks");
+    },
+    get desc() {
+      return tr("Vos adresses dans les fuites connues", "Your addresses in known leaks");
+    },
     icon: <path d="M12 3c4 5 6 8 6 11a6 6 0 0 1-12 0c0-3 2-6 6-11z" />,
   },
   {
     key: "menaces",
     module: "vulns",
-    title: "Menaces émergentes",
-    desc: "Failles en cours d’exploitation qui vous concernent",
+    get title() {
+      return tr("Menaces émergentes", "Emerging threats");
+    },
+    get desc() {
+      return tr("Failles en cours d’exploitation qui vous concernent", "Flaws being exploited that concern you");
+    },
     icon: (
       <>
         <path d="M12 3l9 16H3L12 3z" />
@@ -186,4 +205,4 @@ export function ModIcon({ children }: { children: ReactNode }) {
 }
 
 /** Soon is the "Bientôt" badge of an element without a real source yet. */
-export const Soon = () => <span className="soon">Bientôt</span>;
+export const Soon = () => <span className="soon">{tr("Bientôt", "Soon")}</span>;

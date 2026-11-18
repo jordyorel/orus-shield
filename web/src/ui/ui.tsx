@@ -2,6 +2,7 @@
 // and the theme (the mockup's toast(), showSheet(), closeAll(), openPal()).
 
 import { createContext, Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { tr } from "../i18n";
 import { Arrow } from "./icons";
 
 interface UI {
@@ -119,7 +120,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
         {stack.length > 1 && (
           <button className="back" type="button" onClick={back}>
             <Arrow />
-            Retour
+            {tr("Retour", "Back")}
           </button>
         )}
         <Fragment key={stack.length}>{stack[stack.length - 1]}</Fragment>

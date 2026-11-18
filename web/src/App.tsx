@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import { tr, useLang } from "./i18n";
 import { needsMfa, useAuth } from "./auth";
 import { match, Redirect, useLocation } from "./router";
 import { appPath, AppShell } from "./ui/AppShell";
@@ -46,6 +47,12 @@ function Page({ children }: { children: ReactNode }) {
 export function App() {
   const { state } = useAuth();
   const { path } = useLocation();
+  const { lang, setLang } = useLang();
+  // Signed in with a language chosen in Profil: the whole site speaks it.
+  const chosen = state.status === "signed-in" ? state.me.lang : "";
+  useEffect(() => {
+    if (chosen && chosen !== lang) setLang(chosen);
+  }, [chosen, lang, setLang]);
 
   if (state.status === "loading") return null;
   const moved = MOVED[path];
@@ -88,7 +95,12 @@ export function App() {
     ) : (
       <Page>
         <main>
-          <p className="err">Votre compte n’appartient à aucune organisation. Demandez une invitation à votre administrateur.</p>
+          <p className="err">
+            {tr(
+              "Votre compte n’appartient à aucune organisation. Demandez une invitation à votre administrateur.",
+              "Your account belongs to no organization. Ask your administrator for an invitation.",
+            )}
+          </p>
         </main>
       </Page>
     );

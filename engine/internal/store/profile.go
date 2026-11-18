@@ -17,7 +17,12 @@ type Profile struct {
 	PasswordChangedAt *time.Time
 	// RecoveryCodesLeft: unused recovery codes (0 without MFA).
 	RecoveryCodesLeft int
+	// Lang: "fr" or "en", "" until the user chooses one.
+	Lang string
 }
+
+// ErrInvalidLang is a language the product does not speak.
+var ErrInvalidLang = errors.New("invalid language")
 
 // ErrInvalidName is a name that is too long or holds control characters.
 var ErrInvalidName = errors.New("invalid name")
@@ -42,9 +47,10 @@ func (a *Auth) Profile(ctx context.Context, userID string) (p Profile, err error
 	err = a.inTx(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `
 			SELECT u.name, u.password_changed_at,
-				(SELECT count(*) FROM recovery_codes c WHERE c.user_id = u.id AND c.used_at IS NULL)
+				(SELECT count(*) FROM recovery_codes c WHERE c.user_id = u.id AND c.used_at IS NULL),
+				coalesce(u.lang, '')
 			FROM users u WHERE u.id = $1`, userID).
-			Scan(&p.Name, &p.PasswordChangedAt, &p.RecoveryCodesLeft)
+			Scan(&p.Name, &p.PasswordChangedAt, &p.RecoveryCodesLeft, &p.Lang)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Profile{}, ErrNotFound
@@ -62,6 +68,19 @@ func (a *Auth) SetName(ctx context.Context, userID, email, name, ip string) erro
 			return fmt.Errorf("set name: %w", err)
 		}
 		return logAuth(ctx, tx, AuthEvent{UserID: userID, Email: email, Action: "profile.name_changed", IP: ip})
+	})
+}
+
+// SetLang changes the user's language: "fr" or "en".
+func (a *Auth) SetLang(ctx context.Context, userID, lang string) error {
+	if lang != "fr" && lang != "en" {
+		return ErrInvalidLang
+	}
+	return a.inTx(ctx, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, "UPDATE users SET lang = $2 WHERE id = $1", userID, lang); err != nil {
+			return fmt.Errorf("set language: %w", err)
+		}
+		return nil
 	})
 }
 

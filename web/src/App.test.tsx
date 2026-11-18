@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Finding, Me, OrgSettings, Overview, Plan, Subscription } from "./api/types";
 import { App } from "./App";
+import { LangProvider, Relang, setLangForTests } from "./i18n";
 import { AuthProvider } from "./auth";
 import { navigate } from "./router";
 import { fail, mockApi, ok } from "./test/fetch";
@@ -17,6 +18,7 @@ const me: Me = {
   name: "Jordy Konda",
   password_changed_at: "2026-08-01T00:00:00Z",
   recovery_codes_left: 8,
+  lang: "",
 };
 
 const plans: Plan[] = [
@@ -97,9 +99,13 @@ function orgRoutes(extra: Record<string, ReturnType<typeof ok>> = {}, sub: Subsc
 function renderAt(path: string) {
   window.history.replaceState(null, "", path);
   return render(
-    <AuthProvider>
-      <App />
-    </AuthProvider>,
+    <LangProvider>
+      <AuthProvider>
+        <Relang>
+          <App />
+        </Relang>
+      </AuthProvider>
+    </LangProvider>,
   );
 }
 
@@ -230,6 +236,46 @@ describe("public site", () => {
     await loginWithCode();
     expect(await screen.findByText(/refusé le cookie de session/)).toBeTruthy();
     expect(window.location.pathname).toBe("/connexion");
+  });
+});
+
+describe("language", () => {
+  afterEach(() => setLangForTests("fr"));
+
+  it("signs in in English when English is the language", async () => {
+    setLangForTests("en");
+    mockApi({ "GET /auth/me": fail(401) });
+    renderAt("/connexion");
+    expect(await screen.findByText("Welcome back.")).toBeTruthy();
+    expect(screen.getByLabelText("Email address")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
+  });
+
+  it("switches the public site to English from the top of the page", async () => {
+    const calls = mockApi({ "GET /auth/me": fail(401), "GET /plans": ok({ items: plans }) });
+    renderAt("/tarifs");
+    fireEvent.click(await screen.findByRole("button", { name: "English" }));
+    expect(await screen.findByText("A simple price, paid the way you like.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "English" }).getAttribute("aria-pressed")).toBe("true");
+    expect(calls.some((c) => c.key.startsWith("PATCH"))).toBe(false); // signed out: kept in this browser only
+  });
+
+  it("saves the language on the account when signed in", async () => {
+    const calls = mockApi({ "GET /auth/me": ok(me), "GET /plans": ok({ items: plans }), "PATCH /auth/me": ok({ ...me, lang: "en" }) });
+    renderAt("/tarifs");
+    const en = await screen.findByRole("button", { name: "English" });
+    await act(async () => {
+      fireEvent.click(en);
+    });
+    expect(calls.find((c) => c.key === "PATCH /auth/me")?.body).toEqual({ lang: "en" });
+    expect(await screen.findByText("My dashboard")).toBeTruthy();
+  });
+
+  it("follows the language chosen in Profil once signed in", async () => {
+    orgRoutes({ "GET /auth/me": ok({ ...me, lang: "en" }) });
+    renderAt(`/orgs/${ORG}/aujourdhui`);
+    expect((await screen.findAllByText("Problems")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Problèmes")).toBeNull();
   });
 });
 

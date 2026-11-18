@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState, type PointerEvent as RPointerEvent } from "react";
 import { reportURL } from "../../api/client";
+import { getLang, tr } from "../../i18n";
 import { Tick } from "../icons";
 import { CATNAME, CATS, COLOR, SEV, catState, evaluatedCats, weekly, type AssetView, type Cat, type CellState, type Issue } from "../model";
 import { useOrg } from "../OrgData";
@@ -74,7 +75,7 @@ function ScoreCard({ hist, score, fixed, open }: { hist: number[]; score: number
   return (
     <section className="card2 scorecard" aria-label="Score">
       <div className="scorehead">
-        <p className="big" aria-label={`Score : ${cur ?? "aucun"} sur 100`}>
+        <p className="big" aria-label={tr(`Score : ${cur ?? "aucun"} sur 100`, `Score: ${cur ?? "none"} out of 100`)}>
           {cur ?? "–"}
         </p>
         <div className="scoremeta">
@@ -82,12 +83,12 @@ function ScoreCard({ hist, score, fixed, open }: { hist: number[]; score: number
             {delta >= 0 ? "+" : ""}
             {delta} points
           </p>
-          <p>en {n} semaine{n > 1 ? "s" : ""}</p>
+          <p>{tr(`en ${n} semaine${n > 1 ? "s" : ""}`, `in ${n} week${n > 1 ? "s" : ""}`)}</p>
         </div>
       </div>
       <div className="plot">
         {n >= 2 ? (
-          <svg ref={svg} className="chart spark" id="spark" viewBox="0 0 320 124" role="img" aria-label={`Le score passe de ${hist[0]} à ${cur} en ${n} semaines`} onPointerMove={move} onPointerDown={move} onPointerLeave={leave}>
+          <svg ref={svg} className="chart spark" id="spark" viewBox="0 0 320 124" role="img" aria-label={tr(`Le score passe de ${hist[0]} à ${cur} en ${n} semaines`, `The score goes from ${hist[0]} to ${cur} in ${n} weeks`)} onPointerMove={move} onPointerDown={move} onPointerLeave={leave}>
             {[40, 60, 80, 100].map((v) => (
               <g key={v}>
                 <line x1="34" x2="312" y1={SY(v)} y2={SY(v)} stroke="var(--ring)" strokeWidth="1.2" />
@@ -100,10 +101,10 @@ function ScoreCard({ hist, score, fixed, open }: { hist: number[]; score: number
               n <= 6 || i % 3 === 2 || i === 0 ? <line key={i} x1={SX(i).toFixed(1)} x2={SX(i).toFixed(1)} y1="102" y2="106" stroke="var(--ring)" strokeWidth="1.2" /> : null,
             )}
             <text x="34" y="120" fontSize="11" fill="var(--ink2)">
-              Il y a {n} sem.
+              {tr(`Il y a ${n} sem.`, `${n} wk ago`)}
             </text>
             <text x="310" y="120" fontSize="11" fill="var(--ink2)" textAnchor="end">
-              Aujourd’hui
+              {tr("Aujourd’hui", "Today")}
             </text>
             <path className="area" d={`${spark} L310 102 L34 102 Z`} fill="var(--azur)" />
             <path className="draw" pathLength={1} d={spark} fill="none" stroke="var(--azur)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -125,18 +126,18 @@ function ScoreCard({ hist, score, fixed, open }: { hist: number[]; score: number
             <rect x="20" y="0" width="300" height="110" fill="transparent" />
           </svg>
         ) : (
-          <p className="sub">La courbe apparaît après deux semaines de scans.</p>
+          <p className="sub">{tr("La courbe apparaît après deux semaines de scans.", "The curve appears after two weeks of scans.")}</p>
         )}
         <div ref={tipRef} className={"hmtip" + (tipPos ? " on" : "") + (tipPos?.below ? " below" : "")} id="chtip" role="tooltip" style={tipPos ? { left: tipPos.left + "px", top: tipPos.top + "px" } : undefined}>
           {hover !== null && (
             <>
               <b>{hv} points</b>
-              <em>{back === 0 ? "Aujourd’hui" : back === 1 ? "La semaine dernière" : `Il y a ${back} semaines`}</em>
+              <em>{back === 0 ? tr("Aujourd’hui", "Today") : back === 1 ? tr("La semaine dernière", "Last week") : tr(`Il y a ${back} semaines`, `${back} weeks ago`)}</em>
               {hover > 0 && (
                 <span>
                   <i style={{ background: hv - prev >= 0 ? "var(--lagon)" : "var(--corail)" }} />
                   {hv - prev >= 0 ? "+" : "−"}
-                  {Math.abs(hv - prev)} par rapport à la semaine d’avant
+                  {tr(`${Math.abs(hv - prev)} par rapport à la semaine d’avant`, `${Math.abs(hv - prev)} compared with the week before`)}
                 </span>
               )}
             </>
@@ -144,8 +145,8 @@ function ScoreCard({ hist, score, fixed, open }: { hist: number[]; score: number
         </div>
       </div>
       <p className="scorefoot">
-        {n ? `Parti de ${hist[0]}. ` : ""}
-        {fixed} corrigé{fixed > 1 ? "s" : ""}, {open} ouvert{open > 1 ? "s" : ""}.
+        {n ? tr(`Parti de ${hist[0]}. `, `Started at ${hist[0]}. `) : ""}
+        {tr(`${fixed} corrigé${fixed > 1 ? "s" : ""}, ${open} ouvert${open > 1 ? "s" : ""}.`, `${fixed} fixed, ${open} open.`)}
       </p>
     </section>
   );
@@ -184,18 +185,22 @@ function Heat({ assets, issues, evaluated }: { assets: AssetView[]; issues: Issu
   const curList = cur ? issues.filter((i) => !i.fixed && i.host === cur.asset && i.cat === cur.cat) : [];
 
   return (
-    <section className="card2 heat" aria-label="Carte de chaleur des risques" onMouseLeave={out}>
+    <section className="card2 heat" aria-label={tr("Carte de chaleur des risques", "Risk heat map")} onMouseLeave={out}>
       <div ref={tipRef} className={"hmtip" + (tip ? " on" : "") + (tip?.below ? " below" : "")} id="hmtip" role="tooltip" style={tip ? { left: tip.left + "px", top: tip.top + "px" } : undefined}>
         {cur && (
           <>
             <b>{cur.asset}</b>
             <em>{CATNAME[cur.cat]}</em>
             {curState === "na" ? (
-              <em>{cur.cat === "fuites" ? "Bientôt : la surveillance des fuites arrive." : "Non concerné : ce contrôle ne s’applique pas à cet actif."}</em>
+              <em>
+                {cur.cat === "fuites"
+                  ? tr("Bientôt : la surveillance des fuites arrive.", "Soon: leak monitoring is coming.")
+                  : tr("Non concerné : ce contrôle ne s’applique pas à cet actif.", "Not applicable: this check does not apply to this asset.")}
+              </em>
             ) : !curList.length ? (
               <span>
                 <i style={{ background: "var(--lagon)" }} />
-                Vérifié, rien à signaler.
+                {tr("Vérifié, rien à signaler.", "Checked, all clear.")}
               </span>
             ) : (
               <>
@@ -205,7 +210,7 @@ function Heat({ assets, issues, evaluated }: { assets: AssetView[]; issues: Issu
                     {i.title}
                   </span>
                 ))}
-                <em>Cliquez pour ouvrir l’actif</em>
+                <em>{tr("Cliquez pour ouvrir l’actif", "Click to open the asset")}</em>
               </>
             )}
           </>
@@ -213,7 +218,7 @@ function Heat({ assets, issues, evaluated }: { assets: AssetView[]; issues: Issu
       </div>
       <div className={"hmgrid" + (cur ? " hot" : "")} style={{ gridTemplateColumns: `minmax(84px,1.3fr) repeat(${CATS.length},minmax(38px,1fr))` }}>
         <span className="hmcol" style={{ textAlign: "left", fontWeight: 600, color: "var(--ink)" }}>
-          Où est le risque
+          {tr("Où est le risque", "Where the risk is")}
         </span>
         {CATS.map(([c, l]) => (
           <span key={c} className={"hmcol" + (cur?.cat === c ? " on" : "")} data-col={c}>
@@ -227,23 +232,23 @@ function Heat({ assets, issues, evaluated }: { assets: AssetView[]; issues: Issu
       <div className="key" style={{ justifyContent: "flex-start", marginTop: 10, gap: "6px 12px", fontSize: 12 }}>
         <span>
           <i style={{ background: "var(--lagon)" }} />
-          Rien
+          {tr("Rien", "None")}
         </span>
         <span>
           <i style={{ background: "var(--ciel)" }} />
-          Moyen
+          {tr("Moyen", "Medium")}
         </span>
         <span>
           <i style={{ background: "var(--ambre)" }} />
-          Élevé
+          {tr("Élevé", "High")}
         </span>
         <span>
           <i style={{ background: "var(--corail)" }} />
-          Critique
+          {tr("Critique", "Critical")}
         </span>
         <span>
           <i style={{ background: "var(--ring)" }} />
-          Non concerné
+          {tr("Non concerné", "Not applicable")}
         </span>
       </div>
     </section>
@@ -282,7 +287,7 @@ function HeatRow({
               key={c}
               style={delay}
               className={"hm na" + (isCur ? " cur" : "")}
-              aria-label={`${a.n}, ${c} : non concerné`}
+              aria-label={tr(`${a.n}, ${c} : non concerné`, `${a.n}, ${c}: not applicable`)}
               onMouseEnter={(e) => over(a.n, c, e.currentTarget)}
             >
               <i />
@@ -290,14 +295,17 @@ function HeatRow({
           );
         }
         const n = issues.filter((i) => !i.fixed && i.host === a.n && i.cat === c).length;
-        const label = n ? `${n} problème${n > 1 ? "s" : ""}, niveau ${SEV[s === "ok" ? "ok" : s][0].toLowerCase()}` : "aucun problème";
+        const level = SEV[s === "ok" ? "ok" : s][0].toLowerCase();
+        const label = n
+          ? tr(`${n} problème${n > 1 ? "s" : ""}, niveau ${level}`, `${n} problem${n > 1 ? "s" : ""}, ${level} level`)
+          : tr("aucun problème", "no problem");
         return (
           <button
             key={c}
             type="button"
             style={delay}
             className={"hm " + s + (isCur ? " cur" : "")}
-            aria-label={`${a.n}, ${c} : ${label}`}
+            aria-label={tr(`${a.n}, ${c} : ${label}`, `${a.n}, ${c}: ${label}`)}
             onMouseEnter={(e) => over(a.n, c, e.currentTarget)}
             onFocus={(e) => over(a.n, c, e.currentTarget)}
             onClick={() => open(a.n)}
@@ -314,7 +322,7 @@ function Seg({ name, pass, total }: { name: string; pass: number; total: number 
   return (
     <div className="chk">
       <span>{name}</span>
-      <span className="dots" role="img" aria-label={`${name} : ${pass} contrôles réussis sur ${total}`}>
+      <span className="dots" role="img" aria-label={tr(`${name} : ${pass} contrôles réussis sur ${total}`, `${name}: ${pass} of ${total} checks passed`)}>
         {Array.from({ length: total }, (_, i) => (
           <i key={i} className={i < pass ? "on" : ""} />
         ))}
@@ -366,21 +374,21 @@ export function RapportsPage() {
     return [cs.filter((c) => c.status === "passed").length, cs.length] as const;
   };
   const segs: [string, readonly [number, number]][] = [
-    ["Emails", tally(["email"])],
-    ["Chiffrement", tally(["tls", "web"])],
-    ["Ports et services", tally(["ports"])],
+    [tr("Emails", "Email"), tally(["email"])],
+    [tr("Chiffrement", "Encryption"), tally(["tls", "web"])],
+    [tr("Ports et services", "Ports and services"), tally(["ports"])],
   ];
   const pass = segs.reduce((s, [, [p]]) => s + p, 0);
   const total = segs.reduce((s, [, [, t]]) => s + t, 0);
   const reports = data.subscription.plan.reports;
   const pdf = (kind: "executive" | "technical", label: string, ghost: boolean) =>
     reports ? (
-      <a className={"btn" + (ghost ? " ghost" : "")} href={reportURL(org.org_id, kind, "fr")} download>
-        Générer le PDF
+      <a className={"btn" + (ghost ? " ghost" : "")} href={reportURL(org.org_id, kind, getLang())} download>
+        {tr("Générer le PDF", "Generate the PDF")}
       </a>
     ) : (
-      <button className={"btn" + (ghost ? " ghost" : "")} type="button" aria-disabled="true" onClick={() => toast(`${label} : inclus à partir de l’offre Essentiel`)}>
-        Générer le PDF
+      <button className={"btn" + (ghost ? " ghost" : "")} type="button" aria-disabled="true" onClick={() => toast(tr(`${label} : inclus à partir de l’offre Essentiel`, `${label}: included from the Essential plan`))}>
+        {tr("Générer le PDF", "Generate the PDF")}
       </button>
     );
 
@@ -388,13 +396,13 @@ export function RapportsPage() {
     <>
       <div className="rtop">
         <h1 className="hello" style={{ margin: 0, fontFamily: "inherit", fontWeight: 400, letterSpacing: 0 }}>
-          Rapports
+          {tr("Rapports", "Reports")}
         </h1>
-        <div className="seg2" role="group" aria-label="Période">
+        <div className="seg2" role="group" aria-label={tr("Période", "Period")}>
           {(
             [
-              [4, "4 sem."],
-              [12, "12 sem."],
+              [4, tr("4 sem.", "4 wk")],
+              [12, tr("12 sem.", "12 wk")],
             ] as const
           ).map(([k, l]) => (
             <button key={k} type="button" aria-pressed={period === k} onClick={() => setPeriod(k)}>
@@ -410,10 +418,8 @@ export function RapportsPage() {
 
       <div className="section checks">
         <div className="rhead">
-          <h2 style={{ fontSize: 18 }}>Contrôles automatisés</h2>
-          <p style={{ fontSize: 14, color: "var(--ink2)" }}>
-            {pass} réussis sur {total}
-          </p>
+          <h2 style={{ fontSize: 18 }}>{tr("Contrôles automatisés", "Automated checks")}</h2>
+          <p style={{ fontSize: 14, color: "var(--ink2)" }}>{tr(`${pass} réussis sur ${total}`, `${pass} of ${total} passed`)}</p>
         </div>
         {segs.map(([name, [p, t]]) => (
           <Seg key={name} name={name} pass={p} total={t} />
@@ -421,22 +427,22 @@ export function RapportsPage() {
       </div>
 
       <div className="section">
-        <h2>À partager</h2>
+        <h2>{tr("À partager", "To share")}</h2>
         <div className="docs">
           <div className="doc">
             <Paper kind="dir" />
             <div>
-              <h3>Rapport Direction</h3>
-              <p>Deux pages, sans jargon : le score, ce qui a été corrigé, ce qui reste à décider.</p>
-              {pdf("executive", "Rapport Direction", false)}
+              <h3>{tr("Rapport Direction", "Executive report")}</h3>
+              <p>{tr("Deux pages, sans jargon : le score, ce qui a été corrigé, ce qui reste à décider.", "Two pages, no jargon: the score, what was fixed, what remains to decide.")}</p>
+              {pdf("executive", tr("Rapport Direction", "Executive report"), false)}
             </div>
           </div>
           <div className="doc">
             <Paper kind="tech" />
             <div>
-              <h3>Rapport Technique</h3>
-              <p>Pour votre informaticien : chaque problème, sa preuve, sa CVE et les étapes de correction.</p>
-              {pdf("technical", "Rapport Technique", true)}
+              <h3>{tr("Rapport Technique", "Technical report")}</h3>
+              <p>{tr("Pour votre informaticien : chaque problème, sa preuve, sa CVE et les étapes de correction.", "For your IT person: every problem, its evidence, its CVE and the steps to fix it.")}</p>
+              {pdf("technical", tr("Rapport Technique", "Technical report"), true)}
             </div>
           </div>
         </div>

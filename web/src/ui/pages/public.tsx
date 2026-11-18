@@ -7,6 +7,8 @@ import { useAuth } from "../../auth";
 import { Link, navigate, useLocation } from "../../router";
 import { api, ApiError } from "../../api/client";
 import { Lock, Logo, MODS, ModIcon, Moon, Soon, Tick } from "../icons";
+import { LangSwitch } from "../LangSwitch";
+import { locale, tr } from "../../i18n";
 import { openCheckout } from "../paddle";
 import { money } from "../model";
 import { useBodyClass, useUI } from "../ui";
@@ -21,26 +23,27 @@ export function PubHead({ cur }: { cur: "accueil" | "tarifs" | "legal" }) {
         <Logo />
         <span>Orus Shield</span>
       </Link>
-      <nav aria-label="Site">
+      <nav aria-label={tr("Site", "Site")}>
         <Link to="/" aria-current={cur === "accueil" ? "page" : undefined}>
-          Accueil
+          {tr("Accueil", "Home")}
         </Link>
         <Link to="/tarifs" aria-current={cur === "tarifs" ? "page" : undefined}>
-          Tarifs
+          {tr("Tarifs", "Pricing")}
         </Link>
         {state.status === "signed-in" ? (
           <Link className="btn sm" to="/app">
-            Mon tableau de bord
+            {tr("Mon tableau de bord", "My dashboard")}
           </Link>
         ) : (
           <>
-            <Link to="/connexion">Se connecter</Link>
+            <Link to="/connexion">{tr("Se connecter", "Sign in")}</Link>
             <Link className="btn sm" to="/inscription">
-              Créer un compte
+              {tr("Créer un compte", "Create an account")}
             </Link>
           </>
         )}
-        <button className="iconbtn" type="button" aria-label="Changer de thème" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+        <LangSwitch />
+        <button className="iconbtn" type="button" aria-label={tr("Changer de thème", "Change theme")} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
           <Moon />
         </button>
       </nav>
@@ -53,9 +56,9 @@ export function PubFoot() {
     <footer className="pubfoot">
       <span>Orus Shield</span>
       <span>
-        <Link to="/conditions">Conditions d’utilisation</Link>
-        <Link to="/confidentialite">Confidentialité</Link>
-        <Link to="/tarifs">Tarifs</Link>
+        <Link to="/conditions">{tr("Conditions d’utilisation", "Terms of use")}</Link>
+        <Link to="/confidentialite">{tr("Confidentialité", "Privacy")}</Link>
+        <Link to="/tarifs">{tr("Tarifs", "Pricing")}</Link>
       </span>
     </footer>
   );
@@ -64,7 +67,7 @@ export function PubFoot() {
 /** The static radar of the hero: the empty map of a perimeter. */
 export function HeroRadar({ scanning = false }: { scanning?: boolean }) {
   return (
-    <svg className={"hradar" + (scanning ? " scanning" : "")} viewBox="0 0 300 300" role="img" aria-label="Carte du périmètre">
+    <svg className={"hradar" + (scanning ? " scanning" : "")} viewBox="0 0 300 300" role="img" aria-label={tr("Carte du périmètre", "Map of the attack surface")}>
       <circle cx="150" cy="150" r="128" fill="none" stroke="var(--ring)" strokeWidth="1.8" strokeDasharray="3 6" strokeLinecap="round" />
       <circle cx="150" cy="150" r="100" fill="none" stroke="var(--ring)" strokeWidth="1.8" />
       <circle cx="150" cy="150" r="74" fill="none" stroke="var(--ring)" strokeWidth="1.8" />
@@ -100,18 +103,25 @@ export function price(p: Plan | undefined, bill: Bill): string {
 /** features describes an offer in the cards of Tarifs and Paiement. */
 export function features(p: Plan | undefined): string[] {
   if (!p) return [];
-  const freq = p.max_frequency ? { monthly: "Un scan par mois", weekly: "Scan chaque semaine", daily: "Scan chaque jour" }[p.max_frequency] : "";
-  const doms = `${p.domains} domaine${p.domains > 1 ? "s" : ""}`;
-  if (!p.monitoring) return [`Un audit de ${doms}`, "Contrôles passifs", "Score et plan d’action"];
+  const freq = p.max_frequency
+    ? {
+        monthly: tr("Un scan par mois", "One scan a month"),
+        weekly: tr("Scan chaque semaine", "Weekly scan"),
+        daily: tr("Scan chaque jour", "Daily scan"),
+      }[p.max_frequency]
+    : "";
+  const many = p.domains > 1;
+  const doms = tr(`${p.domains} domaine${many ? "s" : ""}`, `${p.domains} domain${many ? "s" : ""}`);
+  if (!p.monitoring) return [tr(`Un audit de ${doms}`, `One audit of ${doms}`), tr("Contrôles passifs", "Passive checks"), tr("Score et plan d’action", "Score and action plan")];
   return [
-    `${doms} vérifié${p.domains > 1 ? "s" : ""}, ${p.hosts_per_scan} actifs par domaine`,
-    `${freq}, 50 ports courants`,
-    p.threats ? "Vulnérabilités et menaces émergentes" : "Vulnérabilités connues",
-    p.reports ? "Alertes email, rapports Direction et Technique" : "Alertes email",
+    tr(`${doms} vérifié${many ? "s" : ""}, ${p.hosts_per_scan} actifs par domaine`, `${doms} verified, ${p.hosts_per_scan} assets per domain`),
+    tr(`${freq}, 50 ports courants`, `${freq}, 50 common ports`),
+    p.threats ? tr("Vulnérabilités et menaces émergentes", "Vulnerabilities and emerging threats") : tr("Vulnérabilités connues", "Known vulnerabilities"),
+    p.reports ? tr("Alertes email, rapports Direction et Technique", "Email alerts, executive and technical reports") : tr("Alertes email", "Email alerts"),
   ];
 }
 
-const DISCOUNT = "À l’année, jusqu’à 20 % de moins";
+const discount = () => tr("À l’année, jusqu’à 20 % de moins", "Yearly, up to 20% less");
 
 export function AccueilPage() {
   useBodyClass(["public"]);
@@ -125,20 +135,25 @@ export function AccueilPage() {
           <PubHead cur="accueil" />
           <section className="hero">
             <div>
-              <h1>Voyez votre entreprise comme un attaquant la voit.</h1>
-              <p className="herosub">Orus Shield surveille vos domaines, vos emails et vos serveurs, puis vous dit quoi corriger en premier, en français et sans jargon.</p>
+              <h1>{tr("Voyez votre entreprise comme un attaquant la voit.", "See your business the way an attacker sees it.")}</h1>
+              <p className="herosub">
+                {tr(
+                  "Orus Shield surveille vos domaines, vos emails et vos serveurs, puis vous dit quoi corriger en premier, en français et sans jargon.",
+                  "Orus Shield watches your domains, your email and your servers, then tells you what to fix first, in plain language.",
+                )}
+              </p>
               <div className="addrow is-soon">
                 <label className="vh" htmlFor="demo-in">
-                  Votre nom de domaine
+                  {tr("Votre nom de domaine", "Your domain name")}
                 </label>
-                <input id="demo-in" type="text" inputMode="url" autoComplete="off" placeholder="votre-entreprise.cg" disabled />
-                <button className="btn" type="button" aria-disabled="true" onClick={() => toast("Test sans compte : bientôt disponible. Créez un compte gratuit pour tester votre domaine.")}>
-                  Tester mon domaine
+                <input id="demo-in" type="text" inputMode="url" autoComplete="off" placeholder={tr("votre-entreprise.cg", "your-company.com")} disabled />
+                <button className="btn" type="button" aria-disabled="true" onClick={() => toast(tr("Test sans compte : bientôt disponible. Créez un compte gratuit pour tester votre domaine.", "Testing without an account: coming soon. Create a free account to test your domain."))}>
+                  {tr("Tester mon domaine", "Test my domain")}
                   <Soon />
                 </button>
               </div>
               <p className="err" role="alert" />
-              <p className="sub">Audit gratuit, sans carte. Contrôles passifs seulement : rien n’est envoyé vers vos serveurs.</p>
+              <p className="sub">{tr("Audit gratuit, sans carte. Contrôles passifs seulement : rien n’est envoyé vers vos serveurs.", "Free audit, no card. Passive checks only: nothing is sent to your servers.")}</p>
             </div>
             <div className="herovis">
               <HeroRadar />
@@ -146,7 +161,7 @@ export function AccueilPage() {
           </section>
 
           <section className="band">
-            <h2>Ce que nous vérifions</h2>
+            <h2>{tr("Ce que nous vérifions", "What we check")}</h2>
             <ul className="feat">
               {MODS.map((m) => (
                 <li key={m.key}>
@@ -165,25 +180,25 @@ export function AccueilPage() {
 
           <section className="band two">
             <div>
-              <h2>Du problème à la correction</h2>
+              <h2>{tr("Du problème à la correction", "From problem to fix")}</h2>
               <ol className="path">
                 <li>
-                  <b>Ajoutez votre domaine</b>
-                  <span>Nous trouvons vos sous-domaines et vos serveurs.</span>
+                  <b>{tr("Ajoutez votre domaine", "Add your domain")}</b>
+                  <span>{tr("Nous trouvons vos sous-domaines et vos serveurs.", "We find your subdomains and your servers.")}</span>
                 </li>
                 <li>
-                  <b>Prouvez qu’il est à vous</b>
-                  <span>Un enregistrement DNS, et les contrôles complets démarrent.</span>
+                  <b>{tr("Prouvez qu’il est à vous", "Prove it is yours")}</b>
+                  <span>{tr("Un enregistrement DNS, et les contrôles complets démarrent.", "One DNS record, and the full checks start.")}</span>
                 </li>
                 <li>
-                  <b>Corrigez, étape par étape</b>
-                  <span>Chaque problème vient avec sa marche à suivre. Nous revérifions ensuite.</span>
+                  <b>{tr("Corrigez, étape par étape", "Fix it, step by step")}</b>
+                  <span>{tr("Chaque problème vient avec sa marche à suivre. Nous revérifions ensuite.", "Every problem comes with its steps. We check again afterwards.")}</span>
                 </li>
               </ol>
             </div>
             <div className="sample" aria-hidden="true">
-              <p className="mt">Protéger vos emails contre l’usurpation</p>
-              <p className="md">exemple.cg, environ 15 min</p>
+              <p className="mt">{tr("Protéger vos emails contre l’usurpation", "Protect your email against spoofing")}</p>
+              <p className="md">{tr("exemple.cg, environ 15 min", "example.com, about 15 min")}</p>
               <div className="stepline">
                 <b style={{ width: "50%" }} />
               </div>
@@ -191,42 +206,42 @@ export function AccueilPage() {
                 <i>
                   <Tick />
                 </i>
-                <span>Lire les rapports DMARC pendant deux semaines.</span>
+                <span>{tr("Lire les rapports DMARC pendant deux semaines.", "Read the DMARC reports for two weeks.")}</span>
               </div>
               <div className="stepbtn">
                 <i />
-                <span>Passer la règle à « quarantine », puis à « reject ».</span>
+                <span>{tr("Passer la règle à « quarantine », puis à « reject ».", "Move the policy to “quarantine”, then to “reject”.")}</span>
               </div>
             </div>
           </section>
 
           <section className="band dark">
-            <h2>Nous ne testons que ce qui vous appartient</h2>
+            <h2>{tr("Nous ne testons que ce qui vous appartient", "We only test what belongs to you")}</h2>
             <ul className="trust">
               <li>
-                <b>Propriété prouvée</b>
-                <span>Aucun test actif sans preuve que le domaine et le serveur sont à vous.</span>
+                <b>{tr("Propriété prouvée", "Proven ownership")}</b>
+                <span>{tr("Aucun test actif sans preuve que le domaine et le serveur sont à vous.", "No active test without proof that the domain and the server are yours.")}</span>
               </li>
               <li>
-                <b>Vos limites respectées</b>
-                <span>Vous choisissez la vitesse, les horaires et ce qu’on ne touche pas.</span>
+                <b>{tr("Vos limites respectées", "Your limits respected")}</b>
+                <span>{tr("Vous choisissez la vitesse, les horaires et ce qu’on ne touche pas.", "You choose the speed, the hours and what we leave alone.")}</span>
               </li>
               <li>
-                <b>Tout est tracé</b>
-                <span>Chaque scan est enregistré : qui l’a lancé, sur quoi, et quand.</span>
+                <b>{tr("Tout est tracé", "Everything is logged")}</b>
+                <span>{tr("Chaque scan est enregistré : qui l’a lancé, sur quoi, et quand.", "Every scan is recorded: who started it, on what, and when.")}</span>
               </li>
             </ul>
           </section>
 
           <section className="band cta">
-            <h2>Essentiel à partir de {price(ess, "mois")} par mois</h2>
-            <p className="sub">Un audit gratuit pour commencer. Paiement par carte ou PayPal.</p>
+            <h2>{tr(`Essentiel à partir de ${price(ess, "mois")} par mois`, `Essential from ${price(ess, "mois")} a month`)}</h2>
+            <p className="sub">{tr("Un audit gratuit pour commencer. Paiement par carte ou PayPal.", "A free audit to start. Pay by card or PayPal.")}</p>
             <div className="actions" style={{ justifyContent: "center" }}>
               <Link className="btn" to="/tarifs">
-                Voir les tarifs
+                {tr("Voir les tarifs", "See pricing")}
               </Link>
               <Link className="btn ghost" to="/app">
-                Voir le tableau de bord
+                {tr("Voir le tableau de bord", "See the dashboard")}
               </Link>
             </div>
           </section>
@@ -243,23 +258,23 @@ export function TarifsPage() {
   const [bill, setBill] = useState<Bill>("mois");
   const by = (id: Plan["id"]) => plans.find((p) => p.id === id);
   const cards: [Plan | undefined, string, string, string, boolean, string][] = [
-    [by("discovery"), "Gratuit", "Un audit pour voir où vous en êtes.", "Auditer mon domaine", false, ""],
-    [by("sme"), "Essentiel", "Pour une petite entreprise.", "Essayer 14 jours", true, "sme"],
-    [by("pro"), "Pro", "Pour ceux qui ont un informaticien.", "Essayer 14 jours", false, "pro"],
+    [by("discovery"), tr("Gratuit", "Free"), tr("Un audit pour voir où vous en êtes.", "One audit to see where you stand."), tr("Auditer mon domaine", "Audit my domain"), false, ""],
+    [by("sme"), tr("Essentiel", "Essential"), tr("Pour une petite entreprise.", "For a small business."), tr("Essayer 14 jours", "Try it for 14 days"), true, "sme"],
+    [by("pro"), "Pro", tr("Pour ceux qui ont un informaticien.", "For teams with an IT person."), tr("Essayer 14 jours", "Try it for 14 days"), false, "pro"],
   ];
   return (
     <main>
       <div className="view">
         <PubHead cur="tarifs" />
         <section className="phead">
-          <h1>Un prix simple, payable comme vous voulez.</h1>
-          <p className="herosub">Sans engagement : vous arrêtez quand vous voulez.</p>
+          <h1>{tr("Un prix simple, payable comme vous voulez.", "A simple price, paid the way you like.")}</h1>
+          <p className="herosub">{tr("Sans engagement : vous arrêtez quand vous voulez.", "No commitment: stop whenever you want.")}</p>
           <div className="toggles">
-            <div className="seg2" role="group" aria-label="Facturation">
+            <div className="seg2" role="group" aria-label={tr("Facturation", "Billing")}>
               {(
                 [
-                  ["mois", "Au mois"],
-                  ["an", DISCOUNT],
+                  ["mois", tr("Au mois", "Monthly")],
+                  ["an", discount()],
                 ] as const
               ).map(([k, l]) => (
                 <button key={k} type="button" aria-pressed={bill === k} onClick={() => setBill(k)}>
@@ -272,12 +287,12 @@ export function TarifsPage() {
         <div className="plans">
           {cards.map(([p, n, d, cta, star, choose]) => (
             <div key={n} className={"plan" + (star ? " star" : "")}>
-              {star && <span className="tagstar">Le plus choisi</span>}
+              {star && <span className="tagstar">{tr("Le plus choisi", "Most popular")}</span>}
               <h2>{n}</h2>
               <p className="md">{d}</p>
               <p className="price">
-                <b>{n === "Gratuit" ? money(0) : price(p, bill)}</b>
-                <span>{n === "Gratuit" ? "un audit, sans carte" : bill === "an" ? "par mois, payé à l’année" : "par mois"}</span>
+                <b>{!choose ? money(0) : price(p, bill)}</b>
+                <span>{!choose ? tr("un audit, sans carte", "one audit, no card") : bill === "an" ? tr("par mois, payé à l’année", "a month, billed yearly") : tr("par mois", "a month")}</span>
               </p>
               <ul>
                 {features(p).map((f) => (
@@ -291,17 +306,17 @@ export function TarifsPage() {
           ))}
         </div>
         <p className="sub" style={{ textAlign: "center", marginTop: 16 }}>
-          Prestataires informatiques et grands comptes : tarif sur devis, par actif.
+          {tr("Prestataires informatiques et grands comptes : tarif sur devis, par actif.", "IT providers and large accounts: price on quote, per asset.")}
         </p>
         <section className="band">
-          <h2>Tout comparer</h2>
+          <h2>{tr("Tout comparer", "Compare everything")}</h2>
           <div style={{ overflowX: "auto", marginTop: 8 }}>
             <table className="limits plan2">
               <thead>
                 <tr>
                   <th scope="col" />
-                  <th scope="col">Gratuit</th>
-                  <th scope="col">Essentiel</th>
+                  <th scope="col">{tr("Gratuit", "Free")}</th>
+                  <th scope="col">{tr("Essentiel", "Essential")}</th>
                   <th scope="col">Pro</th>
                 </tr>
               </thead>
@@ -319,20 +334,35 @@ export function TarifsPage() {
           </div>
         </section>
         <section className="band">
-          <h2>Moyens de paiement</h2>
+          <h2>{tr("Moyens de paiement", "Payment methods")}</h2>
           <div className="tags" style={{ marginTop: 12 }}>
-            {["Carte bancaire", "PayPal"].map((x) => (
+            {[tr("Carte bancaire", "Bank card"), "PayPal"].map((x) => (
               <span key={x}>{x}</span>
             ))}
           </div>
         </section>
         <section className="band">
-          <h2>Questions fréquentes</h2>
+          <h2>{tr("Questions fréquentes", "Frequently asked questions")}</h2>
           <div className="faq">
             {[
-              ["Puis-je tester un domaine qui n’est pas le mien ?", "Non. Les contrôles passifs lisent des données publiques. Tous les tests actifs demandent une preuve que le domaine et le serveur vous appartiennent."],
-              ["Qui corrige les problèmes ?", "Vous ou votre informaticien, en suivant nos étapes. Nous revérifions ensuite. Un service d’accompagnement est proposé à part si vous préférez qu’on le fasse avec vous."],
-              ["Puis-je arrêter quand je veux ?", "Oui. L’abonnement s’arrête à la fin de la période payée, et vos rapports restent téléchargeables."],
+              [
+                tr("Puis-je tester un domaine qui n’est pas le mien ?", "Can I test a domain that is not mine?"),
+                tr(
+                  "Non. Les contrôles passifs lisent des données publiques. Tous les tests actifs demandent une preuve que le domaine et le serveur vous appartiennent.",
+                  "No. Passive checks read public data. Every active test requires proof that the domain and the server belong to you.",
+                ),
+              ],
+              [
+                tr("Qui corrige les problèmes ?", "Who fixes the problems?"),
+                tr(
+                  "Vous ou votre informaticien, en suivant nos étapes. Nous revérifions ensuite. Un service d’accompagnement est proposé à part si vous préférez qu’on le fasse avec vous.",
+                  "You or your IT person, following our steps. We check again afterwards. Hands-on support is offered separately if you would rather do it with us.",
+                ),
+              ],
+              [
+                tr("Puis-je arrêter quand je veux ?", "Can I stop whenever I want?"),
+                tr("Oui. L’abonnement s’arrête à la fin de la période payée, et vos rapports restent téléchargeables.", "Yes. The subscription ends at the end of the paid period, and your reports stay downloadable."),
+              ],
             ].map(([q, a]) => (
               <details key={q}>
                 <summary>{q}</summary>
@@ -392,17 +422,23 @@ function PayDone({ orgId, txn, signedIn }: { orgId: string; txn: string; signedI
       <div className="okmark big" aria-hidden="true">
         <Tick size={40} width={3} />
       </div>
-      <h1>{state === "active" ? "C’est activé, merci." : "Paiement reçu, merci."}</h1>
+      <h1>{state === "active" ? tr("C’est activé, merci.", "It is active, thank you.") : tr("Paiement reçu, merci.", "Payment received, thank you.")}</h1>
       <p className="herosub" style={{ marginInline: "auto" }} role="status">
         {state === "active"
-          ? "Votre offre est active : scans chaque semaine, vérification de vos corrections, alertes. Vos factures sont dans Réglages, Abonnement."
+          ? tr(
+              "Votre offre est active : scans chaque semaine, vérification de vos corrections, alertes. Vos factures sont dans Réglages, Abonnement.",
+              "Your plan is active: weekly scans, verification of your fixes, alerts. Your invoices are in Settings, Subscription.",
+            )
           : state === "syncing"
-            ? "Activation de votre offre en cours…"
-            : "Votre offre s’active dès que Paddle nous confirme le paiement. Cela peut prendre quelques minutes : vous recevrez aussi son email."}
+            ? tr("Activation de votre offre en cours…", "Activating your plan…")
+            : tr(
+                "Votre offre s’active dès que Paddle nous confirme le paiement. Cela peut prendre quelques minutes : vous recevrez aussi son email.",
+                "Your plan becomes active as soon as Paddle confirms the payment. This can take a few minutes: you will also receive its email.",
+              )}
       </p>
       <div className="actions" style={{ justifyContent: "center" }}>
         <Link className="btn" to={orgId ? `/orgs/${encodeURIComponent(orgId)}/aujourdhui` : "/app"}>
-          Aller au tableau de bord
+          {tr("Aller au tableau de bord", "Go to the dashboard")}
         </Link>
       </div>
     </section>
@@ -440,7 +476,7 @@ export function PaiementPage() {
     );
     return () => ac.abort();
   }, [me, orgId]);
-  const trialEnd = new Date(Date.now() + 14 * 86400000).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+  const trialEnd = new Date(Date.now() + 14 * 86400000).toLocaleDateString(locale(), { day: "numeric", month: "long", year: "numeric" });
   /** pay creates the transaction on our side, then opens Paddle's checkout. */
   const pay = async (inline: boolean) => {
     if (!me) {
@@ -464,21 +500,21 @@ export function PaiementPage() {
       console.error("payment did not start", e); // the reason, for the developer console
       setPayErr(
         e instanceof ApiError && e.status === 409
-          ? "Cette organisation a déjà un abonnement. Gérez-le dans Réglages, Abonnement."
+          ? tr("Cette organisation a déjà un abonnement. Gérez-le dans Réglages, Abonnement.", "This organization already has a subscription. Manage it in Settings, Subscription.")
           : e instanceof ApiError && e.status === 503
-          ? "Le paiement en ligne n’est pas encore ouvert sur ce serveur."
-          : e instanceof ApiError && e.status === 403
-            ? "Seul un administrateur de l’organisation peut payer l’abonnement."
-            : "Le paiement n’a pas pu démarrer. Réessayez dans un instant.",
+            ? tr("Le paiement en ligne n’est pas encore ouvert sur ce serveur.", "Online payment is not open on this server yet.")
+            : e instanceof ApiError && e.status === 403
+              ? tr("Seul un administrateur de l’organisation peut payer l’abonnement.", "Only an administrator of the organization can pay for the subscription.")
+              : tr("Le paiement n’a pas pu démarrer. Réessayez dans un instant.", "The payment could not start. Try again in a moment."),
       );
     } finally {
       setBusy(false);
     }
   };
-  const names = { sme: "Essentiel", pro: "Pro" };
+  const names = { sme: tr("Essentiel", "Essential"), pro: "Pro" };
   const methods: ["card" | "paypal", string, string][] = [
-    ["card", "Carte bancaire", "Visa, Mastercard"],
-    ["paypal", "PayPal", "Votre compte PayPal"],
+    ["card", tr("Carte bancaire", "Bank card"), "Visa, Mastercard"],
+    ["paypal", "PayPal", tr("Votre compte PayPal", "Your PayPal account")],
   ];
 
   return (
@@ -489,29 +525,32 @@ export function PaiementPage() {
             <Logo />
             <span>Orus Shield</span>
           </Link>
-          <ol className="stepper" aria-label="Étapes">
-            <li className="on">Offre</li>
-            <li className={paid ? "on" : "on cur"}>Paiement</li>
-            <li className={paid ? "on cur" : ""}>Confirmation</li>
+          <ol className="stepper" aria-label={tr("Étapes", "Steps")}>
+            <li className="on">{tr("Offre", "Plan")}</li>
+            <li className={paid ? "on" : "on cur"}>{tr("Paiement", "Payment")}</li>
+            <li className={paid ? "on cur" : ""}>{tr("Confirmation", "Confirmation")}</li>
           </ol>
-          <a
-            className="link"
-            href={back}
-            onClick={(e) => {
-              e.preventDefault();
-              navigate(back);
-            }}
-          >
-            Annuler
-          </a>
+          <div className="authtopr">
+            <a
+              className="link"
+              href={back}
+              onClick={(e) => {
+                e.preventDefault();
+                navigate(back);
+              }}
+            >
+              {tr("Annuler", "Cancel")}
+            </a>
+            <LangSwitch />
+          </div>
         </div>
         {paid ? (
           <PayDone orgId={orgId} txn={search.get("txn") ?? ""} signedIn={!!me} />
         ) : (
         <div className="paygrid">
           <section>
-            <h1 className="payh">Votre abonnement</h1>
-            <div className="planpick" role="radiogroup" aria-label="Offre">
+            <h1 className="payh">{tr("Votre abonnement", "Your subscription")}</h1>
+            <div className="planpick" role="radiogroup" aria-label={tr("Offre", "Plan")}>
               {(["sme", "pro"] as const).map((k) => {
                 const x = plans.find((y) => y.id === k);
                 return (
@@ -519,21 +558,28 @@ export function PaiementPage() {
                     <span className="radio" />
                     <span>
                       <b>{names[k]}</b>
-                      <small>{x ? `${x.domains} domaines, ${x.hosts_per_scan} actifs par domaine, scan chaque ${x.max_frequency === "daily" ? "jour" : "semaine"}` : ""}</small>
+                      <small>
+                        {x
+                          ? tr(
+                              `${x.domains} domaines, ${x.hosts_per_scan} actifs par domaine, scan chaque ${x.max_frequency === "daily" ? "jour" : "semaine"}`,
+                              `${x.domains} domains, ${x.hosts_per_scan} assets per domain, ${x.max_frequency === "daily" ? "daily" : "weekly"} scan`,
+                            )
+                          : ""}
+                      </small>
                     </span>
                     <span className="pp">
                       {price(x, bill)}
-                      <small>/mois</small>
+                      <small>{tr("/mois", "/month")}</small>
                     </span>
                   </button>
                 );
               })}
             </div>
-            <div className="seg2" role="group" aria-label="Facturation" style={{ marginTop: 12, display: "inline-flex" }}>
+            <div className="seg2" role="group" aria-label={tr("Facturation", "Billing")} style={{ marginTop: 12, display: "inline-flex" }}>
               {(
                 [
-                  ["mois", "Au mois"],
-                  ["an", DISCOUNT],
+                  ["mois", tr("Au mois", "Monthly")],
+                  ["an", discount()],
                 ] as const
               ).map(([k, l]) => (
                 <button key={k} type="button" aria-pressed={bill === k} onClick={() => setBill(k)}>
@@ -541,8 +587,8 @@ export function PaiementPage() {
                 </button>
               ))}
             </div>
-            <h2 className="payh2">Moyen de paiement</h2>
-            <div className="methods" role="radiogroup" aria-label="Moyen de paiement">
+            <h2 className="payh2">{tr("Moyen de paiement", "Payment method")}</h2>
+            <div className="methods" role="radiogroup" aria-label={tr("Moyen de paiement", "Payment method")}>
               {methods.map(([k, l, d]) => (
                 <button key={k} type="button" role="radio" aria-checked={method === k} onClick={() => setMethod(k)}>
                   <b>{l}</b>
@@ -560,14 +606,17 @@ export function PaiementPage() {
                   {!opened && (
                     <>
                       <p className="sub" style={{ margin: 0 }}>
-                        Vous saisirez votre carte dans le formulaire sécurisé de Paddle, notre prestataire de paiement.
+                        {tr(
+                          "Vous saisirez votre carte dans le formulaire sécurisé de Paddle, notre prestataire de paiement.",
+                          "You will enter your card in the secure form of Paddle, our payment provider.",
+                        )}
                       </p>
                       <p className="err" role="alert">
                         {payErr}
                       </p>
                       <button className="btn wide" type="button" disabled={busy} onClick={() => void pay(true)}>
                         {busy ? <span className="spin" /> : null}
-                        Continuer vers le paiement sécurisé
+                        {tr("Continuer vers le paiement sécurisé", "Continue to secure payment")}
                       </button>
                     </>
                   )}
@@ -576,38 +625,44 @@ export function PaiementPage() {
               {method === "paypal" && (
                 <div className="aform">
                   <p className="sub" style={{ margin: 0 }}>
-                    La fenêtre sécurisée de Paddle, notre prestataire, vous propose PayPal ; vous revenez ensuite ici.
+                    {tr(
+                      "La fenêtre sécurisée de Paddle, notre prestataire, vous propose PayPal ; vous revenez ensuite ici.",
+                      "The secure window of Paddle, our provider, offers you PayPal; you then come back here.",
+                    )}
                   </p>
                   <p className="err" role="alert">
                     {payErr}
                   </p>
                   <button className="btn wide paypal" type="button" disabled={busy} onClick={() => void pay(false)}>
-                    Continuer avec PayPal
+                    {tr("Continuer avec PayPal", "Continue with PayPal")}
                   </button>
                 </div>
               )}
             </div>
             <p className="secure">
               <Lock />
-              Paiement chiffré, traité par notre prestataire de paiement. Nous ne voyons jamais votre numéro de carte.
+              {tr(
+                "Paiement chiffré, traité par notre prestataire de paiement. Nous ne voyons jamais votre numéro de carte.",
+                "Encrypted payment, handled by our payment provider. We never see your card number.",
+              )}
             </p>
           </section>
           <aside className="summary">
-            <p className="md">Récapitulatif</p>
+            <p className="md">{tr("Récapitulatif", "Summary")}</p>
             <p className="sumplan">{names[plan]}</p>
             <div className="sumline">
-              <span>{bill === "an" ? "Prix par mois, payé à l’année" : "Prix par mois"}</span>
+              <span>{bill === "an" ? tr("Prix par mois, payé à l’année", "Price a month, billed yearly") : tr("Prix par mois", "Price a month")}</span>
               <b>{per}</b>
             </div>
             <div className="sumline">
-              <span>Aujourd’hui</span>
+              <span>{tr("Aujourd’hui", "Today")}</span>
               <b>{trial ? money(0) : total}</b>
             </div>
             <div className="sumline total">
-              <span>{trial ? `À partir du ${trialEnd}` : "Ensuite"}</span>
+              <span>{trial ? tr(`À partir du ${trialEnd}`, `From ${trialEnd}`) : tr("Ensuite", "Then")}</span>
               <b>
                 {total}
-                {bill === "an" ? " / an" : " / mois"}
+                {bill === "an" ? tr(" / an", " / year") : tr(" / mois", " / month")}
               </b>
             </div>
             <ul>
@@ -617,8 +672,11 @@ export function PaiementPage() {
             </ul>
             <p className="md">
               {trial
-                ? `Essai de 14 jours : rien n’est prélevé avant le ${trialEnd}. Annulable à tout moment d’ici là, sans frais.`
-                : "Sans engagement : l’abonnement s’arrête à la fin de la période payée."}
+                ? tr(
+                    `Essai de 14 jours : rien n’est prélevé avant le ${trialEnd}. Annulable à tout moment d’ici là, sans frais.`,
+                    `14-day trial: nothing is charged before ${trialEnd}. Cancel any time before then, free of charge.`,
+                  )
+                : tr("Sans engagement : l’abonnement s’arrête à la fin de la période payée.", "No commitment: the subscription ends at the end of the paid period.")}
             </p>
           </aside>
         </div>
