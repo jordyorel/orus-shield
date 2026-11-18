@@ -46,6 +46,12 @@ dashboard: per-domain exclusions, team, latest scans; subscription), plus `profi
 MFA, password, devices, activity). Code lives in `web/src/ui/` (`model.ts` maps API data to
 the mockup's vocabulary). Offers are named Gratuit / Essentiel / Pro / Sur devis (plan IDs
 discovery, sme, pro, enterprise) with the prices of package `plan`, not the mockup's.
+UX additions agreed on 2026-11-18 (beyond the mockup): the same check failing on several names is
+one problem line (`groupIssues`), fixed in one gesture; ticking says it starts a verification and the
+line then shows its verdict ("Vérification en cours…", "Confirmé", "Toujours présent au contrôle de
+…", `OrgProvider.watchFixes`); Aujourd'hui and each domain in Actifs show the last and next scan with
+"Scanner maintenant" (`ScanLine`); the top bar shows a running scan and the offer (trial days left,
+or Gratuit with the way to the trial); alert email links open Problèmes on the finding (`?id=`).
 Anything without a real source (WhatsApp, data leaks, payment providers, public domain test,
 Monday summary, deep profile, invoices, account deletion, regenerating recovery codes) stays
 in place, greyed, with a "Bientôt" badge: never simulated. Backend for it (migration 0016):
@@ -370,7 +376,11 @@ webhook is late or lost; it never overwrites a subscription a webhook already re
 (`ProviderUpdate.OnlyIfNew`), and another organization's transaction is not found. The checkout
 also records its transaction (`pending_checkouts`, migration 0027, two days): while no paid offer
 is in force, `GET /subscription` (every dashboard load) syncs the latest one, so the trial starts
-even without the return page (inline checkout) or the webhook. Webhooks still drive everything after. In development without a tunnel, Paddle's webhooks cannot reach the API:
+even without the return page (inline checkout) or the webhook. Webhooks still drive everything after.
+When an offer gains monitoring (a webhook or a sync moves the organization off Gratuit),
+`startMonitoring` queues a full scan of each verified domain with the offer's modules (requested
+by "paddle") and, when no schedule was chosen, sets a weekly one (Saturday, 2:00 in the
+organization's time zone), changeable in Réglages. In development without a tunnel, Paddle's webhooks cannot reach the API:
 replay them from Paddle once it is up. Deleting an organization here cancels nothing at Paddle.
 A checkout while a Paddle subscription runs is refused (409): it would charge twice;
 changing the offer of a running subscription is not built yet. An offer chosen on Tarifs before

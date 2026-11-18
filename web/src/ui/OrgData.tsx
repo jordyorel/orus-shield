@@ -7,7 +7,7 @@ import type { Activity, Check, Finding, FindingStatus, Me, Membership, OrgAsset,
 import { useAuth } from "../auth";
 import { fallback } from "../messages";
 import { navigate } from "../router";
-import { toAssets, toIssues, type AssetView, type Issue } from "./model";
+import { toAssets, toIssues, type AssetView, type Issue, type Verdict } from "./model";
 
 export interface OrgData {
   overview: Overview;
@@ -33,7 +33,20 @@ interface OrgCtx {
   /** setStatus changes a finding's status and updates the lists in place. */
   setStatus: (issue: Issue, status: FindingStatus) => Promise<void>;
   setSettings: (s: OrgSettings) => void;
+  /** verdicts: what the verification scans said, by "targetId/findingId". */
+  verdicts: Record<string, Verdict>;
+  /** watchFixes follows the verification scans of problems just marked
+   * fixed, then records their verdict (confirmed, or still there). */
+  watchFixes: (list: Issue[]) => void;
+  /** forgetVerdicts drops the verdicts of problems reopened by hand. */
+  forgetVerdicts: (list: Issue[]) => void;
+  /** scanning: a scan of one of the domains is queued or running. */
+  scanning: boolean;
 }
+
+/** How long a verification is followed, and how often. */
+const WATCH_MS = 5 * 60_000;
+const WATCH_EVERY = 4000;
 
 const Ctx = createContext<OrgCtx | null>(null);
 
@@ -126,6 +139,66 @@ export function OrgProvider({ me, org, children }: { me: Me; org: Membership; ch
 
   const setSettings = useCallback((s: OrgSettings) => setData((d) => (d ? { ...d, settings: s } : d)), []);
 
+  const [verdicts, setVerdicts] = useState<Record<string, Verdict>>({});
+  const keyOf = (i: Issue) => i.targetId + "/" + i.id;
+  const watchFixes = useCallback(
+    (list: Issue[]) => {
+      if (!list.length) return;
+      setVerdicts((v) => ({ ...v, ...Object.fromEntries(list.map((i) => [keyOf(i), { state: "checking" } as Verdict])) }));
+      const targets = new Set(list.map((i) => i.targetId));
+      const modules = new Set(list.map((i) => i.moduleId));
+      const end = Date.now() + WATCH_MS;
+      // The API queues the verification scan before answering: it is in the
+      // list at the first look, and the verdict comes once it is done.
+      const look = async () => {
+        let busy = true;
+        try {
+          const sc = await api.scans(org.org_id);
+          busy = sc.items.some((s) => targets.has(s.target_id) && (s.status === "queued" || s.status === "running") && s.modules.some((m) => modules.has(m)));
+        } catch {
+          // A missed look: try again.
+        }
+        if (busy && Date.now() < end) {
+          setTimeout(() => void look(), WATCH_EVERY);
+          return;
+        }
+        let fresh: OrgData;
+        try {
+          fresh = await load(org.org_id);
+        } catch {
+          setVerdicts((v) => ({ ...v, ...Object.fromEntries(list.map((i) => [keyOf(i), { state: "late" } as Verdict])) }));
+          return;
+        }
+        setData(fresh);
+        const at = new Date().toISOString();
+        setVerdicts((v) => {
+          const next = { ...v };
+          for (const i of list) {
+            const f = fresh.findings.find((x) => x.id === i.id && x.target_id === i.targetId);
+            next[keyOf(i)] = busy ? { state: "late" } : f && f.status === "open" ? { state: "still", at } : { state: "confirmed" };
+          }
+          return next;
+        });
+      };
+      setTimeout(() => void look(), 1500);
+    },
+    [org.org_id],
+  );
+  const forgetVerdicts = useCallback((list: Issue[]) => {
+    setVerdicts((v) => {
+      const next = { ...v };
+      for (const i of list) delete next[keyOf(i)];
+      return next;
+    });
+  }, []);
+  const scanning = !!data?.scans.some((s) => s.status === "queued" || s.status === "running");
+  // A scan under way: reload now and then, so results appear by themselves.
+  useEffect(() => {
+    if (!scanning) return;
+    const t = setInterval(() => void reload(), 15000);
+    return () => clearInterval(t);
+  }, [scanning, reload]);
+
   const value = useMemo<OrgCtx>(() => {
     const issues = data ? toIssues(data.findings, data.assets) : [];
     return {
@@ -139,8 +212,12 @@ export function OrgProvider({ me, org, children }: { me: Me; org: Membership; ch
       reload,
       setStatus,
       setSettings,
+      verdicts,
+      watchFixes,
+      forgetVerdicts,
+      scanning,
     };
-  }, [me, org, data, error, reload, setStatus, setSettings]);
+  }, [me, org, data, error, reload, setStatus, setSettings, verdicts, watchFixes, forgetVerdicts, scanning]);
 
   return <Ctx value={value}>{children}</Ctx>;
 }

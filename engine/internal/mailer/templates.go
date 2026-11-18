@@ -203,11 +203,11 @@ func plural(n int) string {
 	return ""
 }
 
-// FindingsLink is the dashboard's vulnerabilities page, optionally on one
-// finding.
+// FindingsLink is the dashboard's Problèmes page, optionally on one finding
+// (the page opens its sheet).
 func FindingsLink(publicURL, orgID, findingID string) string {
-	// The path is the dashboard's French route for the vulnerabilities screen (nav.tsx).
-	u := strings.TrimRight(publicURL, "/") + "/orgs/" + url.PathEscape(orgID) + "/vulnerabilites" //nolint:misspell // French route name, not a typo
+	// The dashboard's route for the Problèmes tab (web/src/App.tsx).
+	u := strings.TrimRight(publicURL, "/") + "/orgs/" + url.PathEscape(orgID) + "/problemes"
 	if findingID != "" {
 		u += "?id=" + url.QueryEscape(findingID)
 	}
@@ -334,9 +334,10 @@ Vous recevez cet email parce que vous êtes administrateur de « %s ».
 	}
 }
 
-// ScansLink is the dashboard's scans page of an organization.
+// ScansLink is the dashboard's Actifs page, where each domain shows its
+// last and next scan.
 func ScansLink(publicURL, orgID string) string {
-	return strings.TrimRight(publicURL, "/") + "/orgs/" + url.PathEscape(orgID) + "/scans"
+	return strings.TrimRight(publicURL, "/") + "/orgs/" + url.PathEscape(orgID) + "/actifs"
 }
 
 // FirstScanFigures are the figures of a first scan's summary.

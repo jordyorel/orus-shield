@@ -13,6 +13,9 @@ interface UI {
   openPal: () => void;
   theme: "light" | "dark";
   setTheme: (t: "light" | "dark") => void;
+  /** wide: the side sheet is shown large (kept for the next sheets). */
+  wide: boolean;
+  toggleWide: () => void;
 }
 
 const Ctx = createContext<UI | null>(null);
@@ -100,16 +103,19 @@ export function UIProvider({ children }: { children: ReactNode }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [closeAll]);
 
+  const [wide, setWide] = useState(false);
+  const toggleWide = useCallback(() => setWide((w) => !w), []);
+
   const value = useMemo<UI>(
-    () => ({ toast, showSheet, closeAll, sheetOpen, palOpen, openPal, theme, setTheme }),
-    [toast, showSheet, closeAll, sheetOpen, palOpen, openPal, theme, setTheme],
+    () => ({ toast, showSheet, closeAll, sheetOpen, palOpen, openPal, theme, setTheme, wide, toggleWide }),
+    [toast, showSheet, closeAll, sheetOpen, palOpen, openPal, theme, setTheme, wide, toggleWide],
   );
 
   return (
     <Ctx value={value}>
       {children}
       <div className={"scrim" + (sheetOpen || palOpen ? " on" : "")} onClick={closeAll} />
-      <aside ref={sheetRef} className={"sheet" + (sheetOpen ? " on" : "")} role="dialog" aria-modal="true" aria-labelledby="sheet-title" aria-hidden={!sheetOpen}>
+      <aside ref={sheetRef} className={"sheet" + (sheetOpen ? " on" : "") + (wide ? " wide" : "")} role="dialog" aria-modal="true" aria-labelledby="sheet-title" aria-hidden={!sheetOpen}>
         {stack.length > 1 && (
           <button className="back" type="button" onClick={back}>
             <Arrow />

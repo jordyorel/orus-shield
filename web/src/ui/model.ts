@@ -420,3 +420,73 @@ export function initials(name: string, email: string): string {
 export function money(v: number): string {
   return `${v} $`;
 }
+
+/**
+ * IssueGroup is one problem as the customer sees it: the same check failing
+ * on several names of a domain (the root and www, one certificate) is one
+ * line, fixed in one gesture. lead is the member shown (the first open one,
+ * most severe).
+ */
+export interface IssueGroup {
+  key: string;
+  lead: Issue;
+  members: Issue[];
+  hosts: string[];
+  /** fixed: every member is done (fixed or accepted). */
+  fixed: boolean;
+  /** gain: the points its open members win (all of them once done). */
+  gain: number;
+}
+
+export function groupIssues(issues: Issue[]): IssueGroup[] {
+  const by = new Map<string, Issue[]>();
+  for (const i of issues) {
+    const k = `${i.targetId}/${i.finding.check_id}/${i.title}`;
+    const list = by.get(k);
+    if (list) list.push(i);
+    else by.set(k, [i]);
+  }
+  return [...by].map(([key, members]) => {
+    const sorted = members.slice().sort((a, b) => Number(a.fixed) - Number(b.fixed) || byPriority(a, b));
+    const open = sorted.filter((m) => !m.fixed);
+    return {
+      key,
+      lead: sorted[0]!,
+      members: sorted,
+      hosts: [...new Set(sorted.map((m) => m.host))],
+      fixed: open.length === 0,
+      gain: (open.length ? open : sorted).reduce((s, m) => s + m.gain, 0),
+    };
+  });
+}
+
+/** hostsText names a group's hosts: "a, b" or "a, b et 3 autres". */
+export function hostsText(hosts: string[]): string {
+  if (hosts.length <= 2) return hosts.join(", ");
+  const more = hosts.length - 2;
+  return `${hosts[0]}, ${hosts[1]} et ${more} autre${more > 1 ? "s" : ""}`;
+}
+
+/** Verdict is what the verification scan said after a problem was marked fixed. */
+export type Verdict = { state: "checking" } | { state: "confirmed" } | { state: "still"; at: string } | { state: "late" };
+
+/** groupVerdict sums up its members' verdicts: still beats checking beats confirmed. */
+export function groupVerdict(members: Issue[], verdicts: Record<string, Verdict>): Verdict | undefined {
+  const vs = members.map((m) => verdicts[m.targetId + "/" + m.id]).filter((v): v is Verdict => v !== undefined);
+  if (!vs.length) return undefined;
+  return vs.find((v) => v.state === "still") ?? vs.find((v) => v.state === "checking") ?? vs.find((v) => v.state === "late") ?? vs[0];
+}
+
+/** verdictText words a verdict for the problem lines. */
+export function verdictText(v: Verdict): string {
+  switch (v.state) {
+    case "checking":
+      return "Vérification en cours…";
+    case "confirmed":
+      return "Confirmé par le contrôle";
+    case "still":
+      return `Toujours présent au contrôle de ${new Date(v.at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`;
+    case "late":
+      return "Vérification en attente : le résultat arrivera ici";
+  }
+}

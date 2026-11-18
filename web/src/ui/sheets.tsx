@@ -5,7 +5,7 @@
 import { useState } from "react";
 import { api, ApiError } from "../api/client";
 import type { Scan } from "../api/types";
-import { Close, NavIcon, Tick } from "./icons";
+import { Close, Expand, NavIcon, Shrink, Tick } from "./icons";
 import { CATS, RANK, SEV, STATE_LABEL, catState, evaluatedCats, worst, type Issue, type SevOrOk } from "./model";
 import { Link } from "../router";
 import { useOrg } from "./OrgData";
@@ -67,12 +67,18 @@ export function UpsellSheet({ what }: { what: "fix" | "scan" }) {
   );
 }
 
+/** CloseButton ends a sheet's header: the "see it large" toggle, then close. */
 export function CloseButton() {
-  const { closeAll } = useUI();
+  const { closeAll, wide, toggleWide } = useUI();
   return (
-    <button className="iconbtn" type="button" data-close aria-label="Fermer" onClick={closeAll}>
-      <Close />
-    </button>
+    <span className="sheetbtns">
+      <button className="iconbtn" type="button" aria-pressed={wide} aria-label={wide ? "Réduire" : "Agrandir"} title={wide ? "Réduire" : "Agrandir"} onClick={toggleWide}>
+        {wide ? <Shrink /> : <Expand />}
+      </button>
+      <button className="iconbtn" type="button" data-close aria-label="Fermer" onClick={closeAll}>
+        <Close />
+      </button>
+    </span>
   );
 }
 
@@ -90,24 +96,34 @@ export async function waitScan(orgId: string, scanId: string, limitMs = 180_000)
   return null;
 }
 
-/** useFix marks a problem fixed or reopens it, with the mockup's toasts. */
+/** useFix marks a problem fixed or reopens it, with the mockup's toasts. A
+ * group (the same problem on several names) is fixed in one gesture. Marked
+ * fixed, it is followed until its verification scan says whether it is gone
+ * (OrgProvider.watchFixes). */
 export function useFix() {
-  const { setStatus, isAdmin, data } = useOrg();
+  const { setStatus, isAdmin, data, watchFixes, forgetVerdicts } = useOrg();
   const { toast, showSheet } = useUI();
-  return async (i: Issue) => {
+  return async (target: Issue | Issue[]) => {
+    const all = Array.isArray(target) ? target : [target];
     if (!isAdmin) {
       toast("Réservé aux administrateurs");
       return;
     }
-    const fixing = !i.fixed;
+    const fixing = !all.every((i) => i.fixed);
     // A fix is verified by a scan: after the free audit, that needs an offer.
     if (fixing && data && !data.subscription.plan.monitoring) {
       showSheet(<UpsellSheet what="fix" />);
       return;
     }
-    toast(fixing ? `Marqué comme corrigé : +${i.gain} points` : "Rouvert");
+    // Fixing: the open ones. Reopening: those marked fixed (an accepted
+    // risk stays the customer's decision, reopened from its own sheet).
+    const list = all.filter((i) => (fixing ? !i.fixed : i.fixed && !i.accepted));
+    const gain = list.reduce((s, i) => s + i.gain, 0);
+    toast(fixing ? `Marqué comme corrigé : +${gain} points, vérification en cours` : "Rouvert");
     try {
-      await setStatus(i, fixing ? "fixed" : "open");
+      for (const i of list) await setStatus(i, fixing ? "fixed" : "open");
+      if (fixing) watchFixes(list);
+      else forgetVerdicts(list);
     } catch (e) {
       if (isAuditUsed(e)) showSheet(<UpsellSheet what="fix" />);
       else toast(e instanceof ApiError && e.status === 403 ? "Réservé aux administrateurs" : "Impossible pour le moment, réessayez");
@@ -248,6 +264,7 @@ export function FindingSheet({ id, targetId }: { id: string; targetId: string })
           Copier
         </button>
       </div>
+      {!i.fixed && <p className="hint">Une fois corrigé, dites-le-nous : un contrôle part aussitôt pour le confirmer, et votre score se met à jour.</p>}
       <div className="actions sticky">
         <button
           className={"btn" + (st.length && done === st.length && !i.fixed ? " ready" : "")}
@@ -258,7 +275,7 @@ export function FindingSheet({ id, targetId }: { id: string; targetId: string })
             void fix(i);
           }}
         >
-          {i.fixed ? "Rouvrir" : "Marquer comme corrigé"}
+          {i.fixed ? "Rouvrir" : "J’ai corrigé : vérifier"}
         </button>
         <button className="btn ghost" type="button" disabled={checking} onClick={() => void recheck()}>
           {checking ? (

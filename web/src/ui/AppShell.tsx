@@ -32,8 +32,37 @@ function NavLinks({ orgId, current }: { orgId: string; current: string }) {
   );
 }
 
+/** daysLeft counts the whole days until iso, at least 0. */
+function daysLeft(iso: string, now = Date.now()): number {
+  return Math.max(0, Math.ceil((new Date(iso).getTime() - now) / 86_400_000));
+}
+
+/** OfferChip shows the offer in force in the top bar: a running trial and
+ * its days left, or Gratuit and the way to the trial. */
+function OfferChip() {
+  const { org, data } = useOrg();
+  if (!data) return null;
+  const sub = data.subscription;
+  if (!sub.plan.monitoring) {
+    return (
+      <Link className="topchip free" to={appPath(org.org_id, "offre")}>
+        Gratuit · Essayer 14 jours
+      </Link>
+    );
+  }
+  if (sub.status === "trialing" && sub.until) {
+    const n = daysLeft(sub.until);
+    return (
+      <Link className="topchip" to={appPath(org.org_id, "reglages")}>
+        Essai {sub.plan.name} : {n} jour{n > 1 ? "s" : ""} restant{n > 1 ? "s" : ""}
+      </Link>
+    );
+  }
+  return null;
+}
+
 export function AppShell({ view, children }: { view: string; children: ReactNode }) {
-  const { me, org } = useOrg();
+  const { me, org, scanning } = useOrg();
   const { openPal, theme, setTheme } = useUI();
 
   useEffect(() => {
@@ -68,6 +97,13 @@ export function AppShell({ view, children }: { view: string; children: ReactNode
               <Logo />
               <span>Orus Shield</span>
             </Link>
+            {scanning && (
+              <span className="topchip scanning" role="status">
+                <span className="spin" aria-hidden="true" />
+                Scan en cours
+              </span>
+            )}
+            <OfferChip />
             <button className="search" id="open-pal" type="button" onClick={openPal}>
               <Search />
               Rechercher <kbd>Ctrl K</kbd>

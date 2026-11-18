@@ -104,8 +104,8 @@ func TestDeliversAlerts(t *testing.T) {
 	}
 	for _, want := range []string{
 		"[Critique] Certificate has expired", "[Élevée] No DMARC record (de retour",
-		"https://app.example/orgs/org-1/vulnerabilites?id=f1", "... et 1 autre.",
-		"https://app.example/orgs/org-1/vulnerabilites\n", "administrateur de « Acme »",
+		"https://app.example/orgs/org-1/problemes?id=f1", "... et 1 autre.",
+		"https://app.example/orgs/org-1/problemes\n", "administrateur de « Acme »",
 	} {
 		if !strings.Contains(msg.Text, want) {
 			t.Errorf("body misses %q:\n%s", want, msg.Text)
@@ -165,7 +165,7 @@ func TestDeliversEmergingThreats(t *testing.T) {
 	for _, want := range []string{
 		"[Critique] CVE-2026-6279 : Avada - Unauthenticated RCE", "concerne : wordpress",
 		"catalogue CISA KEV", "sous 30 jours : 42 %", "[Élevée] Plugin - SQL injection",
-		"Cela ne veut pas dire que vous êtes vulnérable", "https://app.example/orgs/org-1/scans",
+		"Cela ne veut pas dire que vous êtes vulnérable", "https://app.example/orgs/org-1/actifs",
 	} {
 		if !strings.Contains(msg.Text, want) {
 			t.Errorf("body misses %q:\n%s", want, msg.Text)

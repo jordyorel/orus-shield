@@ -80,6 +80,19 @@ export const Close = () => (
   </svg>
 );
 
+/** Expand and Shrink: the side sheet's "see it large" toggle. */
+export const Expand = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" />
+  </svg>
+);
+
+export const Shrink = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M20 10h-6V4M4 14h6v6M14 10l7-7M10 14l-7 7" />
+  </svg>
+);
+
 export const Lock = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
     <rect x="5" y="11" width="14" height="9" rx="2" />

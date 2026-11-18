@@ -3,9 +3,10 @@ import type { Activity } from "../../api/types";
 import { Link, navigate } from "../../router";
 import { appPath } from "../AppShell";
 import { Tick } from "../icons";
-import { COLOR, DIST, byPriority, feedDay, worst, type AssetView, type Issue } from "../model";
+import { COLOR, DIST, byPriority, feedDay, groupIssues, groupVerdict, hostsText, verdictText, worst, type AssetView, type Issue, type IssueGroup } from "../model";
 import { useOrg } from "../OrgData";
 import { AssetSheet, FindingSheet, useFix } from "../sheets";
+import { ScanLine } from "../ScanLine";
 import { useUI } from "../ui";
 import { AddPanel } from "./Actifs";
 
@@ -262,14 +263,9 @@ function writeOnboard(orgId: string, v: "shown" | "closed") {
 /** finished: the first scan is done; the card shows every step ticked, the
  * first figures and the way to the results (onDone). */
 function Onboarding({ finished = false, onDone }: { finished?: boolean; onDone?: () => void }) {
-  const { org, data, isAdmin, reload, issues } = useOrg();
+  const { org, data, isAdmin, issues } = useOrg();
+  // While a scan runs, OrgProvider reloads now and then: the screen fills by itself.
   const { scanning, failed } = data ? firstScan(data) : { scanning: false, failed: false };
-  // A scan running: reload now and then, so the screen fills by itself.
-  useEffect(() => {
-    if (!scanning) return;
-    const t = setInterval(() => void reload(), 15000);
-    return () => clearInterval(t);
-  }, [scanning, reload]);
   if (!data) return null;
   const domains = data.targets.filter((t) => !t.internal);
   const added = domains.length > 0;
@@ -379,7 +375,7 @@ function FreeBand() {
 }
 
 export function AujourdhuiPage() {
-  const { me, org, data, issues, assets } = useOrg();
+  const { me, org, data, issues, assets, verdicts } = useOrg();
   const { showSheet } = useUI();
   const fix = useFix();
   const [onboard, setOnboard] = useState(() => readOnboard(org.org_id));
@@ -396,17 +392,18 @@ export function AujourdhuiPage() {
   const chosen = useRef<string[] | null>(null);
   if (!data) return null;
   const now = new Date();
-  const keyOf = (i: { targetId: string; id: string }) => i.targetId + "/" + i.id;
-  if (!chosen.current || chosen.current.some((k) => !issues.some((i) => keyOf(i) === k))) {
-    chosen.current = issues
-      .filter((i) => !i.fixed)
-      .sort(byPriority)
+  // One action per problem: the same check on several names is one group.
+  const groups = groupIssues(issues);
+  if (!chosen.current || chosen.current.some((k) => !groups.some((g) => g.key === k))) {
+    chosen.current = groups
+      .filter((g) => !g.fixed)
+      .sort((a, b) => byPriority(a.lead, b.lead))
       .slice(0, 3)
-      .map(keyOf);
+      .map((g) => g.key);
   }
   const ids = chosen.current;
-  const top = ids.map((k) => issues.find((i) => keyOf(i) === k)).filter((i): i is Issue => i !== undefined);
-  const left = top.filter((i) => !i.fixed).length;
+  const top = ids.map((k) => groups.find((g) => g.key === k)).filter((g): g is IssueGroup => g !== undefined);
+  const left = top.filter((g) => !g.fixed).length;
   const head =
     top.length === 0
       ? "Rien à corriger pour l’instant."
@@ -466,34 +463,40 @@ export function AujourdhuiPage() {
         <div>
           <p className="hello">{first ? `Bonjour ${first}` : "Bonjour"}</p>
           <h1 className="lead">{head}</h1>
+          <ScanLine targets={data.targets.filter((t) => !t.internal)} />
           <div className="section">
             <div className="rhead">
               <h2>À faire aujourd’hui</h2>
               <span className="dots big3" id="todo-prog" role="img" aria-label={`${top.length - left} actions faites sur ${top.length}`}>
-                {top.map((i) => (
-                  <i key={i.targetId + i.id} className={i.fixed ? "on" : ""} />
+                {top.map((g) => (
+                  <i key={g.key} className={g.fixed ? "on" : ""} />
                 ))}
               </span>
             </div>
-            <p className="hint">Classé par ce qui vous protège le plus, le plus vite.</p>
+            <p className="hint">Classé par ce qui vous protège le plus, le plus vite. Cochez quand c’est corrigé : nous vérifions aussitôt.</p>
             <ul className="todo">
-              {top.map((i) => (
-                <li key={i.targetId + i.id} className={i.fixed ? "done" : ""}>
-                  <button className="check" type="button" aria-pressed={i.fixed} aria-label={`Marquer « ${i.title} » comme fait`} onClick={() => void fix(i)}>
-                    <Tick size={20} width={3} />
-                  </button>
-                  <div>
-                    <p className="t">{i.title}</p>
-                    <p className="m">
-                      {i.host}, environ {i.mins} min ·{" "}
-                      <button className="link" type="button" style={{ minHeight: 0 }} onClick={() => showSheet(<FindingSheet id={i.id} targetId={i.targetId} />)}>
-                        Comment faire
-                      </button>
-                    </p>
-                  </div>
-                  <span className="gain">+{i.gain} pts</span>
-                </li>
-              ))}
+              {top.map((g) => {
+                const i = g.lead;
+                const v = groupVerdict(g.members, verdicts);
+                return (
+                  <li key={g.key} className={g.fixed ? "done" : ""}>
+                    <button className="check" type="button" aria-pressed={g.fixed} aria-label={`Marquer « ${i.title} » comme fait`} onClick={() => void fix(g.members)}>
+                      <Tick size={20} width={3} />
+                    </button>
+                    <div>
+                      <p className="t">{i.title}</p>
+                      <p className="m">
+                        {hostsText(g.hosts)}, environ {i.mins} min ·{" "}
+                        <button className="link" type="button" style={{ minHeight: 0 }} onClick={() => showSheet(<FindingSheet id={i.id} targetId={i.targetId} />)}>
+                          Comment faire
+                        </button>
+                      </p>
+                      {v && <p className={"verdict v-" + v.state}>{verdictText(v)}</p>}
+                    </div>
+                    <span className="gain">+{g.gain} pts</span>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </div>

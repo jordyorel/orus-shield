@@ -252,7 +252,91 @@ describe("dashboard", () => {
       fireEvent.click(check);
     });
     expect(calls.find((c) => c.key.startsWith("PUT"))?.body).toEqual({ status: "fixed" });
-    await waitFor(() => expect(screen.getByText("Marqué comme corrigé : +9 points")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Marqué comme corrigé : +9 points, vérification en cours")).toBeTruthy());
+  });
+
+  describe("problems, scans and verification", () => {
+    const tlsAt = (id: string, asset: string): Finding => ({
+      ...dmarc, id, module_id: "tls", check_id: "tls-cert-untrusted", asset, title: "Certificate is not trusted by browsers", severity: "high",
+    });
+    const two = { [`GET /orgs/${ORG}/findings`]: ok({ items: [tlsAt("c1", "example.cg:443"), tlsAt("c2", "www.example.cg:443")] }) };
+
+    it("shows the same problem on two names as one line, fixed in one gesture", async () => {
+      const calls = orgRoutes({
+        ...two,
+        [`PUT /orgs/${ORG}/targets/t1/findings/c1/status`]: () => ({ status: 204 }),
+        [`PUT /orgs/${ORG}/targets/t1/findings/c2/status`]: () => ({ status: 204 }),
+      });
+      renderAt(`/orgs/${ORG}/problemes`);
+      const checks = await screen.findAllByRole("button", { name: "Marquer « Certificate is not trusted by browsers » comme corrigé" });
+      expect(checks).toHaveLength(1);
+      expect(screen.getByText("example.cg, www.example.cg")).toBeTruthy();
+      expect(screen.getByText(/nous relançons aussitôt un contrôle/)).toBeTruthy();
+      await act(async () => {
+        fireEvent.click(checks[0]!);
+      });
+      await waitFor(() => expect(calls.filter((c) => c.key.startsWith("PUT")).map((c) => c.key)).toHaveLength(2));
+    });
+
+    it("follows the verification and says when the problem is still there", async () => {
+      let scans = 0;
+      let after = false;
+      orgRoutes({
+        [`GET /orgs/${ORG}/findings`]: () => ({ status: 200, json: { items: [{ ...dmarc, status: after ? "open" : "open" }] } }),
+        [`PUT /orgs/${ORG}/targets/t1/findings/f1/status`]: () => {
+          after = true;
+          return { status: 204 };
+        },
+        [`GET /orgs/${ORG}/scans?limit=20`]: () => {
+          scans++;
+          const running = after && scans < 3;
+          return { status: 200, json: { items: running ? [{ id: "v1", target_id: "t1", domain: "example.cg", modules: ["email"], requested_by: "u", status: "running", attempts: 1, created_at: "", started_at: "", finished_at: null }] : [] } };
+        },
+      });
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        renderAt(`/orgs/${ORG}/problemes`);
+        const check = await screen.findByRole("button", { name: "Marquer « No DMARC record » comme corrigé" });
+        await act(async () => {
+          fireEvent.click(check);
+        });
+        expect(await screen.findByText("Vérification en cours…")).toBeTruthy();
+        await vi.advanceTimersByTimeAsync(12_000);
+        expect(await screen.findByText(/Toujours présent au contrôle de/)).toBeTruthy();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("says when the domains were scanned, and scans now", async () => {
+      const calls = orgRoutes({
+        [`GET /orgs/${ORG}/scans?limit=20`]: ok({ items: [{ id: "s1", target_id: "t1", domain: "example.cg", modules: [], requested_by: "u", status: "done", attempts: 1, created_at: "", started_at: "", finished_at: new Date().toISOString() }] }),
+        [`POST /orgs/${ORG}/targets/t1/scans`]: ok({ id: "s2", target_id: "t1", domain: "example.cg", modules: [], requested_by: "u", status: "queued", attempts: 0, created_at: "", started_at: null, finished_at: null }),
+      });
+      renderAt(`/orgs/${ORG}/aujourdhui`);
+      expect(await screen.findByText(/Dernier scan : aujourd’hui à/)).toBeTruthy();
+      expect(screen.getByText(/Aucun scan planifié/)).toBeTruthy();
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Scanner maintenant" }));
+      });
+      expect(calls.some((c) => c.key === `POST /orgs/${ORG}/targets/t1/scans`)).toBe(true);
+    });
+
+    it("shows a sheet large on demand, and keeps it so", async () => {
+      orgRoutes();
+      renderAt(`/orgs/${ORG}/problemes?id=f1`);
+      fireEvent.click(await screen.findByRole("button", { name: "Agrandir" }));
+      expect(document.querySelector(".sheet.wide")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Réduire" }));
+      expect(document.querySelector(".sheet.wide")).toBeNull();
+    });
+
+    it("shows the trial's days left, and opens a problem from an email link", async () => {
+      orgRoutes();
+      renderAt(`/orgs/${ORG}/problemes?id=f1`);
+      expect(await screen.findByRole("link", { name: /Essai Essentiel : \d+ jours? restants?/ })).toBeTruthy();
+      expect(await screen.findByRole("heading", { name: "No DMARC record" })).toBeTruthy();
+    });
   });
 
   describe("after the free audit", () => {

@@ -5,6 +5,7 @@ import { Tick } from "../icons";
 import { CATS, DOMAIN_RE, RANK, catState, evaluatedCats, worst } from "../model";
 import { useOrg } from "../OrgData";
 import { AssetSheet, SevTag } from "../sheets";
+import { ScanLine } from "../ScanLine";
 import { useUI } from "../ui";
 
 const RETRY_MS = 30_000;
@@ -256,6 +257,16 @@ export function ActifsPage() {
           {assets.length} sur {cap} inclus dans l’offre {p.name}
         </span>
       </div>
+      <ul className="domlines" aria-label="Vos domaines">
+        {data.targets
+          .filter((t) => !t.internal)
+          .map((t) => (
+            <li key={t.id}>
+              <b>{t.domain}</b>
+              {t.verified ? <ScanLine targets={[t]} /> : <span className="hint">À vérifier : ajoutez son enregistrement TXT plus bas.</span>}
+            </li>
+          ))}
+      </ul>
       <div className="filters" role="group" aria-label="Filtrer les actifs">
         {(
           [
