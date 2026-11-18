@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Check, Finding, OrgAsset, Target } from "../api/types";
-import { catState, device, evaluatedCats, feedDay, hostOf, initials, money, pwScore, scoreVerdict, strongChecks, toAssets, toIssues, weakChecks, weekly, worst } from "./model";
+import { catState, device, evaluatedCats, feedDay, hostOf, initials, money, pwScore, progressOf, progressText, scoreVerdict, strongChecks, toAssets, toIssues, weakChecks, weekly, worst } from "./model";
 
 const asset = (kind: OrgAsset["kind"], value: string, details: Record<string, string> = {}, domain = "example.cg"): OrgAsset => ({
   target_id: "t1",
@@ -196,5 +196,45 @@ describe("the score explained", () => {
       ["Vos emails", ["Enregistrement DMARC publié", "SPF publié"]],
       ["Vos sites web", ["Redirection vers HTTPS"]],
     ]);
+  });
+});
+
+describe("progress", () => {
+  const now = new Date("2026-11-18T12:00:00Z");
+  const fixed = (id: string, at: string, over: Partial<Finding> = {}) => finding({ id, status: "fixed", fixed_at: at, ...over });
+
+  it("counts the problem lines fixed in the last 30 days and the score since", () => {
+    const issues = toIssues(
+      [
+        fixed("f1", "2026-11-10T00:00:00Z"),
+        fixed("f2", "2026-11-11T00:00:00Z", { asset: "shop.example.cg" }), // same check, another name: one line
+        fixed("f3", "2026-11-12T00:00:00Z", { check_id: "spf-missing", title: "No SPF" }),
+        fixed("f4", "2026-09-01T00:00:00Z", { check_id: "old", title: "Old" }), // before the period
+        finding({ id: "f5", check_id: "tls", title: "TLS" }), // open
+      ],
+      [],
+    );
+    const trend = [
+      { at: "2026-10-01T00:00:00Z", score: 55 },
+      { at: "2026-10-15T00:00:00Z", score: 61 }, // the last score known when the period began
+      { at: "2026-11-01T00:00:00Z", score: null },
+      { at: "2026-11-17T00:00:00Z", score: 83 },
+    ];
+    const p = progressOf(issues, trend, 83, now);
+    expect(p).toEqual({ fixed: 2, from: 61, to: 83, sinceFirst: false });
+    expect(progressText(p!)).toBe("Ces 30 derniers jours, vous avez corrigé 2 problèmes. Votre score est passé de 61 à 83.");
+  });
+
+  it("counts from the first scan for a young organization, and says a drop plainly", () => {
+    const p = progressOf([], [{ at: "2026-11-10T00:00:00Z", score: 80 }], 72, now);
+    expect(p).toEqual({ fixed: 0, from: 80, to: 72, sinceFirst: true });
+    expect(progressText(p!)).toBe(
+      "Depuis votre premier scan, aucun problème corrigé pour l’instant. Votre score est descendu de 80 à 72 : de nouveaux points faibles sont apparus.",
+    );
+  });
+
+  it("shows nothing before any score", () => {
+    expect(progressOf([], [{ at: "2026-11-10T00:00:00Z", score: null }], null, now)).toBeNull();
+    expect(progressOf([], [], 70, now)).toBeNull();
   });
 });

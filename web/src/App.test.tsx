@@ -292,7 +292,10 @@ describe("dashboard", () => {
     expect(screen.getByText("Plus qu’une action pour aujourd’hui.")).toBeTruthy();
     expect(screen.getAllByText("No DMARC record").length).toBeGreaterThan(0);
     expect(screen.getByText("+9 pts")).toBeTruthy();
-    expect(screen.getByText("74")).toBeTruthy();
+    expect(document.querySelector("#score-num")?.textContent).toBe("74");
+    // Progress: the score 30 days ago (the last one known then) against today's.
+    expect(screen.getByText("60 → 74")).toBeTruthy();
+    expect(screen.getByText("Ces 30 derniers jours, aucun problème corrigé pour l’instant. Votre score est passé de 60 à 74.")).toBeTruthy();
   });
 
   it("explains the score: what lowers it and what is fine", async () => {

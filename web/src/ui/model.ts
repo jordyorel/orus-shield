@@ -651,3 +651,55 @@ export function strongChecks(checks: Check[]): { total: number; groups: StrongGr
   groups.sort((a, b) => b.titles.length - a.titles.length || a.label.localeCompare(b.label));
   return { total: passed.length, groups };
 }
+
+// Progress on Aujourd'hui: what the customer achieved lately, the reason
+// to stay after the trial. Over the last 30 days rather than the calendar
+// month, which would be nearly empty on its first days.
+
+export const PROGRESS_DAYS = 30;
+
+export interface Progress {
+  /** fixed: problem lines fixed in the period (as Problèmes counts them). */
+  fixed: number;
+  /** from, to: the score at the start of the period and now. */
+  from: number | null;
+  to: number | null;
+  /** sinceFirst: the organization is younger than the period, so it
+   * counts from its first scored day. */
+  sinceFirst: boolean;
+}
+
+/** progressOf sums up the last PROGRESS_DAYS days, or null before any
+ * score exists (nothing to compare). */
+export function progressOf(issues: Issue[], trend: { at: string; score: number | null }[], score: number | null, now: Date): Progress | null {
+  const start = now.getTime() - PROGRESS_DAYS * 86400000;
+  const points = trend.filter((p) => p.score !== null).sort((a, b) => a.at.localeCompare(b.at));
+  if (!points.length || score === null) return null;
+  // The score when the period began: the last one known by then (scans can
+  // be days apart), else the first ever, for an organization younger than
+  // the period.
+  const before = points.filter((p) => new Date(p.at).getTime() <= start);
+  const sinceFirst = before.length === 0;
+  const inPeriod = before[before.length - 1] ?? points[0]!;
+  const fixedLately = issues.filter((i) => i.finding.status === "fixed" && i.finding.fixed_at && new Date(i.finding.fixed_at).getTime() >= start);
+  return { fixed: groupIssues(fixedLately).length, from: inPeriod.score, to: score, sinceFirst };
+}
+
+/** progressText words a Progress in one or two sentences. */
+export function progressText(p: Progress): string {
+  const when = p.sinceFirst ? tr("Depuis votre premier scan", "Since your first scan") : tr(`Ces ${PROGRESS_DAYS} derniers jours`, `Over the last ${PROGRESS_DAYS} days`);
+  const fixed =
+    p.fixed === 0
+      ? tr("aucun problème corrigé pour l’instant", "no problem fixed yet")
+      : tr(`vous avez corrigé ${p.fixed} problème${p.fixed > 1 ? "s" : ""}`, `you fixed ${p.fixed} problem${p.fixed > 1 ? "s" : ""}`);
+  let score = "";
+  if (p.from !== null && p.to !== null) {
+    score =
+      p.to > p.from
+        ? tr(` Votre score est passé de ${p.from} à ${p.to}.`, ` Your score went from ${p.from} to ${p.to}.`)
+        : p.to < p.from
+          ? tr(` Votre score est descendu de ${p.from} à ${p.to} : de nouveaux points faibles sont apparus.`, ` Your score went down from ${p.from} to ${p.to}: new weak points appeared.`)
+          : tr(` Votre score reste à ${p.to}.`, ` Your score stays at ${p.to}.`);
+  }
+  return `${when}, ${fixed}.${score}`;
+}

@@ -57,7 +57,9 @@ French or English, sent by the customer through `mailto:` or `wa.me`, or copied;
 browser before their click); under the radar, the score in one sentence (`scoreVerdict`: level and
 weak points), a legend of the dots, and "Comprendre mon score" (`ScoreSheet`: how it is computed,
 the failed checks that lower it with their points, the passed checks by category, all from the
-engine's check statuses, `weakChecks` / `strongChecks`).
+engine's check statuses, `weakChecks` / `strongChecks`); "Vos progrès" on Aujourd'hui (`progressOf`:
+problem lines fixed in the last 30 days, from `fixed_at`, and the score then, the last one known
+at the period's start, against today's).
 Anything without a real source (WhatsApp, data leaks, payment providers, public domain test,
 Monday summary, deep profile, invoices, account deletion, regenerating recovery codes) stays
 in place, greyed, with a "Bientôt" badge: never simulated. Backend for it (migration 0016):

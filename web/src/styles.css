@@ -515,6 +515,7 @@ body.pay main{max-width:1120px;padding:0 18px 48px}
 .stats3 div{padding:12px 0}.stats3 div+div{padding-left:14px;border-left:1px solid var(--line)}
 .stats3 small{display:block;font-size:12px;color:var(--ink2)}
 .stats3 b{font-family:'Bricolage Grotesque Variable',sans-serif;font-size:17px}
+.progress3 b{font-size:26px}
 .stepline{height:3px;border-radius:2px;background:var(--soft);margin-top:8px;overflow:hidden}
 .stepline b{display:block;height:100%;background:var(--lagon);border-radius:2px;transition:width .4s cubic-bezier(.2,.8,.2,1)}
 .steps{list-style:none;padding:0;margin:6px 0 0}

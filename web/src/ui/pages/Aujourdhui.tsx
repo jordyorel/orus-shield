@@ -3,7 +3,7 @@ import type { Activity } from "../../api/types";
 import { Link, navigate } from "../../router";
 import { appPath } from "../AppShell";
 import { Tick } from "../icons";
-import { COLOR, DIST, byPriority, feedDay, groupIssues, groupVerdict, hostsText, scoreVerdict, verdictText, weakChecks, worst, type AssetView, type Issue, type IssueGroup } from "../model";
+import { COLOR, DIST, byPriority, feedDay, groupIssues, groupVerdict, hostsText, progressOf, progressText, scoreVerdict, verdictText, weakChecks, worst, type AssetView, type Issue, type IssueGroup } from "../model";
 import { tr } from "../../i18n";
 import { localTitle } from "../lang";
 import { useOrg } from "../OrgData";
@@ -479,6 +479,7 @@ export function AujourdhuiPage() {
           : tr(`${left} actions vous séparent d’un périmètre plus sûr.`, `${left} actions stand between you and a safer perimeter.`);
   const first = me.name.split(/\s+/)[0];
   const score = data.overview.score;
+  const progress = progressOf(issues, data.overview.trend, score, now);
   // The first scan just finished under the customer's eyes: the card's
   // closing screen, until they move on to the results.
   if (!beforeFirstScan && onboard === "shown") {
@@ -582,6 +583,31 @@ export function AujourdhuiPage() {
           <RadarLegend />
         </div>
       </div>
+      {progress && (
+        <div className="section">
+          <div className="rhead">
+            <h2>{tr("Vos progrès", "Your progress")}</h2>
+            <Link className="link" to={appPath(org.org_id, "rapports")}>
+              {tr("Voir l’évolution", "See the trend")}
+            </Link>
+          </div>
+          <div className="stats3 progress3">
+            <div>
+              <small>{tr("Problèmes corrigés", "Problems fixed")}</small>
+              <b>{progress.fixed}</b>
+            </div>
+            <div>
+              <small>{tr("Score", "Score")}</small>
+              <b>{progress.from !== null && progress.from !== progress.to ? `${progress.from} → ${progress.to}` : progress.to}</b>
+            </div>
+            <div>
+              <small>{tr("Problèmes ouverts", "Open problems")}</small>
+              <b>{groups.filter((g) => !g.fixed).length}</b>
+            </div>
+          </div>
+          <p className="hint">{progressText(progress)}</p>
+        </div>
+      )}
       <div className="section">
         <h2>{tr("Depuis votre dernière visite", "Since your last visit")}</h2>
         {data.activity.length ? (
