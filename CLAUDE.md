@@ -415,8 +415,9 @@ organization's time zone), changeable in Réglages. In development without a tun
 replay them from Paddle once it is up. Deleting an organization here cancels nothing at Paddle.
 A checkout while a Paddle subscription runs is refused (409): it would charge twice;
 changing the offer of a running subscription is not built yet. An offer chosen on Tarifs before
-signup is kept in the browser and opens its payment when the new admin first reaches /app. "Voir les factures"
-opens Paddle's customer portal (`POST /orgs/{org}/billing/portal`). `orusctl org plan` still
+signup is kept in the browser and opens its payment when the new admin first reaches /app. "Factures et paiement"
+(Réglages > Abonnement) opens Paddle's customer portal in a new tab (`POST /orgs/{org}/billing/portal`:
+invoices, card, cancellation; Paddle, the merchant of record, keeps the invoices). `orusctl org plan` still
 works for contracts.
 
 Emerging threats: the worker indexes the critical and high CVE templates of

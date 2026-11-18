@@ -686,6 +686,30 @@ describe("dashboard", () => {
     });
   });
 
+  it("opens Paddle's portal in a new tab, cut from the dashboard", async () => {
+    const tab = { opener: {} as unknown, location: { href: "" }, close: vi.fn() };
+    const open = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+    orgRoutes({ [`GET /orgs/${ORG}/members`]: ok({ items: [] }), [`POST /orgs/${ORG}/billing/portal`]: ok({ url: "https://customer-portal.paddle.com/x" }) });
+    renderAt(`/orgs/${ORG}/reglages?s=abonnement`);
+    fireEvent.click(await screen.findByRole("button", { name: /Factures et paiement/ }));
+    expect(open).toHaveBeenCalledWith("", "_blank");
+    expect(tab.opener).toBeNull();
+    await waitFor(() => expect(tab.location.href).toBe("https://customer-portal.paddle.com/x"));
+    expect(tab.close).not.toHaveBeenCalled();
+    open.mockRestore();
+  });
+
+  it("closes the portal's tab when there is nothing to show", async () => {
+    const tab = { opener: null, location: { href: "" }, close: vi.fn() };
+    const open = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+    orgRoutes({ [`GET /orgs/${ORG}/members`]: ok({ items: [] }), [`POST /orgs/${ORG}/billing/portal`]: fail(404, "no online subscription") });
+    renderAt(`/orgs/${ORG}/reglages?s=abonnement`);
+    fireEvent.click(await screen.findByRole("button", { name: /Factures et paiement/ }));
+    await waitFor(() => expect(tab.close).toHaveBeenCalled());
+    expect(await screen.findByText(/Pas encore de facture/)).toBeTruthy();
+    open.mockRestore();
+  });
+
   it("shows a canceled subscription's end, never a next charge", async () => {
     const canceled: Subscription = { ...subscription, status: "canceled" };
     orgRoutes({ [`GET /orgs/${ORG}/members`]: ok({ items: [] }) }, canceled);

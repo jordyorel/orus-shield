@@ -209,6 +209,32 @@ export function ReglagesPage() {
             : !plan.monitoring
               ? tr("Votre audit est fait. La surveillance continue commence avec l’offre Essentiel.", "Your audit is done. Continuous monitoring starts with the Essential plan.")
               : "";
+  // "Factures et paiement" opens Paddle's customer portal, where Paddle,
+  // the merchant of record, keeps the invoices, the card and the
+  // cancellation. In a new tab, so the dashboard stays open. The tab is
+  // opened at the click (a window opened after a network wait is taken for
+  // a pop-up and blocked), cut from this page (opener), then sent to the
+  // portal once our API has its one-time link; closed if that fails.
+  const openPortal = () => {
+    const tab = window.open("", "_blank");
+    if (tab) tab.opener = null;
+    api.billingPortal(org.org_id).then(
+      (r) => {
+        if (tab) tab.location.href = r.url;
+        else window.location.assign(r.url); // pop-ups refused: this tab, as before
+      },
+      (e: unknown) => {
+        tab?.close();
+        toast(
+          e instanceof ApiError && e.status === 404
+            ? tr("Pas encore de facture : vous ne payez pas en ligne pour l’instant", "No invoice yet: you are not paying online for now")
+            : e instanceof ApiError && e.status === 403
+              ? tr("Réservé aux administrateurs", "Administrators only")
+              : tr("Factures indisponibles pour le moment", "Invoices unavailable right now"),
+        );
+      },
+    );
+  };
   const monthStart = new Date();
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
@@ -538,28 +564,16 @@ export function ReglagesPage() {
                 <Link className="btn" to={`/paiement?offre=${plan.id === "pro" ? "pro" : "sme"}&org=${encodeURIComponent(org.org_id)}`}>
                   {plan.monitoring ? tr("Changer d’offre", "Change plan") : tr("Essayer Essentiel 14 jours", "Try Essential for 14 days")}
                 </Link>
-                <button
-                  className="btn ghost"
-                  type="button"
-                  onClick={() =>
-                    void api.billingPortal(org.org_id).then(
-                      (r) => window.location.assign(r.url),
-                      (e: unknown) =>
-                        toast(
-                          e instanceof ApiError && e.status === 404
-                            ? tr("Pas encore de facture : vous ne payez pas en ligne pour l’instant", "No invoice yet: you are not paying online for now")
-                            : e instanceof ApiError && e.status === 403
-                              ? tr("Réservé aux administrateurs", "Administrators only")
-                              : tr("Factures indisponibles pour le moment", "Invoices unavailable right now"),
-                        ),
-                    )
-                  }
-                >
-                  {tr("Voir les factures", "See the invoices")}
+                <button className="btn ghost" type="button" onClick={openPortal}>
+                  {tr("Factures et paiement", "Invoices and payment")}
+                  <span className="vh">{tr(" (s’ouvre dans un nouvel onglet)", " (opens in a new tab)")}</span>
                 </button>
                 <p className="paynote">
                   <Lock size={14} />
-                  {tr("Carte ou PayPal, paiement sécurisé par Paddle.", "Card or PayPal, secure payment by Paddle.")}
+                  {tr(
+                    "S’ouvre sur Paddle, notre revendeur : factures, carte, annulation.",
+                    "Opens on Paddle, our reseller: invoices, card, cancellation.",
+                  )}
                 </p>
               </div>
             </div>
