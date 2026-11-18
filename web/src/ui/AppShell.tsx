@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { labeled, tr } from "../i18n";
 import { Link, navigate } from "../router";
-import { Logo, Moon, NavIcon, Search } from "./icons";
+import { Fold, Logo, Moon, NavIcon, Search } from "./icons";
 import { initials } from "./model";
 import { useOrg } from "./OrgData";
 import { FindingSheet } from "./sheets";
@@ -20,17 +20,49 @@ export const NAV: [string, string][] = [
 
 export const appPath = (orgId: string, view: string) => `/orgs/${encodeURIComponent(orgId)}/${view}`;
 
-function NavLinks({ orgId, current }: { orgId: string; current: string }) {
+/** The sections of Réglages (?s=), "scans" being the default. */
+export type SettingsSection = "scans" | "domaines" | "alertes" | "equipe" | "abonnement" | "apparence";
+
+/** settingsPath is the address of one section of Réglages. */
+export function settingsPath(orgId: string, s: SettingsSection): string {
+  return appPath(orgId, "reglages") + (s === "scans" ? "" : "?s=" + s);
+}
+
+/** NavLinks are the tabs. folded: the rail shows icons only, so each name
+ * moves to a tooltip (the link keeps it as its accessible name). */
+function NavLinks({ orgId, current, folded = false }: { orgId: string; current: string; folded?: boolean }) {
   return (
     <>
       {NAV.map(([k, l]) => (
-        <Link key={k} to={appPath(orgId, k)} data-nav={k} aria-current={k === current ? "page" : undefined}>
+        <Link key={k} to={appPath(orgId, k)} data-nav={k} aria-current={k === current ? "page" : undefined} title={folded ? l : undefined}>
           <NavIcon name={k} />
-          {l}
+          <span className="navl">{l}</span>
         </Link>
       ))}
     </>
   );
+}
+
+// The rail folds to its icons (desktop). The choice is this browser's
+// convenience only: kept in localStorage, and the rail opens unfolded
+// when storage is unavailable.
+const RAIL_KEY = "orus.rail";
+
+function readFolded(): boolean {
+  try {
+    return window.localStorage.getItem(RAIL_KEY) === "folded";
+  } catch {
+    return false;
+  }
+}
+
+function writeFolded(folded: boolean) {
+  try {
+    if (folded) window.localStorage.setItem(RAIL_KEY, "folded");
+    else window.localStorage.removeItem(RAIL_KEY);
+  } catch {
+    // Private window: kept for this page only.
+  }
 }
 
 /** daysLeft counts the whole days until iso, at least 0. */
@@ -54,7 +86,7 @@ function OfferChip() {
   if (sub.status === "trialing" && sub.until) {
     const n = daysLeft(sub.until);
     return (
-      <Link className="topchip" to={appPath(org.org_id, "reglages")}>
+      <Link className="topchip" to={settingsPath(org.org_id, "abonnement")}>
         {tr(`Essai ${sub.plan.name} : ${n} jour${n > 1 ? "s" : ""} restant${n > 1 ? "s" : ""}`, `${sub.plan.name} trial: ${n} day${n !== 1 ? "s" : ""} left`)}
       </Link>
     );
@@ -65,6 +97,7 @@ function OfferChip() {
 export function AppShell({ view, children }: { view: string; children: ReactNode }) {
   const { me, org, scanning } = useOrg();
   const { openPal, theme, setTheme } = useUI();
+  const [folded, setFolded] = useState(readFolded);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -85,12 +118,30 @@ export function AppShell({ view, children }: { view: string; children: ReactNode
 
   return (
     <>
-      <div className="shell">
+      <div className={"shell" + (folded ? " railmin" : "")}>
         <nav className="rail" aria-label="Navigation" id="rail">
           <Link className="logo" to="/" aria-label={tr("Orus Shield, aller à l’accueil", "Orus Shield, go to the home page")}>
             <Logo size={30} />
+            <span className="railname" aria-hidden="true">
+              Orus Shield
+            </span>
           </Link>
-          <NavLinks orgId={org.org_id} current={view} />
+          <NavLinks orgId={org.org_id} current={view} folded={folded} />
+          <button
+            className="railtoggle"
+            type="button"
+            aria-controls="rail"
+            aria-expanded={!folded}
+            title={folded ? tr("Déplier le menu", "Expand the menu") : undefined}
+            onClick={() => {
+              writeFolded(!folded);
+              setFolded(!folded);
+            }}
+          >
+            <Fold />
+            <span>{folded ? tr("Déplier le menu", "Expand the menu") : tr("Réduire le menu", "Collapse the menu")}</span>
+          </button>
+        
         </nav>
         <div>
           <header className="top">

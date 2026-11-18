@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Activity } from "../../api/types";
 import { Link, navigate } from "../../router";
-import { appPath } from "../AppShell";
+import { appPath, settingsPath } from "../AppShell";
 import { Tick } from "../icons";
 import { COLOR, DIST, byPriority, feedDay, groupIssues, groupVerdict, hostsText, progressOf, progressText, scoreVerdict, verdictText, weakChecks, worst, type AssetView, type Issue, type IssueGroup } from "../model";
 import { tr } from "../../i18n";
@@ -402,7 +402,7 @@ function Onboarding({ finished = false, onDone }: { finished?: boolean; onDone?:
       <p className="hint">
         {finished ? tr("Et maintenant", "Now") : tr("Ensuite", "Next")}
         {tr(" : qui reçoit les alertes, et votre équipe, dans ", ": who receives the alerts, and your team, in ")}
-        <Link className="link" to={appPath(org.org_id, "reglages")}>
+        <Link className="link" to={settingsPath(org.org_id, "alertes")}>
           {tr("Réglages", "Settings")}
         </Link>
         .

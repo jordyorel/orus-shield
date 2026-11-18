@@ -59,7 +59,12 @@ weak points), a legend of the dots, and "Comprendre mon score" (`ScoreSheet`: ho
 the failed checks that lower it with their points, the passed checks by category, all from the
 engine's check statuses, `weakChecks` / `strongChecks`); "Vos progrès" on Aujourd'hui (`progressOf`:
 problem lines fixed in the last 30 days, from `fixed_at`, and the score then, the last one known
-at the period's start, against today's).
+at the period's start, against today's); Réglages in sections reached from a menu of pills, one
+at a time, each with its address (`settingsPath`, `?s=domaines|alertes|equipe|abonnement|apparence`,
+Scans by default), and its sliders drawn by us (night shown in the hour's track); Abonnement as a
+plan card (state chip, price, next date), usage tiles and the comparison with "Votre offre"; on
+desktop the rail carries the only logo and folds to its icons ("Réduire le menu", kept in
+localStorage `orus.rail`, tab names as tooltips).
 Anything without a real source (WhatsApp, data leaks, payment providers, public domain test,
 Monday summary, deep profile, invoices, account deletion, regenerating recovery codes) stays
 in place, greyed, with a "Bientôt" badge: never simulated. Backend for it (migration 0016):

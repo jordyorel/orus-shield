@@ -94,6 +94,13 @@ export const Shrink = () => (
   </svg>
 );
 
+/** Fold: the rail's "fold to icons" toggle (it turns over once folded). */
+export const Fold = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M11 17l-5-5 5-5M18 17l-5-5 5-5" />
+  </svg>
+);
+
 export const Lock = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
     <rect x="5" y="11" width="14" height="9" rx="2" />

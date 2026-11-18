@@ -2,11 +2,12 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { api, ApiError } from "../../api/client";
 import type { DeclaredAPI, Member, OrgSettings, Plan, Role, Target, TestAccount } from "../../api/types";
 import { formatExclusions, parseExclusions } from "../../exclusions";
-import { tr } from "../../i18n";
-import { Link } from "../../router";
-import { MODS, ModIcon, Soon } from "../icons";
+import { labeled, tr } from "../../i18n";
+import { Link, useLocation } from "../../router";
+import { settingsPath, type SettingsSection } from "../AppShell";
+import { Lock, MODS, ModIcon, Soon } from "../icons";
 import { CloseButton, SevTag, UpsellSheet } from "../sheets";
-import { byPriority, dayName, sinceText } from "../model";
+import { byPriority, dayName, money, sinceText } from "../model";
 import { useOrg } from "../OrgData";
 import { useUI } from "../ui";
 
@@ -73,8 +74,25 @@ function Switch({ on, label, disabled, onClick }: { on: boolean; label: string; 
   );
 }
 
+// Réglages is split into sections reached from a small menu, one at a
+// time: the page held everything at once and was too long to find one's
+// way. Each section has its address (?s=), so a link (the trial chip, an
+// email, "Réglages, Abonnement" in a text) opens it directly and the back
+// button works.
+const SECTIONS = [
+  labeled<SettingsSection>("scans", "Scans", "Scans"),
+  labeled<SettingsSection>("domaines", "Domaines", "Domains"),
+  labeled<SettingsSection>("alertes", "Alertes", "Alerts"),
+  labeled<SettingsSection>("equipe", "Équipe", "Team"),
+  labeled<SettingsSection>("abonnement", "Abonnement", "Subscription"),
+  labeled<SettingsSection>("apparence", "Apparence", "Appearance"),
+];
+
 export function ReglagesPage() {
   const { data, org, isAdmin, setSettings, issues } = useOrg();
+  const { search } = useLocation();
+  const asked = search.get("s");
+  const sec: SettingsSection = SECTIONS.some(([k]) => k === asked) ? (asked as SettingsSection) : "scans";
   const { toast, theme, setTheme, showSheet, closeAll } = useUI();
   const [preview, setPreview] = useState<{ name: string; msg: string; typing: boolean } | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -158,23 +176,39 @@ export function ReglagesPage() {
   const planCol = { discovery: 1, sme: 2, pro: 3, enterprise: 3 }[plan.id];
   const sub = data.subscription;
   const until = sub.until ? new Date(sub.until).toLocaleDateString(tr("fr-FR", "en-GB"), { day: "numeric", month: "long", year: "numeric" }) : "";
-  const price = plan.on_quote
-    ? tr("sur devis", "on quote")
+  // The plan card: price in large, its unit beside it, then what happens
+  // next (trial end, renewal, end of a cancelled subscription).
+  const [priceBig, priceUnit] = plan.on_quote
+    ? [tr("Sur devis", "On quote"), ""]
     : sub.period === "yearly"
-      ? tr(`à ${plan.usd_yearly * 12} $ par an`, `at $${plan.usd_yearly * 12} per year`)
+      ? [money(plan.usd_yearly * 12), tr("par an", "per year")]
       : plan.usd_monthly
-        ? tr(`à ${plan.usd_monthly} $ par mois`, `at $${plan.usd_monthly} per month`)
-        : tr("gratuite", "free");
-  const subLine =
+        ? [money(plan.usd_monthly), tr("par mois", "per month")]
+        : [money(0), tr("un audit offert", "one free audit")];
+  const left = sub.until ? Math.max(0, Math.ceil((new Date(sub.until).getTime() - Date.now()) / 86_400_000)) : 0;
+  const subState: [string, string] = sub.lapsed
+    ? [tr("Expirée", "Expired"), "st-bad"]
+    : sub.status === "trialing"
+      ? [tr(`Essai · ${left} jour${left > 1 ? "s" : ""} restant${left > 1 ? "s" : ""}`, `Trial · ${left} day${left !== 1 ? "s" : ""} left`), "st-warn"]
+      : sub.status === "canceled"
+        ? [tr("Annulée", "Cancelled"), "st-bad"]
+        : sub.in_grace
+          ? [tr("Paiement attendu", "Payment due"), "st-warn"]
+          : !plan.monitoring
+            ? [tr("Audit gratuit", "Free audit"), "st-mute"]
+            : [tr("Active", "Active"), "st-ok"];
+  const whenLine =
     sub.status === "trialing" && until
-      ? tr(` ${price}. Essai gratuit jusqu’au ${until}.`, ` ${price}. Free trial until ${until}.`)
+      ? tr(`Essai gratuit jusqu’au ${until}.`, `Free trial until ${until}.`)
       : sub.status === "canceled" && until && !sub.lapsed
-        ? tr(` ${price}. Abonnement annulé : il se termine le ${until}, sans nouveau prélèvement.`, ` ${price}. Subscription cancelled: it ends on ${until}, with no further charge.`)
+        ? tr(`Abonnement annulé : il se termine le ${until}, sans nouveau prélèvement.`, `Subscription cancelled: it ends on ${until}, with no further charge.`)
         : sub.in_grace && until
-          ? tr(` ${price}. Paiement attendu avant le ${until}.`, ` ${price}. Payment expected before ${until}.`)
+          ? tr(`Paiement attendu avant le ${until}.`, `Payment expected before ${until}.`)
           : until
-            ? tr(` ${price}. Prochaine échéance le ${until}.`, ` ${price}. Next renewal on ${until}.`)
-            : ` ${price}.`;
+            ? tr(`Prochaine échéance le ${until}.`, `Next renewal on ${until}.`)
+            : !plan.monitoring
+              ? tr("Votre audit est fait. La surveillance continue commence avec l’offre Essentiel.", "Your audit is done. Continuous monitoring starts with the Essential plan.")
+              : "";
   const monthStart = new Date();
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
@@ -195,6 +229,15 @@ export function ReglagesPage() {
           {tr("Réglages", "Settings")}
         </h1>
       </div>
+      <nav className="filters setnav" aria-label={tr("Sections des réglages", "Settings sections")}>
+        {SECTIONS.map(([k, l]) => (
+          <Link key={k} className="pill" to={settingsPath(org.org_id, k)} aria-current={sec === k ? "page" : undefined}>
+            {l}
+          </Link>
+        ))}
+      </nav>
+      {sec === "scans" && (
+        <>
       <div className="cover">
         <div className="covernum">
           <b id="cov-n">{active}</b>
@@ -281,7 +324,7 @@ export function ReglagesPage() {
       <div className="section">
         <h2>{tr("Quand scanner", "When to scan")}</h2>
         <div className="rpanel" style={{ marginTop: 12 }}>
-          <div className="seg2" role="group" aria-label={tr("Fréquence", "Frequency")}>
+          <div className="seg2 segfull" role="group" aria-label={tr("Fréquence", "Frequency")}>
             {(
               [
                 ["jour", tr("Chaque jour", "Every day")],
@@ -306,30 +349,62 @@ export function ReglagesPage() {
             <output id="hour-out" htmlFor="hour">
               {String(s.hour).padStart(2, "0")}:00
             </output>
-            <input id="hour" type="range" min="0" max="23" step="1" value={s.hour} onChange={(e) => save({ ...s, hour: Number(e.target.value), frequency: s.frequency || "weekly" }, 600)} />
-            <div className="clock" aria-hidden="true">
-              {Array.from({ length: 24 }, (_, h) => (
-                <i key={h} className={(h === s.hour ? "on" : "") + (h < 6 || h >= 20 ? " night" : "")} />
+            <input
+              id="hour"
+              className="hourrange"
+              type="range"
+              min="0"
+              max="23"
+              step="1"
+              value={s.hour}
+              onChange={(e) => save({ ...s, hour: Number(e.target.value), frequency: s.frequency || "weekly" }, 600)}
+            />
+            <div className="ticks" aria-hidden="true">
+              {[0, 6, 12, 18, 23].map((h) => (
+                <span key={h} style={{ "--at": h / 23 } as CSSProperties}>
+                  {h} h
+                </span>
               ))}
             </div>
-            <small>{tr("Les heures foncées sont la nuit : c’est là que le scan gêne le moins.", "The dark hours are night time: that is when the scan disturbs least.")}</small>
+            <small>
+              {s.hour < 6 || s.hour >= 20
+                ? tr("De nuit : c’est là que le scan gêne le moins.", "At night: that is when the scan disturbs least.")
+                : tr("En journée : la partie foncée de la barre est la nuit, où le scan gêne le moins.", "In the daytime: the dark part of the bar is night, when the scan disturbs least.")}
+            </small>
           </div>
           <div className="slide">
             <label htmlFor="rate">{tr("Vitesse du scan", "Scan speed")}</label>
             <output id="rate-out" htmlFor="rate">
+              <span className="pulse" id="pulse" aria-hidden="true" style={{ "--spd": (3.2 - rate / 80).toFixed(2) + "s" } as CSSProperties}>
+                {Array.from({ length: 5 }, (_, i) => (
+                  <i key={i} />
+                ))}
+              </span>
               {tr(`${rate} requêtes par seconde`, `${rate} requests per second`)}
             </output>
-            <input id="rate" type="range" min="5" max="200" step="5" value={rate} onChange={(e) => save({ ...s, rate_per_sec: Number(e.target.value) }, 600)} />
-            <div className="pulse" id="pulse" aria-hidden="true" style={{ "--spd": (3.2 - rate / 80).toFixed(2) + "s" } as CSSProperties}>
-              {Array.from({ length: 7 }, (_, i) => (
-                <i key={i} />
-              ))}
+            <input
+              id="rate"
+              type="range"
+              min="5"
+              max="200"
+              step="5"
+              value={rate}
+              style={{ "--fill": (rate - 5) / 195 } as CSSProperties}
+              onChange={(e) => save({ ...s, rate_per_sec: Number(e.target.value) }, 600)}
+            />
+            <div className="ticks ends" aria-hidden="true">
+              <span>{tr("Doux", "Gentle")}</span>
+              <span>{tr("Rapide", "Fast")}</span>
             </div>
             <small id="rate-hint">{rateHint(rate)}</small>
           </div>
         </div>
       </div>
 
+        </>
+      )}
+
+      {sec === "alertes" && (
       <div className="section">
         <h2>{tr("Comment on vous prévient", "How we alert you")}</h2>
         <div className="rpanel" style={{ marginTop: 12 }}>
@@ -408,6 +483,9 @@ export function ReglagesPage() {
         </div>
       </div>
 
+      )}
+
+      {sec === "apparence" && (
       <div className="section">
         <h2>{tr("Apparence", "Appearance")}</h2>
         <div className="themes" role="group" aria-label={tr("Thème", "Theme")}>
@@ -429,81 +507,115 @@ export function ReglagesPage() {
         </div>
       </div>
 
-      <Domains targets={data.targets.filter((t) => !t.internal)} />
-      <Team />
-      <ScanHistory />
+      )}
 
-      <div className="section">
-        <h2>{tr("Abonnement", "Subscription")}</h2>
-        <div className="rpanel" style={{ marginTop: 12 }}>
-          <p>
-            <b style={{ fontFamily: "'Bricolage Grotesque Variable',sans-serif", fontSize: 22 }}>{tr(`Offre ${plan.name}`, `${plan.name} plan`)}</b>
-            <span style={{ color: "var(--ink2)" }}>{subLine}</span>
-          </p>
-          <div className="prog" style={{ marginTop: 16 }}>
-            {prog.map(([n, a, b]) => (
-              <div key={n}>
-                <div>
-                  <span>{n}</span>
-                  <span style={{ color: "var(--ink2)" }}>{b ? tr(`${a} sur ${b}`, `${a} of ${b}`) : tr(`${a}, sans limite`, `${a}, no limit`)}</span>
+      {sec === "domaines" && (
+        <>
+          <Domains targets={data.targets.filter((t) => !t.internal)} />
+          <ScanHistory />
+        </>
+      )}
+      {sec === "equipe" && <Team />}
+
+      {sec === "abonnement" && (
+        <>
+          <div className="section">
+            <h2>{tr("Abonnement", "Subscription")}</h2>
+            <div className="rpanel plancard" style={{ marginTop: 12 }}>
+              <div className="planmain">
+                <p className="plankicker">{tr("Votre offre", "Your plan")}</p>
+                <div className="planname">
+                  <b>{plan.id === "sme" ? tr("Essentiel", "Essential") : plan.id === "discovery" ? tr("Gratuit", "Free") : plan.name}</b>
+                  <span className={"stchip " + subState[1]}>{subState[0]}</span>
                 </div>
-                <div className="bar" style={{ marginTop: 6, height: 4 }}>
-                  <b style={{ width: (b ? Math.min(100, (a / b) * 100) : 0) + "%", background: "var(--azur)" }} />
-                </div>
+                <p className="planprice">
+                  <b>{priceBig}</b>
+                  {priceUnit && <span>{priceUnit}</span>}
+                </p>
+                <p className="planwhen">{whenLine}</p>
               </div>
-            ))}
+              <div className="planacts">
+                <Link className="btn" to={`/paiement?offre=${plan.id === "pro" ? "pro" : "sme"}&org=${encodeURIComponent(org.org_id)}`}>
+                  {plan.monitoring ? tr("Changer d’offre", "Change plan") : tr("Essayer Essentiel 14 jours", "Try Essential for 14 days")}
+                </Link>
+                <button
+                  className="btn ghost"
+                  type="button"
+                  onClick={() =>
+                    void api.billingPortal(org.org_id).then(
+                      (r) => window.location.assign(r.url),
+                      (e: unknown) =>
+                        toast(
+                          e instanceof ApiError && e.status === 404
+                            ? tr("Pas encore de facture : vous ne payez pas en ligne pour l’instant", "No invoice yet: you are not paying online for now")
+                            : e instanceof ApiError && e.status === 403
+                              ? tr("Réservé aux administrateurs", "Administrators only")
+                              : tr("Factures indisponibles pour le moment", "Invoices unavailable right now"),
+                        ),
+                    )
+                  }
+                >
+                  {tr("Voir les factures", "See the invoices")}
+                </button>
+                <p className="paynote">
+                  <Lock size={14} />
+                  {tr("Carte ou PayPal, paiement sécurisé par Paddle.", "Card or PayPal, secure payment by Paddle.")}
+                </p>
+              </div>
+            </div>
           </div>
-          <div className="actions">
-            <Link className="btn" to={`/paiement?offre=${plan.id === "pro" ? "pro" : "sme"}&org=${encodeURIComponent(org.org_id)}`}>
-              {tr("Changer d’offre", "Change plan")}
-            </Link>
-            <button
-              className="btn ghost"
-              type="button"
-              onClick={() =>
-                void api.billingPortal(org.org_id).then(
-                  (r) => window.location.assign(r.url),
-                  (e: unknown) =>
-                    toast(
-                      e instanceof ApiError && e.status === 404
-                        ? tr("Pas encore de facture : vous ne payez pas en ligne pour l’instant", "No invoice yet: you are not paying online for now")
-                        : e instanceof ApiError && e.status === 403
-                          ? tr("Réservé aux administrateurs", "Administrators only")
-                          : tr("Factures indisponibles pour le moment", "Invoices unavailable right now"),
-                    ),
-                )
-              }
-            >
-              {tr("Voir les factures", "See the invoices")}
-            </button>
+
+          <div className="section">
+            <h2>{tr("Utilisation", "Usage")}</h2>
+            <div className="usage">
+              {prog.map(([n, a, b]) => {
+                const pct = b ? Math.min(100, (a / b) * 100) : 0;
+                return (
+                  <div key={n} className="usetile">
+                    <small>{n}</small>
+                    <p>
+                      <b>{a}</b>
+                      <span>{b ? tr(`sur ${b}`, `of ${b}`) : tr("sans limite", "no limit")}</span>
+                    </p>
+                    <div className="usebar" aria-hidden="true">
+                      <b style={{ width: (b ? pct : 100) + "%" }} className={!b ? "free" : pct >= 90 ? "full" : ""} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          <p className="sub" style={{ marginTop: 14 }}>
-            {tr("Paiement par carte ou PayPal, avec Paddle.", "Payment by card or PayPal, with Paddle.")}
-          </p>
-          <div style={{ overflowX: "auto", marginTop: 18 }}>
-            <table className={"limits plan" + planCol}>
-              <thead>
-                <tr>
-                  <th scope="col">{tr("Comparer les offres", "Compare the plans")}</th>
-                  <th scope="col">{tr("Gratuit", "Free")}</th>
-                  <th scope="col">{tr("Essentiel", "Essential")}</th>
-                  <th scope="col">Pro</th>
-                </tr>
-              </thead>
-              <tbody>
-                {limitRows(sub.plans).map(([name, ...cells]) => (
-                  <tr key={name}>
-                    <th scope="row">{name}</th>
-                    {cells.map((c, i) => (
-                      <td key={i}>{c}</td>
+
+          <div className="section">
+            <h2>{tr("Comparer les offres", "Compare the plans")}</h2>
+            <div className="rpanel" style={{ marginTop: 12, overflowX: "auto" }}>
+              <table className={"limits plan" + planCol}>
+                <thead>
+                  <tr>
+                    <th scope="col" />
+                    {[tr("Gratuit", "Free"), tr("Essentiel", "Essential"), "Pro"].map((n, i) => (
+                      <th key={n} scope="col">
+                        {n}
+                        {planCol === i + 1 && <span className="youtag">{tr("Votre offre", "Your plan")}</span>}
+                      </th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {limitRows(sub.plans).map(([name, ...cells]) => (
+                    <tr key={name}>
+                      <th scope="row">{name}</th>
+                      {cells.map((c, i) => (
+                        <td key={i}>{c}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </>
   );
 }

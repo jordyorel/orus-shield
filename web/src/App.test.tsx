@@ -298,6 +298,32 @@ describe("dashboard", () => {
     expect(screen.getByText("Ces 30 derniers jours, aucun problème corrigé pour l’instant. Votre score est passé de 60 à 74.")).toBeTruthy();
   });
 
+  it("folds the rail to its icons, and remembers it", async () => {
+    // The test environment has no localStorage: an in-memory one.
+    const mem = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => mem.get(k) ?? null,
+      setItem: (k: string, v: string) => void mem.set(k, v),
+      removeItem: (k: string) => void mem.delete(k),
+    });
+    orgRoutes();
+    const { unmount } = renderAt(`/orgs/${ORG}/aujourdhui`);
+    const fold = await screen.findByRole("button", { name: "Réduire le menu" });
+    expect(fold.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(fold);
+    expect(document.querySelector(".shell.railmin")).toBeTruthy();
+    // Folded, each tab keeps its name as a tooltip.
+    expect(document.querySelector('#rail a[data-nav="problemes"]')?.getAttribute("title")).toBe("Problèmes");
+    unmount();
+    renderAt(`/orgs/${ORG}/aujourdhui`);
+    const unfold = await screen.findByRole("button", { name: "Déplier le menu" });
+    expect(document.querySelector(".shell.railmin")).toBeTruthy();
+    fireEvent.click(unfold);
+    expect(document.querySelector(".shell.railmin")).toBeNull();
+    expect(mem.size).toBe(0);
+    vi.unstubAllGlobals();
+  });
+
   it("explains the score: what lowers it and what is fine", async () => {
     const checks = [
       { target_id: "t1", id: "email-dmarc", title: "DMARC record published", module: "email", category: "email", severity: "high", status: "failed", findings: 1, evaluated_at: "" },
@@ -564,11 +590,18 @@ describe("dashboard", () => {
 
   it("saves Réglages for the organization", async () => {
     const calls = orgRoutes({ [`PUT /orgs/${ORG}/settings`]: (b) => ({ status: 200, json: b }), [`GET /orgs/${ORG}/members`]: ok({ items: [] }) });
-    renderAt(`/orgs/${ORG}/reglages`);
+    renderAt(`/orgs/${ORG}/reglages?s=alertes`);
     fireEvent.click(await screen.findByRole("button", { name: "Critique seulement" }));
     await waitFor(() => expect(calls.some((c) => c.key === `PUT /orgs/${ORG}/settings`)).toBe(true));
     expect((calls.find((c) => c.key === `PUT /orgs/${ORG}/settings`)?.body as OrgSettings).alert_level).toBe("critical");
-    expect(screen.getByText(/Offre Essentiel/)).toBeTruthy();
+    // Each section is one link away in the menu.
+    fireEvent.click(screen.getByRole("link", { name: "Abonnement" }));
+    expect(await screen.findByText(/Essai gratuit jusqu’au/)).toBeTruthy();
+    expect(screen.getByText(/^Essai · \d+ jours? restants?$/)).toBeTruthy();
+    // The comparison marks the plan in force.
+    expect(screen.getByText("Votre offre", { selector: ".youtag" }).closest("th")?.textContent).toBe("EssentielVotre offre");
+    expect(screen.queryByRole("button", { name: "Critique seulement" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Abonnement" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByText(/Essai gratuit jusqu’au/)).toBeTruthy();
   });
 
@@ -656,7 +689,7 @@ describe("dashboard", () => {
   it("shows a canceled subscription's end, never a next charge", async () => {
     const canceled: Subscription = { ...subscription, status: "canceled" };
     orgRoutes({ [`GET /orgs/${ORG}/members`]: ok({ items: [] }) }, canceled);
-    renderAt(`/orgs/${ORG}/reglages`);
+    renderAt(`/orgs/${ORG}/reglages?s=abonnement`);
     expect(await screen.findByText(/Abonnement annulé : il se termine le/)).toBeTruthy();
     expect(screen.queryByText(/Prochaine échéance/)).toBeNull();
   });
@@ -693,7 +726,7 @@ describe("dashboard", () => {
       },
       pro,
     );
-    renderAt(`/orgs/${ORG}/reglages`);
+    renderAt(`/orgs/${ORG}/reglages?s=domaines`);
     fireEvent.click(await screen.findByRole("button", { name: "Ajouter une API" }));
     fireEvent.change(screen.getByLabelText("Nom"), { target: { value: "Clients" } });
     fireEvent.change(screen.getByLabelText("Adresse de base de l’API"), { target: { value: "https://api.example.cg/v1" } });
@@ -717,7 +750,7 @@ describe("dashboard", () => {
       },
       pro,
     );
-    renderAt(`/orgs/${ORG}/reglages`);
+    renderAt(`/orgs/${ORG}/reglages?s=domaines`);
     fireEvent.click(await screen.findByRole("button", { name: "Ajouter un compte de test" }));
     fireEvent.change(screen.getByLabelText(/Valeur \(par exemple/), { target: { value: "Bearer s3cret" } });
     fireEvent.click(screen.getByRole("button", { name: "Enregistrer le compte de test" }));
