@@ -326,6 +326,7 @@ func TestPendingCheckoutSync(t *testing.T) {
 	orgID = a.orgID
 	base := "/api/v1/orgs/" + a.orgID
 	e.setPlan(a.orgID, plan.Subscription{Plan: plan.Discovery, Status: plan.Active})
+	e.verifyTarget(a.session, a.orgID, a.target.ID) // the free audit is used: nothing queued
 
 	if r := e.do("POST", base+"/checkout", a.session, checkoutRequest{Plan: "sme", Period: "yearly"}); r.status != http.StatusOK {
 		t.Fatalf("checkout = %d %s", r.status, r.body)
@@ -341,6 +342,23 @@ func TestPendingCheckoutSync(t *testing.T) {
 	e.do("GET", base+"/subscription", a.session, nil).json(t, &sub)
 	if sub.Plan.ID != plan.SME || sub.Status != "trialing" || sub.Period != "yearly" {
 		t.Errorf("after payment = %+v, want Essentiel trialing yearly", sub)
+	}
+	// What the customer bought starts at once: a full scan of the verified
+	// domain, and a weekly schedule since none was chosen.
+	var scans list[scanJSON]
+	e.do("GET", base+"/targets/"+a.target.ID+"/scans", a.session, nil).json(t, &scans)
+	if len(scans.Items) == 0 || scans.Items[0].Status != "queued" || scans.Items[0].RequestedBy != "paddle" {
+		t.Errorf("scans after the trial started = %+v, want one queued by paddle", scans.Items)
+	}
+	var settings orgSettingsJSON
+	e.do("GET", base+"/settings", a.session, nil).json(t, &settings)
+	if settings.Frequency != "weekly" || settings.Weekday != 6 || settings.Hour != 2 {
+		t.Errorf("settings after the trial started = %+v, want weekly, Saturday 2:00", settings)
+	}
+	var tg targetJSON
+	e.do("GET", base+"/targets/"+a.target.ID, a.session, nil).json(t, &tg)
+	if tg.Schedule == nil {
+		t.Error("the domain got no schedule")
 	}
 	// Applied once: the pending checkout is forgotten.
 	if id, err := e.st.Org(a.orgID); err != nil {

@@ -158,6 +158,14 @@ func (s *Server) paddleWebhook(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
+	// The offer before the event: gaining monitoring starts it at once.
+	var before plan.Plan
+	org, orgErr := s.org(u.OrgID)
+	if orgErr == nil {
+		if eff, err := org.Plan(r.Context(), s.cfg.Now()); err == nil {
+			before = eff.Plan
+		}
+	}
 	applied, err := s.billing.Apply(r.Context(), u)
 	if errors.Is(err, store.ErrNotFound) {
 		s.log.Warn("paddle event for an unknown organization", "event_id", ev.ID)
@@ -167,6 +175,9 @@ func (s *Server) paddleWebhook(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.internalError(w, r, err) // Paddle retries
 		return
+	}
+	if applied && orgErr == nil {
+		s.startMonitoring(r.Context(), org, before, "paddle")
 	}
 	s.log.Info("paddle event", "event_id", ev.ID, "type", ev.Type, "applied", applied, "plan", u.Sub.Plan, "status", u.Sub.Status)
 	w.WriteHeader(http.StatusOK)
@@ -308,11 +319,19 @@ func (s *Server) syncTransaction(ctx context.Context, org *store.Org, id string)
 	if tx.Trial() {
 		ps = plan.Subscription{Plan: plan.ID(planID), Status: plan.Trialing, TrialEndsAt: &end}
 	}
-	if _, err := s.billing.Apply(ctx, store.ProviderUpdate{
+	eff, err := org.Plan(ctx, s.cfg.Now())
+	if err != nil {
+		return "", err
+	}
+	applied, err := s.billing.Apply(ctx, store.ProviderUpdate{
 		EventID: "sync_" + tx.ID, EventType: "transaction.sync", OrgID: tx.CustomData.OrgID, Sub: ps,
 		Provider: "paddle", Ref: tx.SubscriptionID, Customer: tx.CustomerID, Period: period, OnlyIfNew: true,
-	}); err != nil {
+	})
+	if err != nil {
 		return "", err
+	}
+	if applied {
+		s.startMonitoring(ctx, org, eff.Plan, "paddle")
 	}
 	if err := org.ClearPendingCheckouts(ctx); err != nil {
 		return "", err
