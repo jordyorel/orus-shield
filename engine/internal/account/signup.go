@@ -54,19 +54,19 @@ func (s *Service) Signup(ctx context.Context, email, orgName string, c Client) e
 	if byEmail >= MaxSignupsPerEmail || byIP >= MaxSignupsPerIP {
 		return ErrSignupRateLimited
 	}
-	token, existing, err := s.auth.RequestSignup(ctx, email, orgName, c.IP, SignupTokenTTL)
+	token, existing, err := s.auth.RequestSignup(ctx, email, orgName, c.IP, c.Lang, SignupTokenTTL)
 	if err != nil {
 		return err
 	}
 	to, _ := store.NormalizeEmail(email)
 	base := strings.TrimRight(s.cfg.PublicURL, "/")
 	if existing {
-		s.sendInBackground(ctx, mailer.AlreadyRegistered(to, base+"/login", base+"/forgot-password"), "signup_existing")
+		s.sendInBackground(ctx, mailer.AlreadyRegistered(s.emailLang(ctx, to, c), to, base+"/login", base+"/forgot-password"), "signup_existing")
 		return nil
 	}
 	name, _ := store.NormalizeOrgName(orgName)
 	link := base + "/signup/complete#token=" + token
-	s.sendInBackground(ctx, mailer.ConfirmSignup(to, name, link, SignupTokenTTL), "signup")
+	s.sendInBackground(ctx, mailer.ConfirmSignup(mailer.ParseLang(c.Lang), to, name, link, SignupTokenTTL), "signup")
 	return nil
 }
 

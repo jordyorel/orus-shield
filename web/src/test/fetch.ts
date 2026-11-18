@@ -9,13 +9,14 @@ export type Route = (body: unknown) => { status: number; json?: unknown };
  * calls, to assert what was sent.
  */
 export function mockApi(routes: Record<string, Route>) {
-  const calls: { key: string; body: unknown }[] = [];
+  // lang: the Accept-Language the request carried.
+  const calls: { key: string; body: unknown; lang: string | undefined }[] = [];
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: string, init?: RequestInit) => {
       const key = `${init?.method ?? "GET"} ${input.replace(/^\/api\/v1/, "")}`;
       const body = init?.body ? JSON.parse(String(init.body)) : undefined;
-      calls.push({ key, body });
+      calls.push({ key, body, lang: (init?.headers as Record<string, string> | undefined)?.["Accept-Language"] });
       const route = routes[key];
       if (!route) throw new Error("unexpected request " + key);
       const { status, json } = route(body);

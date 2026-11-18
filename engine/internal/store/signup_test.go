@@ -15,7 +15,7 @@ func TestSignup(t *testing.T) {
 	ctx := context.Background()
 	auth := s.Auth() // runs as orus_auth: proves the grants are enough
 
-	token, existing, err := auth.RequestSignup(ctx, " New@Example.com ", "  Acme   Microfinance ", "192.0.2.1", time.Hour)
+	token, existing, err := auth.RequestSignup(ctx, " New@Example.com ", "  Acme   Microfinance ", "192.0.2.1", "", time.Hour)
 	if err != nil || existing || token == "" {
 		t.Fatalf("RequestSignup = %q, %v, %v", token, existing, err)
 	}
@@ -42,18 +42,18 @@ func TestSignup(t *testing.T) {
 	}
 
 	// An address with an account: no request, existing reported.
-	token, existing, err = auth.RequestSignup(ctx, "new@example.com", "Other", "192.0.2.1", time.Hour)
+	token, existing, err = auth.RequestSignup(ctx, "new@example.com", "Other", "192.0.2.1", "", time.Hour)
 	if err != nil || !existing || token != "" {
 		t.Errorf("existing address = %q, %v, %v", token, existing, err)
 	}
 
 	// A newer request revokes the older one; an expired one never works.
-	first, _, _ := auth.RequestSignup(ctx, "two@example.com", "Two", "192.0.2.2", time.Hour)
-	second, _, _ := auth.RequestSignup(ctx, "two@example.com", "Two", "192.0.2.2", time.Hour)
+	first, _, _ := auth.RequestSignup(ctx, "two@example.com", "Two", "192.0.2.2", "", time.Hour)
+	second, _, _ := auth.RequestSignup(ctx, "two@example.com", "Two", "192.0.2.2", "", time.Hour)
 	if _, _, err := auth.CompleteSignup(ctx, first, "h", ""); !errors.Is(err, ErrInvalidToken) {
 		t.Errorf("revoked request: %v", err)
 	}
-	expired, _, _ := auth.RequestSignup(ctx, "three@example.com", "Three", "192.0.2.3", -time.Minute)
+	expired, _, _ := auth.RequestSignup(ctx, "three@example.com", "Three", "192.0.2.3", "", -time.Minute)
 	if _, _, err := auth.CompleteSignup(ctx, expired, "h", ""); !errors.Is(err, ErrInvalidToken) {
 		t.Errorf("expired request: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestSignup(t *testing.T) {
 		t.Errorf("NormalizeOrgName = %q, %v; line breaks and tabs become one space", n, err)
 	}
 	for _, bad := range []string{"", "   ", "a\x00b", "a\x1bb", string(make([]rune, MaxOrgNameChars+1))} {
-		if _, _, err := auth.RequestSignup(ctx, "x@example.com", bad, "", time.Hour); err == nil {
+		if _, _, err := auth.RequestSignup(ctx, "x@example.com", bad, "", "", time.Hour); err == nil {
 			t.Errorf("org name %q accepted", bad)
 		}
 	}
@@ -85,7 +85,7 @@ func TestSignup(t *testing.T) {
 func TestSignupFunctionNeedsAConsumedRequest(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
-	token, _, err := s.Auth().RequestSignup(ctx, "x@example.com", "X", "", time.Hour)
+	token, _, err := s.Auth().RequestSignup(ctx, "x@example.com", "X", "", "", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,5 +106,30 @@ func TestSignupFunctionNeedsAConsumedRequest(t *testing.T) {
 	})
 	if err == nil {
 		t.Error("function reused on a completed request: nil error")
+	}
+}
+
+// The signup's language becomes the account's; the worker reads it at
+// delivery (RecipientLang), the API before sign-in (LangOf).
+func TestSignupLanguage(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	auth := s.Auth()
+	for email, lang := range map[string]string{"en@example.com": "en", "none@example.com": "", "odd@example.com": "de"} {
+		token, _, err := auth.RequestSignup(ctx, email, "Org "+email, "", lang, time.Hour)
+		if err != nil {
+			t.Fatalf("RequestSignup(%s): %v", lang, err)
+		}
+		if _, _, err := auth.CompleteSignup(ctx, token, "$argon2id$x", ""); err != nil {
+			t.Fatalf("CompleteSignup(%s): %v", lang, err)
+		}
+	}
+	for email, want := range map[string]string{"en@example.com": "en", "EN@example.com": "en", "none@example.com": "", "odd@example.com": "", "nobody@example.com": ""} {
+		if got, err := s.RecipientLang(ctx, email); err != nil || got != want {
+			t.Errorf("RecipientLang(%s) = %q, %v, want %q", email, got, err, want)
+		}
+		if got, err := auth.LangOf(ctx, email); err != nil || got != want {
+			t.Errorf("LangOf(%s) = %q, %v, want %q", email, got, err, want)
+		}
 	}
 }

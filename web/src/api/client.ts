@@ -1,10 +1,11 @@
 import type { Activity, Agent, DeclaredAPI, TestAccount, AuthActivity, Check, DeviceSession, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, OrgSettings, Overview, Plan, RecoveryCodes, Role, Scan, ScheduleInput, Subscription, Target } from "./types";
 import type { Exclusions } from "../exclusions";
+import { getLang } from "../i18n";
 
 /**
  * An error answered by the API. message is the API's English text, for
- * logs only: pages show their own French wording, chosen from status and
- * code.
+ * logs only: pages show their own wording, in the user's language, chosen
+ * from status and code.
  */
 export class ApiError extends Error {
   readonly status: number;
@@ -19,10 +20,14 @@ export class ApiError extends Error {
 }
 
 async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
-  const init: RequestInit = { method, credentials: "same-origin" };
+  // Accept-Language is the language on screen, not the browser's: the API
+  // writes the emails a request sends (signup, reset, invitation) in it
+  // when the recipient has no language of their own.
+  const headers: Record<string, string> = { "Accept-Language": getLang() };
+  const init: RequestInit = { method, credentials: "same-origin", headers };
   if (signal) init.signal = signal;
   if (body !== undefined) {
-    init.headers = { "Content-Type": "application/json" };
+    headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(body);
   }
   const res = await fetch("/api/v1" + path, init);

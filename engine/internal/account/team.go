@@ -39,7 +39,10 @@ func (s *Service) Members(ctx context.Context, orgID string) ([]store.Member, er
 // that they have access, for an account that already exists. emailed says
 // whether an email was sent (false when mail is not configured): the
 // dashboard then tells the admin to pass the code on themselves.
-func (s *Service) Invite(ctx context.Context, orgID, email, role string, by store.Session) (inv store.Invitation, emailed bool, err error) {
+//
+// The email speaks the invitee's language when their account has one, else
+// the inviting admin's page language (c).
+func (s *Service) Invite(ctx context.Context, orgID, email, role string, by store.Session, c Client) (inv store.Invitation, emailed bool, err error) {
 	inv, err = s.auth.Invite(ctx, orgID, email, role, SetupTokenTTL, by.Email)
 	if errors.Is(err, store.ErrExists) {
 		return store.Invitation{}, false, ErrMemberExists
@@ -49,17 +52,18 @@ func (s *Service) Invite(ctx context.Context, orgID, email, role string, by stor
 	}
 	org := s.orgName(ctx, by.UserID, orgID)
 	var m mailer.Message
+	lang := s.emailLang(ctx, inv.Member.Email, c)
 	if inv.Token != "" {
-		m = mailer.Invitation(inv.Member.Email, org, by.Email, role == store.RoleAdmin, mailer.SetupLink(s.cfg.PublicURL, inv.Token), SetupTokenTTL)
+		m = mailer.Invitation(lang, inv.Member.Email, org, by.Email, role == store.RoleAdmin, mailer.SetupLink(s.cfg.PublicURL, inv.Token), SetupTokenTTL)
 	} else {
-		m = mailer.AddedToOrganization(inv.Member.Email, org, by.Email, role == store.RoleAdmin, s.cfg.PublicURL)
+		m = mailer.AddedToOrganization(lang, inv.Member.Email, org, by.Email, role == store.RoleAdmin, s.cfg.PublicURL)
 	}
 	return inv, s.sendInBackground(ctx, m, "invitation"), nil
 }
 
 // ReissueSetupToken gives a never activated member a new setup token and
 // emails them the new link.
-func (s *Service) ReissueSetupToken(ctx context.Context, orgID, userID string, by store.Session) (token string, emailed bool, err error) {
+func (s *Service) ReissueSetupToken(ctx context.Context, orgID, userID string, by store.Session, c Client) (token string, emailed bool, err error) {
 	token, err = s.auth.ReissueSetupToken(ctx, orgID, userID, SetupTokenTTL, by.Email)
 	switch {
 	case errors.Is(err, store.ErrExists):
@@ -75,7 +79,7 @@ func (s *Service) ReissueSetupToken(ctx context.Context, orgID, userID string, b
 	}
 	for _, mem := range members {
 		if mem.UserID == userID {
-			m := mailer.Invitation(mem.Email, s.orgName(ctx, by.UserID, orgID), by.Email, mem.Role == store.RoleAdmin,
+			m := mailer.Invitation(s.emailLang(ctx, mem.Email, c), mem.Email, s.orgName(ctx, by.UserID, orgID), by.Email, mem.Role == store.RoleAdmin,
 				mailer.SetupLink(s.cfg.PublicURL, token), SetupTokenTTL)
 			return token, s.sendInBackground(ctx, m, "invitation"), nil
 		}

@@ -84,6 +84,23 @@ func (a *Auth) SetLang(ctx context.Context, userID, lang string) error {
 	})
 }
 
+// LangOf is the language chosen by the account of email: "fr", "en", or
+// "" when it chose none or there is no such account. Emails sent before
+// sign-in (password reset, invitations) use it before the page's language.
+func (a *Auth) LangOf(ctx context.Context, email string) (lang string, err error) {
+	e, err := NormalizeEmail(email)
+	if err != nil {
+		return "", nil
+	}
+	err = a.inTx(ctx, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, "SELECT coalesce((SELECT lang FROM users WHERE email = $1), '')", e).Scan(&lang)
+	})
+	if err != nil {
+		return "", fmt.Errorf("language of %s: %w", "account", err)
+	}
+	return lang, nil
+}
+
 // DeviceSession is one open session, as Appareils connectés lists it.
 type DeviceSession struct {
 	ID         string

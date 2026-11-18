@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Finding, Me, OrgSettings, Overview, Plan, Subscription } from "./api/types";
+import { api } from "./api/client";
 import { App } from "./App";
 import { LangProvider, Relang, setLangForTests } from "./i18n";
 import { AuthProvider } from "./auth";
@@ -269,6 +270,10 @@ describe("language", () => {
     });
     expect(calls.find((c) => c.key === "PATCH /auth/me")?.body).toEqual({ lang: "en" });
     expect(await screen.findByText("My dashboard")).toBeTruthy();
+    // Requests carry the language on screen: the API writes emails in it.
+    expect(calls[0]?.lang).toBe("fr");
+    await api.plans();
+    expect(calls.at(-1)?.lang).toBe("en");
   });
 
   it("follows the language chosen in Profil once signed in", async () => {

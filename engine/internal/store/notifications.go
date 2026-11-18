@@ -142,6 +142,17 @@ func (s *Store) ClaimNotifications(ctx context.Context, now time.Time, lease tim
 	return out, nil
 }
 
+// RecipientLang is the language of a notification's recipient, read at
+// delivery so a change in Profil applies to emails already queued: "fr",
+// "en", or "" when the account chose none.
+func (s *Store) RecipientLang(ctx context.Context, email string) (lang string, err error) {
+	err = s.pool.QueryRow(ctx, "SELECT coalesce((SELECT lang FROM users WHERE email = lower($1)), '')", email).Scan(&lang)
+	if err != nil {
+		return "", fmt.Errorf("recipient language: %w", err)
+	}
+	return lang, nil
+}
+
 // MarkNotificationSent records a delivered notification.
 func (s *Store) MarkNotificationSent(ctx context.Context, id string, at time.Time) error {
 	return s.markNotification(ctx, `UPDATE notifications SET sent_at = $2, last_error = NULL WHERE id = $1`, id, at)

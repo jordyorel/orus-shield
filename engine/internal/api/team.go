@@ -99,7 +99,7 @@ func (s *Server) inviteMember(w http.ResponseWriter, r *http.Request, req orgReq
 		planLimit(w, fmt.Sprintf("the %s offer includes %d member(s)", p.Name, p.Members))
 		return
 	}
-	inv, emailed, err := s.acct.Invite(r.Context(), req.org.ID(), body.Email, body.Role, req.sess)
+	inv, emailed, err := s.acct.Invite(r.Context(), req.org.ID(), body.Email, body.Role, req.sess, account.ClientFrom(r))
 	switch {
 	case errors.Is(err, account.ErrMemberExists):
 		writeError(w, http.StatusConflict, err.Error())
@@ -155,7 +155,7 @@ type setupTokenJSON struct {
 }
 
 func (s *Server) reissueSetupToken(w http.ResponseWriter, r *http.Request, req orgRequest) {
-	token, emailed, err := s.acct.ReissueSetupToken(r.Context(), req.org.ID(), r.PathValue("user"), req.sess)
+	token, emailed, err := s.acct.ReissueSetupToken(r.Context(), req.org.ID(), r.PathValue("user"), req.sess, account.ClientFrom(r))
 	if errors.Is(err, account.ErrAlreadyActivated) {
 		writeError(w, http.StatusConflict, err.Error())
 		return

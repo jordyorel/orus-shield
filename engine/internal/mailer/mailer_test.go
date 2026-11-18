@@ -103,7 +103,7 @@ func TestSendThroughSMTP(t *testing.T) {
 	srv := newFakeSMTP(t)
 	s := SMTP{Addr: srv.addr, From: "Orus Shield <no-reply@orus.example>"}
 	link := SetupLink("https://app.orus.example/", "tok+en/=")
-	err := s.Send(context.Background(), PasswordReset("alice@example.com", link, time.Hour))
+	err := s.Send(context.Background(), PasswordReset(French, "alice@example.com", link, time.Hour))
 	if err != nil {
 		t.Fatalf("Send: %v", err)
 	}
@@ -187,25 +187,25 @@ func TestFrenchDuration(t *testing.T) {
 }
 
 func TestTemplatesNeutralizeOrganizationNames(t *testing.T) {
-	m := Invitation("a@example.com", "Evil\r\nBcc: x@example.com", "admin@example.com", false, "https://x/setup-password#token=t", 24*time.Hour)
+	m := Invitation(French, "a@example.com", "Evil\r\nBcc: x@example.com", "admin@example.com", false, "https://x/setup-password#token=t", 24*time.Hour)
 	if strings.ContainsAny(m.Subject, "\r\n") || !strings.Contains(m.Subject, "Evil Bcc: x@example.com") {
 		t.Errorf("subject = %q", m.Subject)
 	}
 	if !strings.Contains(m.Text, "valable 24 heures") || !strings.Contains(m.Text, "lecteur") {
 		t.Errorf("text:\n%s", m.Text)
 	}
-	long := Invitation("a@example.com", strings.Repeat("é", 300), "x@example.com", true, "l", time.Hour)
+	long := Invitation(French, "a@example.com", strings.Repeat("é", 300), "x@example.com", true, "l", time.Hour)
 	if n := len([]rune(long.Subject)); n > 130 {
 		t.Errorf("subject has %d characters", n)
 	}
-	if got := AddedToOrganization("a@example.com", "", "x@example.com", true, "https://app/"); !strings.Contains(got.Text, "https://app/login") {
+	if got := AddedToOrganization(French, "a@example.com", "", "x@example.com", true, "https://app/"); !strings.Contains(got.Text, "https://app/login") {
 		t.Errorf("access email:\n%s", got.Text)
 	}
 }
 
 func TestFirstScan(t *testing.T) {
 	score := 72
-	m := FirstScan("a@example.com", "OrusLabs", "orushield.xyz",
+	m := FirstScan(French, "a@example.com", "OrusLabs", "orushield.xyz",
 		FirstScanFigures{Score: &score, Critical: 1, Medium: 3, Hostnames: 6}, TodayLink("https://app.example.com/", "org-1"), "offer")
 	for _, want := range []string{"72/100", "1 critique, 3 moyens", "sous le domaine : 6", "https://app.example.com/orgs/org-1/aujourdhui", "« OrusLabs »"} {
 		if !strings.Contains(m.Text, want) {
@@ -216,17 +216,71 @@ func TestFirstScan(t *testing.T) {
 		t.Errorf("message = %+v", m)
 	}
 	// Nothing found, no score: said plainly.
-	m = FirstScan("a@example.com", "O", "example.com", FirstScanFigures{}, "l", "offer")
+	m = FirstScan(French, "a@example.com", "O", "example.com", FirstScanFigures{}, "l", "offer")
 	if !strings.Contains(m.Text, "pas encore calculé") || !strings.Contains(m.Text, "aucun pour le moment") || strings.Contains(m.Text, "essai") {
 		t.Errorf("empty summary:\n%s", m.Text)
 	}
 	// After the free audit: what it did not check, and the trial.
-	m = FirstScan("a@example.com", "O", "example.com", FirstScanFigures{IPs: 2, Free: true}, "l",
+	m = FirstScan(French, "a@example.com", "O", "example.com", FirstScanFigures{IPs: 2, Free: true}, "l",
 		OfferLink("https://app.example.com", "org-1"))
 	for _, want := range []string{"ports ouverts de vos 2 serveurs", "14 jours", "https://app.example.com/orgs/org-1/offre"} {
 		if !strings.Contains(m.Text, want) {
 			t.Errorf("free audit summary lacks %q:\n%s", want, m.Text)
 		}
+	}
+}
+
+func TestParseLang(t *testing.T) {
+	for in, want := range map[string]Lang{"en": English, "en-GB": English, " EN-us ": English, "fr": French, "fr-FR": French, "": French, "de": French, "eng": French} {
+		if got := ParseLang(in); got != want {
+			t.Errorf("ParseLang(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestEnglishTemplates checks that every template has its English text:
+// English subject and body, English signature, no French left.
+func TestEnglishTemplates(t *testing.T) {
+	score := 72
+	msgs := map[string]Message{
+		"reset":       PasswordReset(English, "a@example.com", "link", time.Hour),
+		"invitation":  Invitation(English, "a@example.com", "Acme", "admin@example.com", false, "link", 24*time.Hour),
+		"access":      AddedToOrganization(English, "a@example.com", "Acme", "admin@example.com", true, "https://app/"),
+		"signup":      ConfirmSignup(English, "a@example.com", "Acme", "link", time.Hour),
+		"registered":  AlreadyRegistered(English, "a@example.com", "login", "forgot"),
+		"findings":    NewFindings(English, "a@example.com", "Acme", "acme.example", []AlertItem{{Severity: "critical", Title: "Certificate has expired", Asset: "acme.example:443", Reopened: true, Link: "l"}}, 2, "list"),
+		"threats":     EmergingThreats(English, "a@example.com", "Acme", "acme.example", []ThreatItem{{CVE: "CVE-2026-1", Name: "X RCE", Severity: "high", KEV: true, EPSS: 0.5, Products: []string{"nginx"}}}, 1, "scans"),
+		"first scan":  FirstScan(English, "a@example.com", "Acme", "acme.example", FirstScanFigures{Score: &score, Critical: 1, IPs: 2, Free: true}, "today", "offer"),
+		"trial nudge": TrialReminder(English, "a@example.com", "Acme", "acme.example", TrialNudge{Day: 10, Open: 3, High: 1, Top: "No DMARC record"}, "offer", "unsub"),
+	}
+	french := []string{"Bonjour", "L'équipe", "Vous recevez", "valable", "organisation «", " : "}
+	for name, m := range msgs {
+		if !strings.HasPrefix(m.Text, "Hello,") || !strings.Contains(m.Text, "The Orus Shield team") {
+			t.Errorf("%s: not English:\n%s", name, m.Text)
+		}
+		for _, w := range french {
+			if strings.Contains(m.Subject, w) || strings.Contains(m.Text, w) {
+				t.Errorf("%s: French %q left in:\n%s\n%s", name, w, m.Subject, m.Text)
+			}
+		}
+	}
+	for name, want := range map[string]string{
+		"reset":       "valid for 1 hour",
+		"invitation":  "viewer (reads the results)",
+		"findings":    "[Critical] Certificate has expired (back again",
+		"threats":     "probability of exploitation within 30 days: 50%",
+		"first scan":  "the open ports of your 2 servers",
+		"trial nudge": "3 problems to fix, 1 of them urgent",
+	} {
+		if !strings.Contains(msgs[name].Text, want) {
+			t.Errorf("%s lacks %q:\n%s", name, want, msgs[name].Text)
+		}
+	}
+	if s := msgs["findings"].Subject; s != "Orus Shield: 1 critical vulnerability on acme.example" {
+		t.Errorf("findings subject = %q", s)
+	}
+	if msgs["trial nudge"].Unsubscribe != "unsub" {
+		t.Error("English reminder lost its unsubscribe link")
 	}
 }
 

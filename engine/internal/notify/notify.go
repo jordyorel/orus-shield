@@ -29,6 +29,8 @@ type Store interface {
 	AbandonNotification(ctx context.Context, id, reason string, at time.Time) error
 	// TrialNudgeWanted: a trial reminder still makes sense (store).
 	TrialNudgeWanted(ctx context.Context, orgID, recipient string, now time.Time) (bool, error)
+	// RecipientLang: the recipient account's language, "" if none (store).
+	RecipientLang(ctx context.Context, email string) (string, error)
 }
 
 const (
@@ -108,7 +110,13 @@ func (n *Notifier) RunOnce(ctx context.Context) (int, error) {
 				continue
 			}
 		}
-		m, err := n.message(nt)
+		// The language is read now, not when the scan queued the email: a
+		// change in Profil applies to what is still waiting.
+		lang, err := n.store.RecipientLang(ctx, nt.Recipient)
+		if err != nil {
+			return sent, err
+		}
+		m, err := n.message(nt, mailer.ParseLang(lang))
 		if err != nil {
 			// A payload we cannot read will not get better: give up.
 			if err := n.store.AbandonNotification(ctx, nt.ID, err.Error(), now); err != nil {
@@ -144,7 +152,7 @@ func (n *Notifier) failed(ctx context.Context, nt store.Notification, sendErr er
 }
 
 // message builds the email of a notification.
-func (n *Notifier) message(nt store.Notification) (mailer.Message, error) {
+func (n *Notifier) message(nt store.Notification, lang mailer.Lang) (mailer.Message, error) {
 	switch nt.Kind {
 	case store.NotifyNewFindings:
 		var a store.NewFindingsAlert
@@ -153,9 +161,10 @@ func (n *Notifier) message(nt store.Notification) (mailer.Message, error) {
 		}
 		items := make([]mailer.AlertItem, 0, len(a.Findings))
 		for _, f := range a.Findings {
-			// The emails are French: the finding's French title when it has one.
+			// In French, the finding's French title when it has one (older
+			// findings get it at their next scan).
 			title := f.Title
-			if f.TitleFR != "" {
+			if lang == mailer.French && f.TitleFR != "" {
 				title = f.TitleFR
 			}
 			items = append(items, mailer.AlertItem{
@@ -163,7 +172,7 @@ func (n *Notifier) message(nt store.Notification) (mailer.Message, error) {
 				Link: mailer.FindingsLink(n.publicURL, a.OrgID, f.ID),
 			})
 		}
-		return mailer.NewFindings(nt.Recipient, a.OrgName, a.Domain, items, a.Total, mailer.FindingsLink(n.publicURL, a.OrgID, "")), nil
+		return mailer.NewFindings(lang, nt.Recipient, a.OrgName, a.Domain, items, a.Total, mailer.FindingsLink(n.publicURL, a.OrgID, "")), nil
 	case store.NotifyEmergingThreat:
 		var a store.EmergingThreatAlert
 		if err := json.Unmarshal(nt.Payload, &a); err != nil {
@@ -173,7 +182,7 @@ func (n *Notifier) message(nt store.Notification) (mailer.Message, error) {
 		for _, t := range a.Threats {
 			items = append(items, mailer.ThreatItem{CVE: t.CVE, Name: t.Name, Severity: t.Severity, KEV: t.KEV, EPSS: t.EPSS, Products: t.Products})
 		}
-		return mailer.EmergingThreats(nt.Recipient, a.OrgName, a.Domain, items, a.Total, mailer.ScansLink(n.publicURL, a.OrgID)), nil
+		return mailer.EmergingThreats(lang, nt.Recipient, a.OrgName, a.Domain, items, a.Total, mailer.ScansLink(n.publicURL, a.OrgID)), nil
 	case store.NotifyFirstScan:
 		var a store.FirstScanSummary
 		if err := json.Unmarshal(nt.Payload, &a); err != nil {
@@ -181,14 +190,14 @@ func (n *Notifier) message(nt store.Notification) (mailer.Message, error) {
 		}
 		figures := mailer.FirstScanFigures{Score: a.Score, Critical: a.Critical, High: a.High, Medium: a.Medium, Low: a.Low,
 			Hostnames: a.Hostnames, IPs: a.IPs, Free: a.Free}
-		return mailer.FirstScan(nt.Recipient, a.OrgName, a.Domain, figures,
+		return mailer.FirstScan(lang, nt.Recipient, a.OrgName, a.Domain, figures,
 			mailer.TodayLink(n.publicURL, a.OrgID), mailer.OfferLink(n.publicURL, a.OrgID)), nil
 	case store.NotifyTrialNudge:
 		var a store.TrialNudge
 		if err := json.Unmarshal(nt.Payload, &a); err != nil {
 			return mailer.Message{}, fmt.Errorf("read payload: %w", err)
 		}
-		return mailer.TrialReminder(nt.Recipient, a.OrgName, a.Domain,
+		return mailer.TrialReminder(lang, nt.Recipient, a.OrgName, a.Domain,
 			mailer.TrialNudge{Day: a.Day, Critical: a.Critical, High: a.High, Open: a.Open, Top: a.Top},
 			mailer.OfferLink(n.publicURL, a.OrgID), mailer.UnsubscribeLink(n.publicURL, a.Unsubscribe)), nil
 	}

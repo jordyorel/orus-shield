@@ -41,7 +41,10 @@ func NormalizeOrgName(name string) (string, error) {
 // existing is true when an account already has the address: no request is
 // stored, and the caller emails the owner instead. Either way the request
 // is logged, for the rate limit.
-func (a *Auth) RequestSignup(ctx context.Context, email, orgName, ip string, ttl time.Duration) (token string, existing bool, err error) {
+func (a *Auth) RequestSignup(ctx context.Context, email, orgName, ip, lang string, ttl time.Duration) (token string, existing bool, err error) {
+	if lang != "fr" && lang != "en" {
+		lang = "" // unknown: the account gets no language, the browser's decides
+	}
 	e, err := NormalizeEmail(email)
 	if err != nil {
 		return "", false, err
@@ -72,8 +75,8 @@ func (a *Auth) RequestSignup(ctx context.Context, email, orgName, ip string, ttl
 		if token, hash, err = newToken(); err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO signup_requests (token_hash, email, org_name, ip, expires_at)
-			VALUES ($1, $2, $3, $4, now() + make_interval(secs => $5))`, hash, e, name, ip, ttl.Seconds())
+		_, err = tx.Exec(ctx, `INSERT INTO signup_requests (token_hash, email, org_name, ip, expires_at, lang)
+			VALUES ($1, $2, $3, $4, now() + make_interval(secs => $5), NULLIF($6, ''))`, hash, e, name, ip, ttl.Seconds(), lang)
 		return err
 	})
 	if err != nil {
@@ -105,10 +108,11 @@ func (a *Auth) RecentSignupRequests(ctx context.Context, email, ip string, since
 func (a *Auth) CompleteSignup(ctx context.Context, token, passwordHash, ip string) (u User, orgID string, err error) {
 	err = a.inTx(ctx, func(tx pgx.Tx) error {
 		var orgName string
+		var lang *string
 		err := tx.QueryRow(ctx, `
 			UPDATE signup_requests SET used_at = now()
 			WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()
-			RETURNING email, org_name`, tokenHash(token)).Scan(&u.Email, &orgName)
+			RETURNING email, org_name, lang`, tokenHash(token)).Scan(&u.Email, &orgName, &lang)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrInvalidToken
 		}
@@ -122,8 +126,9 @@ func (a *Auth) CompleteSignup(ctx context.Context, token, passwordHash, ip strin
 		if tag.RowsAffected() == 0 {
 			return ErrExists
 		}
-		if err := tx.QueryRow(ctx, `UPDATE users SET password_hash = $2, password_changed_at = now()
-			WHERE email = $1 RETURNING id::text`, u.Email, passwordHash).Scan(&u.ID); err != nil {
+		// The account speaks the language the person signed up in.
+		if err := tx.QueryRow(ctx, `UPDATE users SET password_hash = $2, password_changed_at = now(), lang = $3
+			WHERE email = $1 RETURNING id::text`, u.Email, passwordHash, lang).Scan(&u.ID); err != nil {
 			return err
 		}
 		// The auth role cannot insert organizations; this function creates

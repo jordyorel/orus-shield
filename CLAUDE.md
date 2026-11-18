@@ -75,8 +75,12 @@ use the French text; older findings get it at their next scan. Step 2 is done: t
 one prevails, both drafts for the lawyer). A FR / EN switch sits at the top of the public and
 sign-in pages (`ui/LangSwitch.tsx`), and Profil has the same choice. Each user's language is
 `users.lang` (migration 0028, `PATCH /auth/me {"lang"}`; the switch saves it when signed in),
-else this browser's choice, else the browser's language (French unless English). Next step:
-English emails, following `users.lang`.
+else this browser's choice, else the browser's language (French unless English). Step 3 is done:
+every email has its French and its English text (`mailer.Lang`, whole texts side by side). The
+worker reads the recipient's `users.lang` at delivery (`Store.RecipientLang`, French when unset);
+emails sent from the site (reset, signup, invitation) use the recipient account's language, else
+the page's, which the dashboard sends as `Accept-Language`; a signup keeps its page's language on
+the new account (migration 0029).
 
 ## How to work on this repo
 
@@ -142,7 +146,7 @@ engine/
   internal/store/    PostgreSQL: organizations, targets, scan queue, findings lifecycle,
                      audit log; org-scoped handle (store.Org) + row-level security
   internal/worker/   claims scans, runs modules, records results
-  internal/mailer/   SMTP email and French templates (password reset, invitations, alerts)
+  internal/mailer/   SMTP email and its templates in French and English (reset, invitations, alerts)
   internal/notify/   delivers queued alert emails (outbox), in the worker process
   internal/pdf/      minimal PDF writer (A4, standard Helvetica fonts, WinAnsi text), stdlib only
   internal/report/   security report from stored data: executive or technical, French or English

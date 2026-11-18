@@ -25,6 +25,12 @@ type fakeStore struct {
 	// unwanted: trial reminders no longer make sense (trial started,
 	// unsubscribed).
 	unwanted bool
+	// langs: each recipient's language, as users.lang.
+	langs map[string]string
+}
+
+func (f *fakeStore) RecipientLang(_ context.Context, email string) (string, error) {
+	return f.langs[email], nil
 }
 
 func (f *fakeStore) TrialNudgeWanted(context.Context, string, string, time.Time) (bool, error) {
@@ -110,6 +116,33 @@ func TestDeliversAlerts(t *testing.T) {
 		if !strings.Contains(msg.Text, want) {
 			t.Errorf("body misses %q:\n%s", want, msg.Text)
 		}
+	}
+}
+
+// An English recipient gets the alert in English, with the findings'
+// English titles; a French one gets the French titles.
+func TestAlertsFollowTheRecipientsLanguage(t *testing.T) {
+	fr := alert(t, "n1", 1, now.Add(-time.Minute))
+	var a store.NewFindingsAlert
+	if err := json.Unmarshal(fr.Payload, &a); err != nil {
+		t.Fatal(err)
+	}
+	a.Findings[0].TitleFR = "Le certificat a expiré"
+	payload, _ := json.Marshal(a)
+	fr.Payload = payload
+	en := fr
+	en.ID, en.Recipient = "n2", "boss@acme.example"
+	st := &fakeStore{due: []store.Notification{fr, en}, retried: map[string]time.Time{}, abandoned: map[string]string{},
+		langs: map[string]string{"boss@acme.example": "en"}}
+	m := &fakeMail{}
+	if _, err := newNotifier(st, m).RunOnce(context.Background()); err != nil || len(m.sent) != 2 {
+		t.Fatalf("sent %d, err %v", len(m.sent), err)
+	}
+	if !strings.Contains(m.sent[0].Text, "[Critique] Le certificat a expiré") {
+		t.Errorf("French alert:\n%s", m.sent[0].Text)
+	}
+	if m.sent[1].Subject != "Orus Shield: 1 critical vulnerability on acme.example" || !strings.Contains(m.sent[1].Text, "[Critical] Certificate has expired") {
+		t.Errorf("English alert: %q\n%s", m.sent[1].Subject, m.sent[1].Text)
 	}
 }
 

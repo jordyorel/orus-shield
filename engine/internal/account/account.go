@@ -153,6 +153,10 @@ func New(auth *store.Auth, cfg Config) (*Service, error) {
 type Client struct {
 	IP        string
 	UserAgent string
+	// Lang is the language of the page the request came from ("fr", "en",
+	// or "" when unknown): the dashboard sends it as Accept-Language. It
+	// chooses the language of emails to an address without one of its own.
+	Lang string
 }
 
 // ClientFrom reads the client of an HTTP request. The address is the TCP
@@ -164,7 +168,32 @@ func ClientFrom(r *http.Request) Client {
 	if err != nil {
 		host = r.RemoteAddr
 	}
-	return Client{IP: host, UserAgent: r.UserAgent()}
+	return Client{IP: host, UserAgent: r.UserAgent(), Lang: langFrom(r.Header.Get("Accept-Language"))}
+}
+
+// langFrom reads the first language of an Accept-Language header: "en"
+// or "fr" when it is one of ours, else "".
+func langFrom(h string) string {
+	first, _, _ := strings.Cut(h, ",")
+	first, _, _ = strings.Cut(first, ";")
+	first = strings.ToLower(strings.TrimSpace(first))
+	switch {
+	case first == "en" || strings.HasPrefix(first, "en-"):
+		return "en"
+	case first == "fr" || strings.HasPrefix(first, "fr-"):
+		return "fr"
+	}
+	return ""
+}
+
+// emailLang is the language of an email to address: the one its account
+// chose in Profil, else the language of the page the request came from,
+// else French. A failed lookup only costs the preference.
+func (s *Service) emailLang(ctx context.Context, address string, c Client) mailer.Lang {
+	if l, err := s.auth.LangOf(ctx, address); err == nil && l != "" {
+		return mailer.ParseLang(l)
+	}
+	return mailer.ParseLang(c.Lang)
 }
 
 // NewSession is a session just opened: the token goes into the cookie.
@@ -330,7 +359,7 @@ func (s *Service) ForgotPassword(ctx context.Context, email string, c Client) er
 		return err
 	}
 	to, _ := store.NormalizeEmail(email) // valid: an account has it
-	m := mailer.PasswordReset(to, mailer.SetupLink(s.cfg.PublicURL, token), ResetTokenTTL)
+	m := mailer.PasswordReset(s.emailLang(ctx, to, c), to, mailer.SetupLink(s.cfg.PublicURL, token), ResetTokenTTL)
 	s.sendInBackground(ctx, m, "password_reset")
 	return nil
 }

@@ -88,3 +88,41 @@ func TestSignupRateLimit(t *testing.T) {
 		t.Errorf("6th request from one address = %d (Retry-After %q), want 429", r.status, r.header.Get("Retry-After"))
 	}
 }
+
+// A signup from the English site gets English emails, and the account
+// keeps English: later emails follow it, whatever page they start from.
+func TestSignupInEnglish(t *testing.T) {
+	e := newEnv(t)
+	english := map[string]string{"Sec-Fetch-Site": "same-origin", "Accept-Language": "en-GB,en;q=0.9,fr;q=0.8"}
+	if r := e.doHeaders("POST", "/api/v1/auth/signup", english, signupRequest{Email: "ceo@corp.example", Organization: "Corp"}); r.status != http.StatusAccepted {
+		t.Fatalf("signup = %d %s", r.status, r.body)
+	}
+	m := e.nextMail()
+	if m.Subject != "Confirm the creation of your Orus Shield account" || !strings.Contains(m.Text, `organization "Corp"`) {
+		t.Fatalf("email %q:\n%s", m.Subject, m.Text)
+	}
+	const prefix = "https://app.example/signup/complete#token="
+	i := strings.Index(m.Text, prefix)
+	if i < 0 {
+		t.Fatalf("no link in:\n%s", m.Text)
+	}
+	token := strings.Fields(m.Text[i+len(prefix):])[0]
+	if r := e.do("POST", "/api/v1/auth/signup/complete", "", setupPasswordRequest{Token: token, Password: "my own long passphrase"}); r.status != http.StatusNoContent {
+		t.Fatalf("complete = %d %s", r.status, r.body)
+	}
+	session := e.do("POST", "/api/v1/auth/login", "", loginRequest{Email: "ceo@corp.example", Password: "my own long passphrase"}).cookie(sessionCookie).Value
+	var me meResponse
+	e.do("GET", "/api/v1/auth/me", session, nil).json(t, &me)
+	if me.Lang != "en" {
+		t.Errorf("account language = %q, want en", me.Lang)
+	}
+
+	// From a French page, the account's English still wins.
+	french := map[string]string{"Sec-Fetch-Site": "same-origin", "Accept-Language": "fr-FR"}
+	if r := e.doHeaders("POST", "/api/v1/auth/forgot-password", french, forgotPasswordRequest{Email: "ceo@corp.example"}); r.status != http.StatusAccepted {
+		t.Fatalf("forgot = %d %s", r.status, r.body)
+	}
+	if m := e.nextMail(); m.Subject != "Reset your Orus Shield password" {
+		t.Errorf("reset email in the account's language: %q", m.Subject)
+	}
+}
