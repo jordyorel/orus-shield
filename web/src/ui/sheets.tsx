@@ -6,7 +6,7 @@ import { useState } from "react";
 import { api, ApiError } from "../api/client";
 import type { Scan } from "../api/types";
 import { Close, Expand, NavIcon, Shrink, Tick } from "./icons";
-import { CATS, RANK, SEV, STATE_LABEL, catState, evaluatedCats, worst, type Issue, type SevOrOk } from "./model";
+import { CATS, RANK, SEV, STATE_LABEL, catState, evaluatedCats, scoreVerdict, sevOf, strongChecks, weakChecks, worst, type Issue, type SevOrOk } from "./model";
 import { tr, useLang, type Lang } from "../i18n";
 import { Link } from "../router";
 import { useOrg } from "./OrgData";
@@ -506,3 +506,105 @@ export function AssetSheet({ n }: { n: string }) {
   );
 }
 
+
+/**
+ * ScoreSheet explains the score: what it means, how it is computed, what
+ * lowers it (each failed check, with the points its fix wins) and what is
+ * fine (the passed checks, by category): the proof of what the customer
+ * pays for. Every figure comes from the engine's check statuses.
+ */
+export function ScoreSheet() {
+  const { data, issues } = useOrg();
+  const { showSheet } = useUI();
+  if (!data) return null;
+  const score = data.overview.score;
+  const weak = weakChecks(data.checks, issues, data.targets);
+  const strong = strongChecks(data.checks);
+  const several = new Set(weak.map((w) => w.domain)).size > 1;
+  return (
+    <>
+      <div className="shead">
+        <span />
+        <CloseButton />
+      </div>
+      <h2 id="sheet-title">{score === null ? tr("Votre score", "Your score") : tr(`Votre score : ${score} sur 100`, `Your score: ${score} out of 100`)}</h2>
+      <p className="why">{scoreVerdict(score, weak.length)}</p>
+      <h3>{tr("Comment il est calculé", "How it is computed")}</h3>
+      <p className="why">
+        {tr(
+          "Chaque scan passe vos domaines au crible de contrôles. Le score est la part des contrôles réussis, chacun compté selon sa gravité : un contrôle critique pèse dix fois plus qu’un contrôle faible. Corriger un problème grave fait donc remonter le score bien plus vite.",
+          "Every scan runs a set of checks on your domains. The score is the share of checks passed, each counted by its severity: a critical check weighs ten times more than a low one. Fixing a serious problem therefore raises the score much faster.",
+        )}
+      </p>
+      <h3>
+        {tr("Ce qui fait baisser votre score", "What lowers your score")}
+        <span>{weak.length}</span>
+      </h3>
+      {weak.length ? (
+        <ul className="rows2 insheet">
+          {weak.map((w) => (
+            <li key={w.key}>
+              {w.issue ? (
+                <button className="rowmain" type="button" onClick={() => w.issue && showSheet(<FindingSheet id={w.issue.id} targetId={w.issue.targetId} />)}>
+                  <span className="t">{w.title}</span>
+                  <span className="m">
+                    <SevTag s={sevOf(w.severity)} />
+                    {several && <span>{w.domain}</span>}
+                  </span>
+                </button>
+              ) : (
+                <div className="rowmain">
+                  <span className="t">{w.title}</span>
+                  <span className="m">
+                    <SevTag s={sevOf(w.severity)} />
+                    {several && <span>{w.domain}</span>}
+                  </span>
+                </div>
+              )}
+              {w.gain > 0 && <span className="gain">+{w.gain}</span>}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="why" style={{ color: "var(--ink2)" }}>
+          {tr("Aucun contrôle en échec : rien ne fait baisser votre score.", "No failed check: nothing lowers your score.")}
+        </p>
+      )}
+      <h3>
+        {tr("Ce qui va bien", "What is fine")}
+        <span>{strong.total}</span>
+      </h3>
+      {strong.groups.length ? (
+        <>
+          <p className="why">
+            {tr(
+              `${strong.total} contrôle${strong.total > 1 ? "s" : ""} réussi${strong.total > 1 ? "s" : ""} au dernier scan. Nous les revérifions à chaque scan : vous serez prévenu si l’un d’eux échoue.`,
+              `${strong.total} check${strong.total > 1 ? "s" : ""} passed at the latest scan. We check them again at every scan: you will be told if one fails.`,
+            )}
+          </p>
+          <ul className="wellgroups">
+            {strong.groups.map((g) => (
+              <li key={g.category}>
+                <b>{g.label}</b>
+                <ul>
+                  {g.titles.map((t) => (
+                    <li key={t}>
+                      <i aria-hidden="true">
+                        <Tick size={14} width={3} />
+                      </i>
+                      {t}
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p className="why" style={{ color: "var(--ink2)" }}>
+          {tr("Rien n’a encore été contrôlé avec succès : les résultats arrivent après le premier scan.", "Nothing has passed a check yet: results arrive after the first scan.")}
+        </p>
+      )}
+    </>
+  );
+}

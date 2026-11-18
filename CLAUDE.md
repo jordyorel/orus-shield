@@ -54,7 +54,10 @@ line then shows its verdict ("Vérification en cours…", "Confirmé", "Toujours
 or Gratuit with the way to the trial); alert email links open Problèmes on the finding (`?id=`); each open problem's sheet has
 "Envoyer à mon prestataire" (`ui/share.ts`: the whole problem, steps and evidence, as a message in
 French or English, sent by the customer through `mailto:` or `wa.me`, or copied; nothing leaves the
-browser before their click).
+browser before their click); under the radar, the score in one sentence (`scoreVerdict`: level and
+weak points), a legend of the dots, and "Comprendre mon score" (`ScoreSheet`: how it is computed,
+the failed checks that lower it with their points, the passed checks by category, all from the
+engine's check statuses, `weakChecks` / `strongChecks`).
 Anything without a real source (WhatsApp, data leaks, payment providers, public domain test,
 Monday summary, deep profile, invoices, account deletion, regenerating recovery codes) stays
 in place, greyed, with a "Bientôt" badge: never simulated. Backend for it (migration 0016):

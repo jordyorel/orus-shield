@@ -3,11 +3,11 @@ import type { Activity } from "../../api/types";
 import { Link, navigate } from "../../router";
 import { appPath } from "../AppShell";
 import { Tick } from "../icons";
-import { COLOR, DIST, byPriority, feedDay, groupIssues, groupVerdict, hostsText, verdictText, worst, type AssetView, type Issue, type IssueGroup } from "../model";
+import { COLOR, DIST, byPriority, feedDay, groupIssues, groupVerdict, hostsText, scoreVerdict, verdictText, weakChecks, worst, type AssetView, type Issue, type IssueGroup } from "../model";
 import { tr } from "../../i18n";
 import { localTitle } from "../lang";
 import { useOrg } from "../OrgData";
-import { AssetSheet, FindingSheet, useFix } from "../sheets";
+import { AssetSheet, FindingSheet, ScoreSheet, useFix } from "../sheets";
 import { ScanLine } from "../ScanLine";
 import { useUI } from "../ui";
 import { AddPanel } from "./Actifs";
@@ -175,6 +175,35 @@ export function Radar({ assets, issues, score }: { assets: AssetView[]; issues: 
         )}
       </div>
     </div>
+  );
+}
+
+/** RadarLegend says what the radar's dots mean: their colour is the worst
+ * open problem of the asset, their distance from the centre its exposure. */
+function RadarLegend() {
+  const items: [string, string][] = [
+    [COLOR.crit, tr("Critique", "Critical")],
+    [COLOR.high, tr("Élevé", "High")],
+    [COLOR.med, tr("Moyen ou faible", "Medium or low")],
+    [COLOR.ok, tr("Protégé", "Protected")],
+  ];
+  return (
+    <>
+      <ul className="rlegend" aria-label={tr("Légende du radar", "Radar legend")}>
+        {items.map(([c, l]) => (
+          <li key={l}>
+            <i style={{ background: c }} aria-hidden="true" />
+            {l}
+          </li>
+        ))}
+      </ul>
+      <p className="md">
+        {tr(
+          "Chaque point est un de vos actifs, de la couleur de son problème le plus grave. Plus il est loin du centre, plus il est exposé.",
+          "Each dot is one of your assets, in the colour of its most serious problem. The further from the centre, the more exposed it is.",
+        )}
+      </p>
+    </>
   );
 }
 
@@ -544,6 +573,13 @@ export function AujourdhuiPage() {
         </div>
         <div>
           <Radar assets={assets} issues={issues} score={score} />
+          <div className="scorenote">
+            <p>{scoreVerdict(score, weakChecks(data.checks, issues, data.targets).length)}</p>
+            <button className="link" type="button" onClick={() => showSheet(<ScoreSheet />)}>
+              {tr("Comprendre mon score", "Understand my score")}
+            </button>
+          </div>
+          <RadarLegend />
         </div>
       </div>
       <div className="section">

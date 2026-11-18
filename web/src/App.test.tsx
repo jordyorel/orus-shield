@@ -295,6 +295,22 @@ describe("dashboard", () => {
     expect(screen.getByText("74")).toBeTruthy();
   });
 
+  it("explains the score: what lowers it and what is fine", async () => {
+    const checks = [
+      { target_id: "t1", id: "email-dmarc", title: "DMARC record published", module: "email", category: "email", severity: "high", status: "failed", findings: 1, evaluated_at: "" },
+      { target_id: "t1", id: "email-spf", title: "SPF record published", title_fr: "Enregistrement SPF publié", module: "email", category: "email", severity: "high", status: "passed", findings: 0, evaluated_at: "" },
+    ];
+    orgRoutes({ [`GET /orgs/${ORG}/checks`]: ok({ items: checks }) });
+    renderAt(`/orgs/${ORG}/aujourdhui`);
+    expect(await screen.findByText("Niveau moyen, 1 point faible à régler.")).toBeTruthy();
+    expect(screen.getByText("Protégé")).toBeTruthy(); // the radar's legend
+    fireEvent.click(screen.getByRole("button", { name: "Comprendre mon score" }));
+    expect(await screen.findByRole("heading", { name: "Votre score : 74 sur 100" })).toBeTruthy();
+    expect(screen.getByText("DMARC record published")).toBeTruthy();
+    expect(screen.getByText("Vos emails")).toBeTruthy();
+    expect(screen.getByText("Enregistrement SPF publié")).toBeTruthy();
+  });
+
   it("marks a problem fixed through the API", async () => {
     const calls = orgRoutes({ [`PUT /orgs/${ORG}/targets/t1/findings/f1/status`]: () => ({ status: 204 }) });
     renderAt(`/orgs/${ORG}/problemes`);

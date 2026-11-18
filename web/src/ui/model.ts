@@ -1,9 +1,9 @@
 // The mockup's vocabulary (severities, the five check columns, assets) built
 // from the API's data. Pure functions: every screen and the tests use them.
 
-import type { Check, Finding, OrgAsset, Severity } from "../api/types";
+import type { Category, Check, Finding, OrgAsset, Severity, Target } from "../api/types";
 import { locale, tr } from "../i18n";
-import { findingText } from "./lang";
+import { findingText, localTitle } from "./lang";
 
 /** label is a [key, label] pair whose label follows the current language. */
 function label<K>(k: K, fr: string, en: string): [K, string] {
@@ -539,4 +539,115 @@ export function verdictText(v: Verdict): string {
     case "late":
       return tr("Vérification en attente : le résultat arrivera ici", "Check pending: the result will appear here");
   }
+}
+
+// The score explained. It is the engine's (package posture): the evaluated
+// checks, each weighted by its severity, and the share of that weight that
+// passed. Info checks weigh nothing: they describe, they do not warn. The
+// dashboard only words it and lists its parts; it never computes its own.
+
+/** WEIGHT mirrors posture.Weight, to rank what lowers the score. */
+export const WEIGHT: Record<Severity, number> = { critical: 10, high: 6, medium: 3, low: 1, info: 0 };
+
+/** scoreVerdict words a score in one sentence, with its weak points (the
+ * failed checks that weigh in it). */
+export function scoreVerdict(score: number | null, weak: number): string {
+  if (score === null) return tr("Pas encore de score : il apparaît après le premier scan.", "No score yet: it appears after the first scan.");
+  const level =
+    score >= 90
+      ? tr("Très bon niveau", "Very good level")
+      : score >= 75
+        ? tr("Bon niveau", "Good level")
+        : score >= 50
+          ? tr("Niveau moyen", "Fair level")
+          : tr("Niveau faible", "Weak level");
+  const pts =
+    weak === 0
+      ? tr("aucun point faible", "no weak point")
+      : tr(`${weak} point${weak > 1 ? "s" : ""} faible${weak > 1 ? "s" : ""} à régler`, `${weak} weak point${weak > 1 ? "s" : ""} to fix`);
+  return `${level}, ${pts}.`;
+}
+
+/** WeakCheck is a failed check that lowers the score, with its problem. */
+export interface WeakCheck {
+  key: string;
+  title: string;
+  domain: string;
+  severity: Severity;
+  /** gain: the points its open problems win once fixed (as on Aujourd'hui). */
+  gain: number;
+  /** issue: its first open problem, to open its sheet; absent when none is open. */
+  issue?: Issue;
+}
+
+/** weakChecks lists the failed checks that weigh in the score, heaviest
+ * first, then those winning the most points. */
+export function weakChecks(checks: Check[], issues: Issue[], targets: Target[]): WeakCheck[] {
+  const domain = new Map(targets.map((t) => [t.id, t.domain]));
+  return checks
+    .filter((c) => c.status === "failed" && WEIGHT[c.severity] > 0)
+    .map((c) => {
+      const open = issues.filter((i) => !i.fixed && i.targetId === c.target_id && i.finding.check_id === c.id).sort(byPriority);
+      const w: WeakCheck = {
+        key: `${c.target_id ?? ""}/${c.id}`,
+        title: localTitle(c.title, c.title_fr),
+        domain: domain.get(c.target_id ?? "") ?? "",
+        severity: c.severity,
+        gain: open.reduce((n, i) => n + i.gain, 0),
+      };
+      if (open[0]) w.issue = open[0];
+      return w;
+    })
+    .sort((a, b) => WEIGHT[b.severity] - WEIGHT[a.severity] || b.gain - a.gain || a.title.localeCompare(b.title));
+}
+
+/** The categories of the check catalog, worded for "Ce qui va bien". */
+export const CATEGORY_LABEL: Record<Category, string> = {
+  get email() {
+    return tr("Vos emails", "Your email");
+  },
+  get web() {
+    return tr("Vos sites web", "Your websites");
+  },
+  get tls() {
+    return tr("Vos certificats et le chiffrement", "Your certificates and encryption");
+  },
+  get dns() {
+    return tr("Vos noms de domaine", "Your domain names");
+  },
+  get network() {
+    return tr("Vos serveurs et leurs ports", "Your servers and their ports");
+  },
+  get identity() {
+    return tr("Vos accès et identités", "Your access and identities");
+  },
+  get cloud() {
+    return tr("Votre cloud", "Your cloud");
+  },
+  get leaks() {
+    return tr("Vos fuites de données", "Your data leaks");
+  },
+};
+
+/** StrongGroup is what passed in one category: each check once, even when
+ * it passed on several domains. */
+export interface StrongGroup {
+  category: Category;
+  label: string;
+  titles: string[];
+}
+
+/** strongChecks groups the passed checks that weigh in the score by
+ * category, the categories with the most first. */
+export function strongChecks(checks: Check[]): { total: number; groups: StrongGroup[] } {
+  const passed = checks.filter((c) => c.status === "passed" && WEIGHT[c.severity] > 0);
+  const by = new Map<Category, Set<string>>();
+  for (const c of passed) {
+    const set = by.get(c.category) ?? new Set<string>();
+    set.add(localTitle(c.title, c.title_fr));
+    by.set(c.category, set);
+  }
+  const groups = [...by].map(([category, titles]) => ({ category, label: CATEGORY_LABEL[category] ?? category, titles: [...titles].sort((a, b) => a.localeCompare(b)) }));
+  groups.sort((a, b) => b.titles.length - a.titles.length || a.label.localeCompare(b.label));
+  return { total: passed.length, groups };
 }

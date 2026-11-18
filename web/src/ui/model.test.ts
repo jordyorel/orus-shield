@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Check, Finding, OrgAsset } from "../api/types";
-import { catState, device, evaluatedCats, feedDay, hostOf, initials, money, pwScore, toAssets, toIssues, weekly, worst } from "./model";
+import type { Check, Finding, OrgAsset, Target } from "../api/types";
+import { catState, device, evaluatedCats, feedDay, hostOf, initials, money, pwScore, scoreVerdict, strongChecks, toAssets, toIssues, weakChecks, weekly, worst } from "./model";
 
 const asset = (kind: OrgAsset["kind"], value: string, details: Record<string, string> = {}, domain = "example.cg"): OrgAsset => ({
   target_id: "t1",
@@ -134,5 +134,67 @@ describe("helpers", () => {
     expect(initials("Jordy Konda", "j@x.cg")).toBe("JK");
     expect(initials("", "j@x.cg")).toBe("J");
     expect(money(35)).toBe("35 $");
+  });
+});
+
+describe("the score explained", () => {
+  const check = (over: Partial<Check>): Check => ({
+    target_id: "t1",
+    id: "dmarc-missing",
+    title: "DMARC record published",
+    title_fr: "Enregistrement DMARC publié",
+    module: "email",
+    category: "email",
+    severity: "high",
+    status: "passed",
+    findings: 0,
+    evaluated_at: "",
+    ...over,
+  });
+  const targets = [
+    { id: "t1", domain: "example.cg" },
+    { id: "t2", domain: "shop.cg" },
+  ] as Target[];
+
+  it("words the level and the weak points", () => {
+    expect(scoreVerdict(null, 0)).toBe("Pas encore de score : il apparaît après le premier scan.");
+    expect(scoreVerdict(95, 0)).toBe("Très bon niveau, aucun point faible.");
+    expect(scoreVerdict(83, 2)).toBe("Bon niveau, 2 points faibles à régler.");
+    expect(scoreVerdict(74, 1)).toBe("Niveau moyen, 1 point faible à régler.");
+    expect(scoreVerdict(40, 5)).toBe("Niveau faible, 5 points faibles à régler.");
+  });
+
+  it("lists what lowers the score, heaviest first, with its problem", () => {
+    const checks = [
+      check({ id: "tls-weak", title: "Strong ciphers", title_fr: "Chiffrements solides", category: "tls", severity: "medium", status: "failed" }),
+      check({ status: "failed", target_id: "t2" }),
+      check({ id: "tls-info", severity: "info", status: "failed" }), // weighs nothing
+      check({ id: "spf", title: "SPF", title_fr: "SPF publié" }), // passed
+    ];
+    const issues = toIssues([finding({ target_id: "t2", id: "f2", check_id: "dmarc-missing", gain: 7 })], []);
+    const weak = weakChecks(checks, issues, targets);
+    expect(weak.map((w) => [w.title, w.domain, w.gain])).toEqual([
+      ["Enregistrement DMARC publié", "shop.cg", 7],
+      ["Chiffrements solides", "example.cg", 0],
+    ]);
+    expect(weak[0]?.issue?.id).toBe("f2");
+    expect(weak[1]?.issue).toBeUndefined();
+  });
+
+  it("groups what is fine by category, each check once", () => {
+    const checks = [
+      check({}),
+      check({ target_id: "t2" }), // passed on a second domain: listed once, counted twice
+      check({ id: "spf", title_fr: "SPF publié" }),
+      check({ id: "https", title_fr: "Redirection vers HTTPS", category: "web" }),
+      check({ id: "tech", title_fr: "Technologies", category: "web", severity: "info" }), // weighs nothing
+      check({ id: "tls", title_fr: "Certificat valide", category: "tls", status: "failed" }),
+    ];
+    const { total, groups } = strongChecks(checks);
+    expect(total).toBe(4);
+    expect(groups.map((g) => [g.label, g.titles])).toEqual([
+      ["Vos emails", ["Enregistrement DMARC publié", "SPF publié"]],
+      ["Vos sites web", ["Redirection vers HTTPS"]],
+    ]);
   });
 });

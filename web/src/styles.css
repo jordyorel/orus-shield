@@ -185,6 +185,17 @@ a.topchip:hover{border-color:var(--azur);color:var(--azur-ink)}
 .langsw button{min-height:34px;padding:0 10px;font-size:13px;font-weight:600;letter-spacing:.02em;border-radius:9px}
 .authtopr{display:flex;align-items:center;gap:14px}
 .sharerow{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:10px}
+.wellgroups{list-style:none;padding:0;margin:12px 0 0;display:grid;gap:16px}
+.wellgroups>li>b{display:block;font-size:15px;margin-bottom:6px}
+.wellgroups ul{list-style:none;padding:0;margin:0;display:grid;gap:6px}
+.wellgroups ul li{display:flex;align-items:flex-start;gap:10px;font-size:15px;color:var(--ink2)}
+.wellgroups i{flex:none;display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--lagon);margin-top:1px}
+.scorenote{text-align:center;margin:10px auto 0;max-width:420px}
+.scorenote p{margin:0;font-weight:600}
+.rlegend{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 14px;margin:12px auto 0;padding:0;list-style:none;font-size:13px;color:var(--ink2);max-width:420px}
+.rlegend li{display:inline-flex;align-items:center;gap:6px}
+.rlegend i{width:10px;height:10px;border-radius:50%}
+.rlegend+.md{text-align:center;font-size:13px;color:var(--ink2);margin:6px auto 0;max-width:420px}
 .chart .draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw 1.2s cubic-bezier(.4,0,.2,1) forwards}
 .chart .area{opacity:0;animation:fadeA .8s .7s forwards}
 .chart .pt{opacity:0;animation:pop .35s cubic-bezier(.3,1.6,.5,1) forwards;transform-box:fill-box;transform-origin:center}
