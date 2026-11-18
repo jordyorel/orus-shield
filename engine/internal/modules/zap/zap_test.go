@@ -276,3 +276,13 @@ func TestApplyAuth(t *testing.T) {
 		t.Error("--env-file without a test account")
 	}
 }
+
+// Every kind of flaw is named and explained in French.
+func TestKindsHaveFrench(t *testing.T) {
+	for _, c := range []string{CheckInjection, CheckXSS, CheckFiles, CheckForgery, CheckOther,
+		CheckAPIInjection, CheckAPIAccess, CheckAPIExposure, CheckAPIConfig, CheckAPIOther} {
+		if k := kindsFR[c]; k.label == "" || k.why == "" {
+			t.Errorf("check %s: no French text", c)
+		}
+	}
+}

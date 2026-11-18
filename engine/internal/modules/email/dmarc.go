@@ -57,6 +57,11 @@ func checkDMARC(ctx context.Context, dns resolver.Resolver, domain string, recei
 			evidence:    strings.Join(records, "\n"),
 			remediation: []string{"Keep a single DMARC record at " + asset + "."},
 			references:  []string{refDMARC},
+			fr: finding.Text{
+				Title:       "Plusieurs enregistrements DMARC",
+				Description: "Plus d’un enregistrement DMARC est publié. Les serveurs de réception n’appliquent alors aucune politique DMARC.",
+				Remediation: []string{"Gardez un seul enregistrement DMARC sur " + asset + "."},
+			},
 		}}, nil
 	}
 
@@ -75,6 +80,11 @@ func checkDMARC(ctx context.Context, dns resolver.Resolver, domain string, recei
 			evidence:    record,
 			remediation: []string{"Set p=none, p=quarantine or p=reject in the DMARC record."},
 			references:  []string{refDMARC},
+			fr: finding.Text{
+				Title:       "Enregistrement DMARC invalide",
+				Description: "La politique (p=) de l’enregistrement DMARC est absente ou inconnue. Sans politique valide, les serveurs de réception n’appliquent pas DMARC.",
+				Remediation: []string{"Indiquez p=none, p=quarantine ou p=reject dans l’enregistrement DMARC."},
+			},
 		}}, nil
 	}
 
@@ -93,6 +103,14 @@ func checkDMARC(ctx context.Context, dns resolver.Resolver, domain string, recei
 				"Move to p=quarantine, then p=reject.",
 			},
 			references: []string{refDMARC},
+			fr: finding.Text{
+				Title:       "La politique DMARC ne bloque pas l’usurpation",
+				Description: "La politique DMARC est p=none : les serveurs de réception se contentent de signaler les échecs et distribuent quand même les emails usurpés. C’est une étape de surveillance, pas une protection.",
+				Remediation: []string{
+					"Lisez les rapports DMARC pour vérifier que tous vos emails légitimes passent SPF ou DKIM.",
+					"Passez à p=quarantine, puis à p=reject.",
+				},
+			},
 		})
 	} else {
 		// Partial enforcement and subdomain policy only matter once the
@@ -108,6 +126,11 @@ func checkDMARC(ctx context.Context, dns resolver.Resolver, domain string, recei
 				evidence:    record,
 				remediation: []string{"Raise pct to 100, or remove the pct tag (100 is the default)."},
 				references:  []string{refDMARC},
+				fr: finding.Text{
+					Title:       "La politique DMARC ne s’applique qu’à une partie des emails",
+					Description: "Le paramètre pct= limite la politique à un pourcentage des emails en échec ; les autres sont distribués comme s’il n’y avait aucune politique.",
+					Remediation: []string{"Passez pct à 100, ou supprimez le paramètre pct (100 est la valeur par défaut)."},
+				},
 			})
 		}
 		if strings.EqualFold(tags["sp"], "none") {
@@ -120,6 +143,11 @@ func checkDMARC(ctx context.Context, dns resolver.Resolver, domain string, recei
 				evidence:    record,
 				remediation: []string{"Remove sp=none so subdomains inherit the main policy, or set sp=reject."},
 				references:  []string{refDMARC},
+				fr: finding.Text{
+					Title:       "Les sous-domaines ne sont pas protégés par DMARC",
+					Description: "Le paramètre sp=none désactive la politique pour les sous-domaines : on peut encore usurper n’importe quel sous-domaine (par exemple facturation." + domain + ").",
+					Remediation: []string{"Supprimez sp=none pour que les sous-domaines héritent de la politique principale, ou indiquez sp=reject."},
+				},
 			})
 		}
 	}
@@ -133,6 +161,11 @@ func checkDMARC(ctx context.Context, dns resolver.Resolver, domain string, recei
 			evidence:    record,
 			remediation: []string{"Add rua=mailto:<address> to receive aggregate reports."},
 			references:  []string{refDMARC},
+			fr: finding.Text{
+				Title:       "Les rapports DMARC ne sont pas collectés",
+				Description: "L’enregistrement DMARC n’indique aucune adresse rua= : vous ne recevez aucun rapport sur qui envoie des emails en votre nom, légitimement ou non.",
+				Remediation: []string{"Ajoutez rua=mailto:<adresse> pour recevoir les rapports agrégés."},
+			},
 		}
 		// Without mail, reports only tell who tried to spoof the domain;
 		// the policy already blocks them. Useful to know, not a problem to
@@ -141,6 +174,8 @@ func checkDMARC(ctx context.Context, dns resolver.Resolver, domain string, recei
 			i.severity = finding.SeverityInfo
 			i.description = "The domain handles no mail and its DMARC policy already blocks spoofed messages. Adding a rua= address would also tell you who tries to send mail in its name."
 			i.remediation = []string{"Optional: add rua=mailto:<address> to receive reports about spoofing attempts."}
+			i.fr.Description = "Le domaine ne gère aucun email et sa politique DMARC bloque déjà les messages usurpés. Ajouter une adresse rua= vous indiquerait en plus qui tente d’envoyer des emails en son nom."
+			i.fr.Remediation = []string{"Facultatif : ajoutez rua=mailto:<adresse> pour recevoir les rapports sur les tentatives d’usurpation."}
 		}
 		issues = append(issues, i)
 	}
@@ -155,15 +190,26 @@ func dmarcMissing(asset string, receivesMail bool) issue {
 		title:       "No DMARC record",
 		description: "The domain publishes no DMARC policy. Receivers have no instruction to reject mail that fails SPF and DKIM, so the domain can be used for phishing.",
 		references:  []string{refDMARC},
+		fr: finding.Text{
+			Title:       "Aucun enregistrement DMARC",
+			Description: "Le domaine ne publie aucune politique DMARC. Les serveurs de réception n’ont aucune consigne pour rejeter les emails qui échouent à SPF et DKIM : le domaine peut servir à de l’hameçonnage.",
+		},
 	}
 	if receivesMail {
 		i.remediation = []string{
 			"Publish \"v=DMARC1; p=none; rua=mailto:<address>\" at " + asset + " to start collecting reports.",
 			"After checking the reports, move to p=quarantine, then p=reject.",
 		}
+		i.fr.Remediation = []string{
+			"Publiez « v=DMARC1; p=none; rua=mailto:<adresse> » sur " + asset + " pour commencer à recevoir les rapports.",
+			"Après lecture des rapports, passez à p=quarantine, puis à p=reject.",
+		}
 	} else {
 		i.remediation = []string{
 			"If the domain never sends mail, publish \"v=DMARC1; p=reject\" at " + asset + ".",
+		}
+		i.fr.Remediation = []string{
+			"Si le domaine n’envoie jamais d’emails, publiez « v=DMARC1; p=reject » sur " + asset + ".",
 		}
 	}
 	return i

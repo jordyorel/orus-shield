@@ -64,25 +64,25 @@ func (m *Module) Info() module.Info {
 // Checks is the module's catalog. Severity is the check's weight in the
 // posture score: the usual severity of its finding.
 var Checks = []module.Check{
-	{ID: CheckSPFMissing, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "SPF record published"},
-	{ID: CheckSPFMultiple, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "Single SPF record"},
-	{ID: CheckSPFInvalid, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "SPF record is valid"},
-	{ID: CheckSPFPassAll, Category: module.CategoryEmail, Severity: finding.SeverityCritical, Title: "SPF does not authorize every server (+all)"},
-	{ID: CheckSPFNeutralAll, Category: module.CategoryEmail, Severity: finding.SeverityMedium, Title: "SPF rejects unknown senders (not ?all)"},
-	{ID: CheckSPFSoftfailAll, Category: module.CategoryEmail, Severity: finding.SeverityLow, Title: "SPF fails unknown senders strictly (not ~all)"},
-	{ID: CheckSPFNoAll, Category: module.CategoryEmail, Severity: finding.SeverityMedium, Title: "SPF has a default rule"},
-	{ID: CheckSPFTooManyLookups, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "SPF stays within 10 DNS lookups"},
-	{ID: CheckDMARCMissing, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "DMARC record published"},
-	{ID: CheckDMARCMultiple, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "Single DMARC record"},
-	{ID: CheckDMARCInvalid, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "DMARC record is valid"},
-	{ID: CheckDMARCPolicyNone, Category: module.CategoryEmail, Severity: finding.SeverityMedium, Title: "DMARC policy blocks spoofing"},
-	{ID: CheckDMARCPartialEnforcement, Category: module.CategoryEmail, Severity: finding.SeverityLow, Title: "DMARC policy applies to all mail"},
-	{ID: CheckDMARCSubdomainNone, Category: module.CategoryEmail, Severity: finding.SeverityLow, Title: "DMARC protects subdomains"},
-	{ID: CheckDMARCNoReporting, Category: module.CategoryEmail, Severity: finding.SeverityLow, Title: "DMARC reports are collected"},
-	{ID: CheckDKIMNotFound, Category: module.CategoryEmail, Severity: finding.SeverityInfo, Title: "DKIM key published"},
-	{ID: CheckDKIMInvalidKey, Category: module.CategoryEmail, Severity: finding.SeverityMedium, Title: "DKIM keys are valid"},
-	{ID: CheckDKIMWeakKey, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "DKIM keys are strong"},
-	{ID: CheckDKIMShortKey, Category: module.CategoryEmail, Severity: finding.SeverityLow, Title: "DKIM keys use 2048 bits"},
+	{ID: CheckSPFMissing, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "SPF record published", TitleFR: "Enregistrement SPF publié"},
+	{ID: CheckSPFMultiple, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "Single SPF record", TitleFR: "Un seul enregistrement SPF"},
+	{ID: CheckSPFInvalid, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "SPF record is valid", TitleFR: "Enregistrement SPF valide"},
+	{ID: CheckSPFPassAll, Category: module.CategoryEmail, Severity: finding.SeverityCritical, Title: "SPF does not authorize every server (+all)", TitleFR: "SPF n’autorise pas tous les serveurs (+all)"},
+	{ID: CheckSPFNeutralAll, Category: module.CategoryEmail, Severity: finding.SeverityMedium, Title: "SPF rejects unknown senders (not ?all)", TitleFR: "SPF rejette les expéditeurs inconnus (pas de ?all)"},
+	{ID: CheckSPFSoftfailAll, Category: module.CategoryEmail, Severity: finding.SeverityLow, Title: "SPF fails unknown senders strictly (not ~all)", TitleFR: "SPF refuse strictement les expéditeurs inconnus (pas de ~all)"},
+	{ID: CheckSPFNoAll, Category: module.CategoryEmail, Severity: finding.SeverityMedium, Title: "SPF has a default rule", TitleFR: "SPF a une règle par défaut"},
+	{ID: CheckSPFTooManyLookups, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "SPF stays within 10 DNS lookups", TitleFR: "SPF reste sous la limite de 10 requêtes DNS"},
+	{ID: CheckDMARCMissing, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "DMARC record published", TitleFR: "Enregistrement DMARC publié"},
+	{ID: CheckDMARCMultiple, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "Single DMARC record", TitleFR: "Un seul enregistrement DMARC"},
+	{ID: CheckDMARCInvalid, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "DMARC record is valid", TitleFR: "Enregistrement DMARC valide"},
+	{ID: CheckDMARCPolicyNone, Category: module.CategoryEmail, Severity: finding.SeverityMedium, Title: "DMARC policy blocks spoofing", TitleFR: "La politique DMARC bloque l’usurpation"},
+	{ID: CheckDMARCPartialEnforcement, Category: module.CategoryEmail, Severity: finding.SeverityLow, Title: "DMARC policy applies to all mail", TitleFR: "La politique DMARC s’applique à tous les emails"},
+	{ID: CheckDMARCSubdomainNone, Category: module.CategoryEmail, Severity: finding.SeverityLow, Title: "DMARC protects subdomains", TitleFR: "DMARC protège les sous-domaines"},
+	{ID: CheckDMARCNoReporting, Category: module.CategoryEmail, Severity: finding.SeverityLow, Title: "DMARC reports are collected", TitleFR: "Les rapports DMARC sont collectés"},
+	{ID: CheckDKIMNotFound, Category: module.CategoryEmail, Severity: finding.SeverityInfo, Title: "DKIM key published", TitleFR: "Clé DKIM publiée"},
+	{ID: CheckDKIMInvalidKey, Category: module.CategoryEmail, Severity: finding.SeverityMedium, Title: "DKIM keys are valid", TitleFR: "Les clés DKIM sont valides"},
+	{ID: CheckDKIMWeakKey, Category: module.CategoryEmail, Severity: finding.SeverityHigh, Title: "DKIM keys are strong", TitleFR: "Les clés DKIM sont robustes"},
+	{ID: CheckDKIMShortKey, Category: module.CategoryEmail, Severity: finding.SeverityLow, Title: "DKIM keys use 2048 bits", TitleFR: "Les clés DKIM font 2048 bits"},
 }
 
 // evaluated collects the checks a run actually performed.
@@ -169,6 +169,7 @@ type issue struct {
 	evidence    string
 	remediation []string
 	references  []string
+	fr          finding.Text // the customer-facing text in French
 }
 
 func (i issue) finding(target string) finding.Finding {
@@ -185,6 +186,7 @@ func (i issue) finding(target string) finding.Finding {
 		Evidence:      finding.TruncateEvidence(i.evidence),
 		Remediation:   i.remediation,
 		References:    i.references,
+		Translations:  map[string]finding.Text{"fr": i.fr},
 	}
 }
 

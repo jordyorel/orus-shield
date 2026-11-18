@@ -100,6 +100,7 @@ type Check struct {
 	Category Category
 	Severity finding.Severity
 	Title    string // short English title of what is checked
+	TitleFR  string // the same in French
 }
 
 // CheckStatus is the outcome of one check in one run.

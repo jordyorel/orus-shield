@@ -9,6 +9,9 @@ type family struct {
 	// why explains the risk to a non-specialist.
 	why string
 	fix []string
+	// whyFR and fixFR are the same in French.
+	whyFR string
+	fixFR []string
 }
 
 // service is one TCP port we look for.
@@ -44,18 +47,28 @@ var (
 			"Reach the machine through a VPN instead.",
 			"Until then, use long unique passwords and lock accounts after failed attempts.",
 		},
+		whyFR: "Les services de bureau à distance sont l’une des principales portes d’entrée des rançongiciels : des attaquants y essaient des mots de passe automatiquement, jour et nuit.",
+		fixFR: []string{
+			"Fermez ce port à internet dans le pare-feu ou le panneau d’hébergement.",
+			"Accédez à la machine par un VPN à la place.",
+			"En attendant, utilisez des mots de passe longs et uniques, et verrouillez les comptes après plusieurs échecs.",
+		},
 	}
 	windowsSharing = family{
 		checkID:  "port-windows-sharing-exposed",
 		severity: finding.SeverityCritical,
 		why:      "Windows file sharing and RPC were never meant for the internet. Worms such as WannaCry spread through them without any password.",
 		fix:      []string{"Block this port in the firewall: these services must stay on the internal network."},
+		whyFR:    "Le partage de fichiers et le RPC de Windows n’ont jamais été conçus pour internet. Des vers comme WannaCry se propagent par ces services sans aucun mot de passe.",
+		fixFR:    []string{"Bloquez ce port dans le pare-feu : ces services doivent rester sur le réseau interne."},
 	}
 	cleartextAdmin = family{
 		checkID:  "port-cleartext-admin-exposed",
 		severity: finding.SeverityCritical,
 		why:      "This administration protocol sends passwords and commands unencrypted: anyone on the path can read them.",
 		fix:      []string{"Disable the service and administer the machine over SSH instead."},
+		whyFR:    "Ce protocole d’administration transmet mots de passe et commandes sans chiffrement : n’importe qui sur le trajet peut les lire.",
+		fixFR:    []string{"Désactivez ce service et administrez la machine par SSH à la place."},
 	}
 	orchestration = family{
 		checkID:  "port-orchestration-api-exposed",
@@ -64,6 +77,11 @@ var (
 		fix: []string{
 			"Close this port to the internet; only administrators' networks should reach it.",
 			"Require authentication and TLS client certificates on the API.",
+		},
+		whyFR: "Les API de pilotage de conteneurs et de clusters donnent le contrôle total du serveur à quiconque peut les joindre, souvent sans aucun mot de passe.",
+		fixFR: []string{
+			"Fermez ce port à internet ; seuls les réseaux des administrateurs doivent pouvoir le joindre.",
+			"Exigez une authentification et des certificats clients TLS sur l’API.",
 		},
 	}
 	database = family{
@@ -75,6 +93,12 @@ var (
 			"Block this port in the firewall.",
 			"Check that authentication is enabled.",
 		},
+		whyFR: "Une base de données ne doit être accessible qu’à l’application qui l’utilise. Plusieurs bases (Redis, MongoDB, Elasticsearch, Memcached) acceptent par défaut les connexions sans mot de passe : la base entière peut alors être copiée ou effacée en une seule connexion.",
+		fixFR: []string{
+			"Faites écouter la base de données sur localhost ou sur un réseau privé uniquement.",
+			"Bloquez ce port dans le pare-feu.",
+			"Vérifiez que l’authentification est activée.",
+		},
 	}
 	fileSharing = family{
 		checkID:  "port-file-sharing-exposed",
@@ -84,12 +108,19 @@ var (
 			"Close this port if the service is not needed from the internet.",
 			"Replace FTP with SFTP (file transfer over SSH).",
 		},
+		whyFR: "Les services de transfert et de partage de fichiers exposent des fichiers sur internet, et plusieurs d’entre eux (FTP, NFS, rsync) transmettent mots de passe ou données sans chiffrement, ou font confiance au réseau au lieu de demander un mot de passe.",
+		fixFR: []string{
+			"Fermez ce port si le service n’a pas besoin d’être joignable depuis internet.",
+			"Remplacez FTP par SFTP (transfert de fichiers par SSH).",
+		},
 	}
 	directory = family{
 		checkID:  "port-directory-exposed",
 		severity: finding.SeverityHigh,
 		why:      "A directory server (LDAP) holds user accounts and often answers questions about them; exposed, it helps attackers list users and guess passwords.",
 		fix:      []string{"Block this port in the firewall; directory services belong on the internal network."},
+		whyFR:    "Un annuaire (LDAP) contient les comptes des utilisateurs et répond souvent à des questions à leur sujet ; exposé, il aide les attaquants à lister les utilisateurs et à deviner leurs mots de passe.",
+		fixFR:    []string{"Bloquez ce port dans le pare-feu ; les annuaires ont leur place sur le réseau interne."},
 	}
 	broker = family{
 		checkID:  "port-message-broker-exposed",
@@ -99,12 +130,19 @@ var (
 			"Close this port to the internet.",
 			"Require authentication and change default credentials.",
 		},
+		whyFR: "Les courtiers de messages relient des applications internes. Exposés, ils peuvent permettre à des tiers de lire ou d’injecter des messages, souvent avec les identifiants par défaut.",
+		fixFR: []string{
+			"Fermez ce port à internet.",
+			"Exigez une authentification et changez les identifiants par défaut.",
+		},
 	}
 	proxy = family{
 		checkID:  "port-proxy-exposed",
 		severity: finding.SeverityHigh,
 		why:      "An open proxy lets anyone relay traffic through your server: attackers use them to hide their origin, and your IP then gets blocklisted.",
 		fix:      []string{"Close this port or restrict the proxy to your own users."},
+		whyFR:    "Un proxy ouvert permet à n’importe qui de faire transiter du trafic par votre serveur : les attaquants s’en servent pour masquer leur origine, et votre adresse IP finit sur des listes de blocage.",
+		fixFR:    []string{"Fermez ce port ou réservez le proxy à vos propres utilisateurs."},
 	}
 	adminWeb = family{
 		checkID:  "port-admin-web-exposed",
@@ -114,18 +152,27 @@ var (
 			"Check what answers on this port.",
 			"If it is an admin or development tool, close the port or put it behind a VPN or a login.",
 		},
+		whyFR: "Les ports web secondaires hébergent souvent des panneaux d’administration, des tableaux de bord ou des serveurs de développement qui n’ont jamais été destinés au public.",
+		fixFR: []string{
+			"Vérifiez ce qui répond sur ce port.",
+			"S’il s’agit d’un outil d’administration ou de développement, fermez le port ou placez-le derrière un VPN ou une connexion protégée.",
+		},
 	}
 	voip = family{
 		checkID:  "port-voip-exposed",
 		severity: finding.SeverityMedium,
 		why:      "Exposed telephony (SIP) servers are scanned constantly for weak accounts, which attackers use to place expensive calls at your cost.",
 		fix:      []string{"Restrict this port to your telephony provider's addresses."},
+		whyFR:    "Les serveurs de téléphonie (SIP) exposés sont sondés en permanence à la recherche de comptes faibles, que les attaquants utilisent pour passer des appels coûteux à vos frais.",
+		fixFR:    []string{"Limitez ce port aux adresses de votre opérateur de téléphonie."},
 	}
 	cleartextMail = family{
 		checkID:  "port-cleartext-mail-exposed",
 		severity: finding.SeverityLow,
 		why:      "This mail port accepts unencrypted connections, so mailbox passwords can travel in clear text.",
 		fix:      []string{"Use the encrypted ports (993 for IMAP, 995 for POP3) and close the unencrypted ones."},
+		whyFR:    "Ce port de messagerie accepte les connexions non chiffrées : les mots de passe des boîtes mail peuvent circuler en clair.",
+		fixFR:    []string{"Utilisez les ports chiffrés (993 pour IMAP, 995 pour POP3) et fermez les ports non chiffrés."},
 	}
 	ssh = family{
 		checkID:  "port-ssh-exposed",
@@ -134,6 +181,11 @@ var (
 		fix: []string{
 			"Allow key-based login only and disable password login.",
 			"If possible, restrict the port to your own addresses or a VPN.",
+		},
+		whyFR: "SSH est le moyen normal d’administrer un serveur, mais il subit en continu des tentatives automatisées de devinette de mots de passe.",
+		fixFR: []string{
+			"N’autorisez que la connexion par clé et désactivez la connexion par mot de passe.",
+			"Si possible, limitez le port à vos propres adresses ou à un VPN.",
 		},
 	}
 )

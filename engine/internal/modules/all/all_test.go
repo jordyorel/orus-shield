@@ -17,3 +17,19 @@ func TestRegistry(t *testing.T) {
 		}
 	}
 }
+
+// Every check of every shipped module has its French title: the dashboard
+// and the reports show the catalog in the customer's language.
+func TestChecksHaveFrenchTitles(t *testing.T) {
+	reg, err := Registry(resolver.NewSystem(), Options{})
+	if err != nil {
+		t.Fatalf("Registry: %v", err)
+	}
+	for _, m := range reg.All() {
+		for _, c := range m.Info().Checks {
+			if c.TitleFR == "" {
+				t.Errorf("module %s, check %s: no French title", m.Info().ID, c.ID)
+			}
+		}
+	}
+}

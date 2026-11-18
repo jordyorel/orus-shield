@@ -71,14 +71,14 @@ func (m *Module) Info() module.Info {
 
 // Checks is the module's catalog.
 var Checks = []module.Check{
-	{ID: CheckHandshakeFailed, Category: module.CategoryTLS, Severity: finding.SeverityMedium, Title: "HTTPS connections succeed"},
-	{ID: CheckLegacyVersion, Category: module.CategoryTLS, Severity: finding.SeverityMedium, Title: "TLS 1.0 and 1.1 are refused"},
-	{ID: CheckCertExpired, Category: module.CategoryTLS, Severity: finding.SeverityCritical, Title: "Certificate has not expired"},
-	{ID: CheckCertExpiringSoon, Category: module.CategoryTLS, Severity: finding.SeverityMedium, Title: "Certificate is not about to expire"},
-	{ID: CheckCertNotYetValid, Category: module.CategoryTLS, Severity: finding.SeverityHigh, Title: "Certificate is already valid"},
-	{ID: CheckCertHostnameMismatch, Category: module.CategoryTLS, Severity: finding.SeverityHigh, Title: "Certificate matches the site name"},
-	{ID: CheckCertUntrusted, Category: module.CategoryTLS, Severity: finding.SeverityHigh, Title: "Certificate is trusted by browsers"},
-	{ID: CheckCertWeakKey, Category: module.CategoryTLS, Severity: finding.SeverityMedium, Title: "Certificate key is strong enough"},
+	{ID: CheckHandshakeFailed, Category: module.CategoryTLS, Severity: finding.SeverityMedium, Title: "HTTPS connections succeed", TitleFR: "Les connexions HTTPS aboutissent"},
+	{ID: CheckLegacyVersion, Category: module.CategoryTLS, Severity: finding.SeverityMedium, Title: "TLS 1.0 and 1.1 are refused", TitleFR: "TLS 1.0 et 1.1 sont refusés"},
+	{ID: CheckCertExpired, Category: module.CategoryTLS, Severity: finding.SeverityCritical, Title: "Certificate has not expired", TitleFR: "Le certificat n’a pas expiré"},
+	{ID: CheckCertExpiringSoon, Category: module.CategoryTLS, Severity: finding.SeverityMedium, Title: "Certificate is not about to expire", TitleFR: "Le certificat n’est pas sur le point d’expirer"},
+	{ID: CheckCertNotYetValid, Category: module.CategoryTLS, Severity: finding.SeverityHigh, Title: "Certificate is already valid", TitleFR: "Le certificat est déjà valide"},
+	{ID: CheckCertHostnameMismatch, Category: module.CategoryTLS, Severity: finding.SeverityHigh, Title: "Certificate matches the site name", TitleFR: "Le certificat correspond au nom du site"},
+	{ID: CheckCertUntrusted, Category: module.CategoryTLS, Severity: finding.SeverityHigh, Title: "Certificate is trusted by browsers", TitleFR: "Le certificat est reconnu par les navigateurs"},
+	{ID: CheckCertWeakKey, Category: module.CategoryTLS, Severity: finding.SeverityMedium, Title: "Certificate key is strong enough", TitleFR: "La clé du certificat est assez robuste"},
 }
 
 // certChecks are evaluated on every completed handshake.
@@ -330,7 +330,8 @@ type issue struct {
 	evidence    string
 	remediation []string
 	references  []string
-	ip          netip.Addr // address where it was observed; not part of the finding
+	fr          finding.Text // the customer-facing text in French
+	ip          netip.Addr   // address where it was observed; not part of the finding
 }
 
 func (i issue) finding(target string) finding.Finding {
@@ -347,5 +348,6 @@ func (i issue) finding(target string) finding.Finding {
 		Evidence:      finding.TruncateEvidence(i.evidence),
 		Remediation:   i.remediation,
 		References:    i.references,
+		Translations:  map[string]finding.Text{"fr": i.fr},
 	}
 }

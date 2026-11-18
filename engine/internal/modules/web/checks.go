@@ -61,6 +61,17 @@ func analyzeHTTP(domain, host string, chain []*response, httpsWorks bool) (_ *is
 			"nginx: in the port 80 server block, use `return 301 https://$host$request_uri;`. Apache: `Redirect permanent / https://" + host + "/`. Most hosting panels have a \"Force HTTPS\" option.",
 			"Then enable HSTS so browsers stop trying http:// at all.",
 		}
+		i.fr = finding.Text{
+			Title: "Le site ne redirige pas HTTP vers HTTPS",
+			Description: fmt.Sprintf("http://%s/ sert le site sans chiffrement au lieu d’envoyer les visiteurs vers la version HTTPS. "+
+				"Toute personne sur le même réseau (Wi-Fi public, routeur compromis) peut lire ou modifier ce que ces visiteurs voient et envoient, "+
+				"y compris les mots de passe saisis dans les formulaires.", host),
+			Remediation: []string{
+				"Faites répondre le serveur web à chaque requête http:// par une redirection permanente (301) vers la même adresse en https://.",
+				"nginx : dans le bloc server du port 80, utilisez `return 301 https://$host$request_uri;`. Apache : `Redirect permanent / https://" + host + "/`. La plupart des panneaux d’hébergement proposent une option « Forcer HTTPS ».",
+				"Activez ensuite HSTS pour que les navigateurs n’essaient plus du tout http://.",
+			},
+		}
 		return &i, true
 	}
 	i.severity = finding.SeverityHigh
@@ -70,6 +81,15 @@ func analyzeHTTP(domain, host string, chain []*response, httpsWorks bool) (_ *is
 	i.remediation = []string{
 		"Get a free certificate (Let's Encrypt, or the SSL option of your hosting panel) for " + host + ".",
 		"Enable HTTPS on the web server, then redirect every http:// request to https://.",
+	}
+	i.fr = finding.Text{
+		Title: "Le site n’est accessible que sans chiffrement",
+		Description: fmt.Sprintf("http://%s/ sert le site et aucune version HTTPS fonctionnelle n’a été trouvée. "+
+			"Tout ce que les visiteurs voient et envoient, y compris les mots de passe saisis dans les formulaires, circule en clair et peut être lu ou modifié en chemin.", host),
+		Remediation: []string{
+			"Obtenez un certificat gratuit (Let’s Encrypt, ou l’option SSL de votre panneau d’hébergement) pour " + host + ".",
+			"Activez HTTPS sur le serveur web, puis redirigez chaque requête http:// vers https://.",
+		},
 	}
 	return &i, true
 }
@@ -112,6 +132,15 @@ func analyzeHTTPS(host string, chain []*response) hostResult {
 				"A reasonable first policy: `default-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'self'`, then allow the external sources the site really uses.",
 			},
 			references: []string{refCSP, refOWASPHdrs},
+			fr: finding.Text{
+				Title: "Aucune politique de sécurité du contenu (CSP)",
+				Description: "Le site n’indique pas aux navigateurs quelles sources de scripts, de styles et de cadres sont légitimes. " +
+					"Si un attaquant parvient à injecter un script dans une page (un champ de commentaire, une extension vulnérable), rien n’empêche le navigateur de l’exécuter.",
+				Remediation: []string{
+					"Ajoutez un en-tête Content-Security-Policy. Commencez en mode observation (Content-Security-Policy-Report-Only) pour voir ce qui serait bloqué.",
+					"Une première politique raisonnable : `default-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'self'`, puis autorisez les sources externes que le site utilise réellement.",
+				},
+			},
 		})
 	}
 
@@ -127,6 +156,15 @@ func analyzeHTTPS(host string, chain []*response) hostResult {
 				"With a Content Security Policy, `frame-ancestors 'self'` does the same for modern browsers.",
 			},
 			references: []string{refFrame, refOWASPHdrs},
+			fr: finding.Text{
+				Title: "D’autres sites peuvent intégrer vos pages (clickjacking)",
+				Description: "N’importe quel site peut afficher ces pages dans un cadre invisible et amener les visiteurs à cliquer sur leurs boutons " +
+					"(confirmer une action, modifier un réglage) en croyant cliquer sur autre chose.",
+				Remediation: []string{
+					"Ajoutez l’en-tête `X-Frame-Options: SAMEORIGIN` (ou DENY si le site n’intègre jamais ses propres pages).",
+					"Avec une politique de sécurité du contenu, `frame-ancestors 'self'` produit le même effet dans les navigateurs modernes.",
+				},
+			},
 		})
 	}
 
@@ -139,6 +177,12 @@ func analyzeHTTPS(host string, chain []*response) hostResult {
 			evidence:    evidence,
 			remediation: []string{"Add the header `X-Content-Type-Options: nosniff` to every response."},
 			references:  []string{refFetch, refOWASPHdrs},
+			fr: finding.Text{
+				Title: "Les navigateurs peuvent deviner le type des contenus (nosniff absent)",
+				Description: "Sans `X-Content-Type-Options: nosniff`, un navigateur peut traiter un fichier texte ou une image téléversés comme un script ou une page web, " +
+					"ce qui peut transformer une fonction d’envoi de fichiers en moyen d’attaquer les visiteurs.",
+				Remediation: []string{"Ajoutez l’en-tête `X-Content-Type-Options: nosniff` à chaque réponse."},
+			},
 		})
 	}
 	return r
@@ -159,16 +203,26 @@ func checkHSTS(asset string, first *response) *issue {
 			"Add `includeSubDomains` only when every subdomain has HTTPS.",
 		},
 		references: []string{refHSTS, refOWASPHdrs},
+		fr: finding.Text{Remediation: []string{
+			"Ajoutez l’en-tête `Strict-Transport-Security: max-age=31536000` (un an) aux réponses HTTPS, une fois que toutes les pages fonctionnent en HTTPS.",
+			"N’ajoutez `includeSubDomains` que si tous les sous-domaines disposent de HTTPS.",
+		}},
 	}
 	if value == "" || !ok {
 		i.title = "HSTS is not enabled"
 		i.description = "The site does not tell browsers to always use HTTPS. A visitor who types the address or follows an old http:// link " +
 			"makes a first unencrypted request, which an attacker on the same network can intercept to keep them on a fake, unencrypted version (SSL stripping)."
+		i.fr.Title = "HSTS n’est pas activé"
+		i.fr.Description = "Le site n’indique pas aux navigateurs d’utiliser toujours HTTPS. Un visiteur qui tape l’adresse ou suit un ancien lien http:// " +
+			"envoie une première requête non chiffrée, qu’un attaquant sur le même réseau peut intercepter pour le maintenir sur une fausse version non chiffrée (SSL stripping)."
 		return i
 	}
 	i.title = "HSTS lifetime is too short"
 	i.description = fmt.Sprintf("Browsers are told to remember HTTPS for %s only. After that, visitors are exposed again to a first unencrypted request. "+
 		"Use at least 180 days, ideally one year.", humanDuration(age))
+	i.fr.Title = "La durée HSTS est trop courte"
+	i.fr.Description = fmt.Sprintf("Les navigateurs ne retiennent l’usage de HTTPS que pendant %s. Ensuite, les visiteurs sont de nouveau exposés à une première requête non chiffrée. "+
+		"Utilisez au moins 180 jours, idéalement un an.", humanDurationFR(age))
 	return i
 }
 
@@ -187,6 +241,18 @@ func hstsMaxAge(v string) (age int64, ok bool) {
 		return n, true
 	}
 	return 0, false
+}
+
+func humanDurationFR(seconds int64) string {
+	n := func(v int64, unit string) string { return fmt.Sprintf("%d %s%s", v, unit, finding.Plural(int(v), "s")) }
+	switch {
+	case seconds >= 86400:
+		return n(seconds/86400, "jour")
+	case seconds >= 3600:
+		return n(seconds/3600, "heure")
+	default:
+		return n(seconds, "seconde")
+	}
 }
 
 func humanDuration(seconds int64) string {
@@ -249,6 +315,15 @@ func checkCookies(asset string, chain []*response) *issue {
 			"Also set HttpOnly on session cookies, and SameSite=Lax or Strict.",
 		},
 		references: []string{refCookies, refOWASPHdrs},
+		fr: finding.Text{
+			Title: "Des cookies peuvent circuler sans chiffrement",
+			Description: fmt.Sprintf("Le site crée %d cookie%s sans l’attribut Secure. Le navigateur les enverra aussi en http:// simple, "+
+				"où ils peuvent être lus sur le réseau. S’il s’agit d’un cookie de session, le lire suffit pour prendre le contrôle du compte du visiteur.", len(seen), finding.Plural(len(seen), "s")),
+			Remediation: []string{
+				"Activez l’attribut Secure sur chaque cookie créé par le site (dans les réglages de l’application, du framework ou du CMS).",
+				"Activez aussi HttpOnly sur les cookies de session, ainsi que SameSite=Lax ou Strict.",
+			},
+		},
 	}
 }
 
@@ -306,6 +381,17 @@ func analyzeVersions(host string, chains ...[]*response) hostResult {
 			"Keep the software itself up to date: hiding a version does not patch it.",
 		},
 		references: []string{refOWASPHdrs},
+		fr: finding.Text{
+			Title: "Le serveur révèle les versions de ses logiciels",
+			Description: "Les en-têtes de réponse indiquent quels logiciels font fonctionner le site, et en quelle version exacte. " +
+				"Les attaquants s’en servent pour choisir des vulnérabilités connues de ces versions sans avoir à sonder. Masquer ces informations ne corrige rien en soi, " +
+				"mais retire un indice gratuit, et un numéro de version ancien rappelle qu’il faut mettre à jour.",
+			Remediation: []string{
+				"nginx : `server_tokens off;`. Apache : `ServerTokens Prod` et `ServerSignature Off`. PHP : `expose_php = Off` dans php.ini.",
+				"Supprimez les en-têtes X-Powered-By et X-AspNet-Version dans les réglages du framework.",
+				"Gardez les logiciels eux-mêmes à jour : masquer une version ne la corrige pas.",
+			},
+		},
 	})
 	return r
 }

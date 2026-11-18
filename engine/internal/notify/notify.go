@@ -153,8 +153,13 @@ func (n *Notifier) message(nt store.Notification) (mailer.Message, error) {
 		}
 		items := make([]mailer.AlertItem, 0, len(a.Findings))
 		for _, f := range a.Findings {
+			// The emails are French: the finding's French title when it has one.
+			title := f.Title
+			if f.TitleFR != "" {
+				title = f.TitleFR
+			}
 			items = append(items, mailer.AlertItem{
-				Severity: string(f.Severity), Title: f.Title, Asset: f.Asset, Reopened: f.Reopened,
+				Severity: string(f.Severity), Title: title, Asset: f.Asset, Reopened: f.Reopened,
 				Link: mailer.FindingsLink(n.publicURL, a.OrgID, f.ID),
 			})
 		}

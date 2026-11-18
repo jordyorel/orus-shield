@@ -17,6 +17,7 @@ type activityJSON struct {
 	// kind finding
 	FindingID string           `json:"finding_id,omitempty"`
 	Title     string           `json:"title,omitempty"`
+	TitleFR   string           `json:"title_fr,omitempty"` // the finding's French title
 	Asset     string           `json:"asset,omitempty"`
 	Severity  finding.Severity `json:"severity,omitempty"`
 	From      string           `json:"from,omitempty"` // absent: first seen
@@ -46,7 +47,7 @@ func (s *Server) activity(w http.ResponseWriter, r *http.Request, req orgRequest
 	out := make([]activityJSON, 0, len(as))
 	for _, a := range as {
 		out = append(out, activityJSON{Kind: a.Kind, At: a.At, TargetID: a.TargetID, Domain: a.Domain,
-			FindingID: a.FindingID, Title: a.Title, Asset: a.Asset, Severity: a.Severity, From: a.From, To: a.To,
+			FindingID: a.FindingID, Title: a.Title, TitleFR: a.TitleFR, Asset: a.Asset, Severity: a.Severity, From: a.From, To: a.To,
 			ScanID: a.ScanID, RequestedBy: a.RequestedBy, Assets: a.Assets})
 	}
 	writeJSON(w, http.StatusOK, listOf(out))

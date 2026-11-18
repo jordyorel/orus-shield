@@ -57,6 +57,7 @@ type priorityJSON struct {
 	FindingID  string           `json:"finding_id,omitempty"`
 	Severity   finding.Severity `json:"severity,omitempty"`
 	Title      string           `json:"title,omitempty"`
+	TitleFR    string           `json:"title_fr,omitempty"` // the finding's French title
 	Asset      string           `json:"asset,omitempty"`
 	FirstSeen  *time.Time       `json:"first_seen,omitempty"`
 	LastScanAt *time.Time       `json:"last_scan_at,omitempty"`
@@ -168,7 +169,7 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request, req orgRequest
 			if f.Status == finding.StatusOpen && (f.Severity == finding.SeverityCritical || f.Severity == finding.SeverityHigh) {
 				urgent = append(urgent, priorityJSON{
 					Kind: "finding", TargetID: t.ID, Domain: t.Domain, FindingID: f.ID,
-					Severity: f.Severity, Title: f.Title, Asset: f.Asset, FirstSeen: &f.FirstSeen,
+					Severity: f.Severity, Title: f.Title, TitleFR: f.Translations["fr"].Title, Asset: f.Asset, FirstSeen: &f.FirstSeen,
 				})
 			}
 		}

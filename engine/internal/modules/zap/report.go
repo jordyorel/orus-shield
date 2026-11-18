@@ -201,6 +201,19 @@ func convertWith(moduleID string, classify func(alert) (string, finding.Severity
 						Remediation:   nonEmpty(plain(a.Solution, maxText)),
 						References:    refs,
 					}
+					// ZAP's alert texts are English, and there are hundreds:
+					// the French text names the kind of flaw, explains it,
+					// and quotes ZAP's detail as such.
+					kind := kindsFR[check]
+					solution := "Corrigez la faille dans le code de l’application, puis relancez le scan."
+					if s := plain(a.Solution, maxText); s != "" {
+						solution = "Recommandation de ZAP (en anglais) : " + s
+					}
+					f.Translations = map[string]finding.Text{"fr": {
+						Title:       kind.label + " : " + clean(name, 200) + " (" + clean(u.Host+u.EscapedPath(), 120) + ")",
+						Description: kind.why + " Détail technique (en anglais) : " + plain(a.Desc, maxText),
+						Remediation: []string{solution},
+					}}
 					byKey[k] = f
 					order = append(order, k)
 				}
@@ -227,6 +240,32 @@ func convertWith(moduleID string, classify func(alert) (string, finding.Severity
 		res.Findings = append(res.Findings, *byKey[k])
 	}
 	return res
+}
+
+// kindFR names and explains a kind of flaw in French.
+type kindFR struct{ label, why string }
+
+var kindsFR = map[string]kindFR{
+	CheckInjection: {"Faille d’injection",
+		"Une donnée envoyée au site est exécutée comme du code (base de données, commande, modèle) : un attaquant peut lire ou modifier vos données, voire prendre le contrôle du serveur."},
+	CheckXSS: {"Faille XSS (script intersite)",
+		"Le site renvoie dans ses pages du contenu fourni par un visiteur sans le neutraliser : un attaquant peut faire exécuter son propre script dans le navigateur de vos utilisateurs et voler leur session."},
+	CheckFiles: {"Accès à des fichiers du serveur",
+		"Le site permet de lire ou d’inclure des fichiers du serveur en manipulant une adresse ou un paramètre : un attaquant peut récupérer la configuration, des mots de passe ou le code source."},
+	CheckForgery: {"Requête forcée ou redirection ouverte",
+		"Le site peut être amené à appeler une adresse choisie par un attaquant, ou à rediriger vos visiteurs vers un site de son choix : cela sert à atteindre des services internes ou à rendre crédible un hameçonnage."},
+	CheckOther: {"Faille applicative à haut risque",
+		"Le test actif a détecté une faille à haut risque dans l’application web."},
+	CheckAPIInjection: {"Faille d’injection dans l’API",
+		"Une donnée envoyée à l’API est exécutée comme du code (base de données, commande, XML) : un attaquant peut lire ou modifier vos données, voire prendre le contrôle du serveur."},
+	CheckAPIAccess: {"Contrôle d’accès de l’API insuffisant",
+		"Un point d’accès de l’API répond sans authentification suffisante, ou laisse un utilisateur atteindre des données qui ne sont pas les siennes."},
+	CheckAPIExposure: {"Données sensibles exposées par l’API",
+		"L’API renvoie des détails internes (erreurs, traces, versions) ou des données sensibles qu’un attaquant peut exploiter."},
+	CheckAPIConfig: {"Configuration de l’API à risque",
+		"L’API est configurée de façon permissive (CORS, méthodes HTTP autorisées), ce qui peut permettre à d’autres sites de l’appeler au nom de vos utilisateurs."},
+	CheckAPIOther: {"Faille à haut risque dans l’API",
+		"Le test actif a détecté une faille à haut risque dans l’API."},
 }
 
 func nonEmpty(s string) []string {

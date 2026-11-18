@@ -268,3 +268,33 @@ func TestTruncateEvidence(t *testing.T) {
 		t.Error("truncate changed a short string")
 	}
 }
+
+func TestTranslations(t *testing.T) {
+	f := validFinding()
+	f.Remediation = []string{"Do this."}
+	f.Translations = map[string]Text{"fr": {Title: "Titre", Description: "Explication.", Remediation: []string{"Faites ceci."}}}
+	if err := f.Validate(); err != nil {
+		t.Fatalf("valid translation refused: %v", err)
+	}
+	if got := f.Localized("fr"); got.Title != "Titre" || got.Remediation[0] != "Faites ceci." {
+		t.Errorf("Localized(fr) = %+v", got)
+	}
+	if got := f.Localized("en"); got.Title != f.Title {
+		t.Errorf("Localized(en) = %+v, want the English text", got)
+	}
+	for name, tr := range map[string]map[string]Text{
+		"unknown language": {"de": {Title: "T", Description: "D", Remediation: []string{"S"}}},
+		"empty title":      {"fr": {Description: "D", Remediation: []string{"S"}}},
+		"missing step":     {"fr": {Title: "T", Description: "D"}},
+		"empty step":       {"fr": {Title: "T", Description: "D", Remediation: []string{" "}}},
+	} {
+		g := f
+		g.Translations = tr
+		if g.Validate() == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	if FrenchDate(time.Date(2026, 11, 18, 23, 0, 0, 0, time.UTC)) != "18 novembre 2026" {
+		t.Error("FrenchDate")
+	}
+}

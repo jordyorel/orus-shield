@@ -25,6 +25,7 @@ const maxAlertFindings = 20
 type AlertFinding struct {
 	ID       string           `json:"id"`
 	Title    string           `json:"title"`
+	TitleFR  string           `json:"title_fr,omitempty"` // the French title, for French emails
 	Asset    string           `json:"asset"`
 	Severity finding.Severity `json:"severity"`
 	Reopened bool             `json:"reopened"` // was fixed, and is back

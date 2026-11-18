@@ -106,6 +106,31 @@ type Finding struct {
 	// FixedAt. Added in schema version 1 as an optional field: older
 	// readers ignore it.
 	FixedAt *time.Time `json:"fixed_at,omitempty"`
+	// Translations holds the customer-facing text in other languages, by
+	// language code ("fr"); the fields above are English. Added in schema
+	// version 1 as an optional field (2026-11-18): older readers ignore it,
+	// and a missing language falls back to English (Localized).
+	Translations map[string]Text `json:"translations,omitempty"`
+}
+
+// Text is a finding's customer-facing text in one language.
+type Text struct {
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Remediation []string `json:"remediation,omitempty"`
+}
+
+// Languages are the languages a finding may be translated into, besides
+// English (its own fields).
+var Languages = []string{"fr"}
+
+// Localized returns the finding's text in lang, or the English text when
+// it has no translation in that language (or lang is "en").
+func (f Finding) Localized(lang string) Text {
+	if t, ok := f.Translations[lang]; ok {
+		return t
+	}
+	return Text{Title: f.Title, Description: f.Description, Remediation: f.Remediation}
 }
 
 // NewID returns the deterministic ID of a finding: the hex SHA-256 of its
@@ -172,6 +197,27 @@ func (f Finding) Validate() error {
 	for i, ref := range f.References {
 		if strings.TrimSpace(ref) == "" {
 			fail("references[%d]: must not be empty", i)
+		}
+	}
+	for lang, t := range f.Translations {
+		known := false
+		for _, l := range Languages {
+			known = known || l == lang
+		}
+		if !known {
+			fail("translations: unknown language %q", lang)
+			continue
+		}
+		if strings.TrimSpace(t.Title) == "" || strings.TrimSpace(t.Description) == "" {
+			fail("translations[%s]: title and description must not be empty", lang)
+		}
+		if len(t.Remediation) != len(f.Remediation) {
+			fail("translations[%s]: %d remediation steps, want %d like the English text", lang, len(t.Remediation), len(f.Remediation))
+		}
+		for i, step := range t.Remediation {
+			if strings.TrimSpace(step) == "" {
+				fail("translations[%s].remediation[%d]: must not be empty", lang, i)
+			}
 		}
 	}
 	if f.FirstSeen.IsZero() {

@@ -30,6 +30,7 @@ type Activity struct {
 	// Finding entries.
 	FindingID string
 	Title     string
+	TitleFR   string // the finding's French title, "" when it has none
 	Asset     string
 	Severity  finding.Severity
 	From      string // "" when the finding was first seen
@@ -50,7 +51,7 @@ func (o *Org) Activity(ctx context.Context, since time.Time, limit int) ([]Activ
 	defer tx.Rollback(ctx)
 	rows, err := tx.Query(ctx, `
 		(SELECT 'finding', e.at, e.target_id::text, t.domain, e.finding_id,
-			f.data->>'title', f.data->>'asset', f.severity, coalesce(e.from_status, ''), e.to_status,
+			f.data->>'title', coalesce(f.data->'translations'->'fr'->>'title', ''), f.data->>'asset', f.severity, coalesce(e.from_status, ''), e.to_status,
 			'', '', 0
 		FROM finding_events e
 		JOIN targets t ON t.id = e.target_id
@@ -59,7 +60,7 @@ func (o *Org) Activity(ctx context.Context, since time.Time, limit int) ([]Activ
 		ORDER BY e.at DESC LIMIT $3)
 		UNION ALL
 		(SELECT 'scan', s.finished_at, s.target_id::text, t.domain, '',
-			'', '', '', '', '',
+			'', '', '', '', '', '',
 			s.id::text, s.requested_by,
 			(SELECT count(*)::int FROM assets a WHERE a.target_id = s.target_id AND a.gone_at IS NULL)
 		FROM scans s JOIN targets t ON t.id = s.target_id
@@ -72,7 +73,7 @@ func (o *Org) Activity(ctx context.Context, since time.Time, limit int) ([]Activ
 	out, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Activity, error) {
 		var a Activity
 		var sev string
-		err := row.Scan(&a.Kind, &a.At, &a.TargetID, &a.Domain, &a.FindingID, &a.Title, &a.Asset, &sev,
+		err := row.Scan(&a.Kind, &a.At, &a.TargetID, &a.Domain, &a.FindingID, &a.Title, &a.TitleFR, &a.Asset, &sev,
 			&a.From, &a.To, &a.ScanID, &a.RequestedBy, &a.Assets)
 		a.Severity = finding.Severity(sev)
 		return a, err

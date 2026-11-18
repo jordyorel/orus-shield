@@ -61,9 +61,17 @@ quick/standard profile, switched-off modules, schedule and rate, applied to ever
 inherited by new ones), `GET /orgs/{org}/activity`, public `GET /plans`; findings carry
 `minutes` (estimate per module), `gain` (posture points), `category`, `emerging`, `cve`; a
 customer may mark a finding fixed, which queues a verification scan of its module (the scan
-reopens it if still there). Scheduled scans run (package `schedule`, migration 0010). Finding
-texts stay in the modules'
-English (decided 2026-11-10); the dashboard's own wording is French.
+reopens it if still there). Scheduled scans run (package `schedule`, migration 0010).
+The product is bilingual, French and English, both professional (decided 2026-11-18, replacing the
+English-only finding texts of 2026-11-10): the whole site follows the user's language. Step 1 is
+done: every finding carries its French text in `translations.fr` (title, description, steps, the
+same number of steps as the English; optional field of schema version 1, `Finding.Localized`), and
+every check its `TitleFR`. Modules write both at creation (values inserted in both; `FrenchDate`).
+Nuclei and ZAP texts come from the tools: the French text names the kind of problem, explains it,
+and quotes the tool's English detail as such. Reports, alert emails and the dashboard (`web/src/ui/lang.ts`)
+use the French text; older findings get it at their next scan. Next steps: the dashboard's English
+interface with a per-user language (Profil), English emails, the public site in English (legal pages
+need a lawyer's translation).
 
 ## How to work on this repo
 
@@ -151,7 +159,8 @@ Every module:
 - has a stable ID, a name, and declares whether it is **passive** (public data only: DNS,
   certificates, HTTP responses) or **active** (sends probes: port scans, app tests);
 - declares its check catalog in `Info.Checks` (ID unique across modules, category,
-  severity used as the score weight, title); every finding uses a declared check;
+  severity used as the score weight, title in English and French); every finding uses a declared
+  check and carries its French text (`Translations["fr"]`, checked by `Validate` and the modules' tests);
 - receives a `context.Context` and must respect its cancellation and deadline;
 - receives the target and its configuration; never reads global state;
 - returns a `module.Result`: findings in the standard schema and the assets it observed

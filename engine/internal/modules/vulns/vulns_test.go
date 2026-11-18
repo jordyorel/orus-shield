@@ -269,3 +269,13 @@ func TestInfo(t *testing.T) {
 		}
 	}
 }
+
+// Every kind of problem is named and explained in French, step for step.
+func TestKindsHaveFrench(t *testing.T) {
+	for check, steps := range defaultRemediation {
+		k := kindsFR[check]
+		if k.label == "" || k.why == "" || len(defaultRemediationFR[check]) != len(steps) {
+			t.Errorf("check %s: French text missing or %d steps for %d", check, len(defaultRemediationFR[check]), len(steps))
+		}
+	}
+}

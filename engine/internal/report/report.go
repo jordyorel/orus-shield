@@ -93,7 +93,7 @@ func Write(w io.Writer, d Data, o Options) error {
 		return err
 	}
 	t := texts[o.Lang]
-	r := newRenderer(t, o, d)
+	r := newRenderer(t, o, localize(d, o.Lang))
 	r.cover()
 	r.summary()
 	if o.Kind == Technical {
@@ -101,6 +101,23 @@ func Write(w io.Writer, d Data, o Options) error {
 		r.inventory()
 	}
 	return r.finish(w)
+}
+
+// localize returns d with each finding's title, description and steps in
+// lang (English when a finding has no translation into it). d is not
+// changed: its slices are copied.
+func localize(d Data, lang Lang) Data {
+	targets := slices.Clone(d.Targets)
+	for i := range targets {
+		fs := slices.Clone(targets[i].Findings)
+		for j := range fs {
+			txt := fs[j].Localized(string(lang))
+			fs[j].Title, fs[j].Description, fs[j].Remediation = txt.Title, txt.Description, txt.Remediation
+		}
+		targets[i].Findings = fs
+	}
+	d.Targets = targets
+	return d
 }
 
 // openFindings returns the open findings of every domain, most severe first,

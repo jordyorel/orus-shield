@@ -43,7 +43,7 @@ type TrialNudge struct {
 func queueTrialNudges(ctx context.Context, tx pgx.Tx, orgID, targetID, scanID string, at time.Time, p FirstScanSummary) error {
 	top := ""
 	if err := tx.QueryRow(ctx, `
-		SELECT coalesce((SELECT data->>'title' FROM findings
+		SELECT coalesce((SELECT coalesce(data->'translations'->'fr'->>'title', data->>'title') FROM findings
 			WHERE target_id = $1 AND status = 'open' AND severity <> 'info'
 			ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, first_seen
 			LIMIT 1), '')`, targetID).Scan(&top); err != nil {

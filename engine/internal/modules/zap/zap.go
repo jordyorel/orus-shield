@@ -55,11 +55,11 @@ const (
 
 // Checks is the module's catalog.
 var Checks = []module.Check{
-	{ID: CheckInjection, Category: module.CategoryWeb, Severity: finding.SeverityCritical, Title: "No injection flaw (SQL, command, code, template, XML)"},
-	{ID: CheckXSS, Category: module.CategoryWeb, Severity: finding.SeverityHigh, Title: "No cross-site scripting"},
-	{ID: CheckFiles, Category: module.CategoryWeb, Severity: finding.SeverityHigh, Title: "No path traversal or file inclusion"},
-	{ID: CheckForgery, Category: module.CategoryWeb, Severity: finding.SeverityMedium, Title: "No server-side request forgery or open redirect"},
-	{ID: CheckOther, Category: module.CategoryWeb, Severity: finding.SeverityHigh, Title: "No other high-risk web application flaw"},
+	{ID: CheckInjection, Category: module.CategoryWeb, Severity: finding.SeverityCritical, Title: "No injection flaw (SQL, command, code, template, XML)", TitleFR: "Aucune faille d’injection (SQL, commande, code, modèle, XML)"},
+	{ID: CheckXSS, Category: module.CategoryWeb, Severity: finding.SeverityHigh, Title: "No cross-site scripting", TitleFR: "Aucune faille XSS (script intersite)"},
+	{ID: CheckFiles, Category: module.CategoryWeb, Severity: finding.SeverityHigh, Title: "No path traversal or file inclusion", TitleFR: "Aucun accès illégitime aux fichiers du serveur"},
+	{ID: CheckForgery, Category: module.CategoryWeb, Severity: finding.SeverityMedium, Title: "No server-side request forgery or open redirect", TitleFR: "Aucune requête forcée ni redirection ouverte"},
+	{ID: CheckOther, Category: module.CategoryWeb, Severity: finding.SeverityHigh, Title: "No other high-risk web application flaw", TitleFR: "Aucune autre faille applicative à haut risque"},
 }
 
 const (

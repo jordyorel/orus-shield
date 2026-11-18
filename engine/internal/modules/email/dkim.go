@@ -80,6 +80,16 @@ func checkDKIM(ctx context.Context, dns resolver.Resolver, domain string, receiv
 				"Publish the DKIM key the provider gives you as a TXT record at <selector>._domainkey." + domain + ".",
 			},
 			references: []string{refDKIM},
+			fr: finding.Text{
+				Title: "Aucune clé DKIM trouvée sous les sélecteurs courants",
+				Description: fmt.Sprintf("Nous avons cherché des clés DKIM sous %d sélecteurs courants, sans en trouver. "+
+					"Les sélecteurs sont choisis librement : vos emails sont peut-être signés avec un sélecteur que nous n’avons pas essayé. "+
+					"Sinon, les serveurs de réception ne peuvent pas vérifier que vos emails n’ont été ni modifiés ni falsifiés.", len(dkimSelectors)),
+				Remediation: []string{
+					"Vérifiez dans les réglages de votre messagerie que la signature DKIM est activée.",
+					"Publiez la clé DKIM fournie par votre messagerie dans un enregistrement TXT sur <sélecteur>._domainkey." + domain + ".",
+				},
+			},
 		})
 	}
 	return issues, nil
@@ -97,6 +107,11 @@ func dkimKeyIssue(asset, record, keyType, key string) (issue, bool) {
 		evidence:    record,
 		remediation: []string{"Copy the DKIM record again from your mail provider, without truncating the key."},
 		references:  []string{refDKIM},
+		fr: finding.Text{
+			Title:       "Clé DKIM illisible",
+			Description: "L’enregistrement DKIM publie une clé impossible à décoder. Les serveurs de réception ne peuvent pas vérifier les signatures faites avec elle : vos emails signés sont traités comme non signés.",
+			Remediation: []string{"Copiez à nouveau l’enregistrement DKIM depuis votre messagerie, sans tronquer la clé."},
+		},
 	}
 	if len(key) > maxDKIMKeyChars {
 		return invalid, true
@@ -144,6 +159,11 @@ func dkimKeyIssue(asset, record, keyType, key string) (issue, bool) {
 			evidence:    evidence,
 			remediation: []string{"Generate a new 2048-bit DKIM key in your mail provider and publish it, then remove the old one."},
 			references:  []string{refDKIMKeySize},
+			fr: finding.Text{
+				Title:       "La clé DKIM est trop faible",
+				Description: fmt.Sprintf("La clé DKIM ne fait que %d bits. Une clé aussi courte peut être cassée, ce qui permettrait à un attaquant de signer de faux emails en votre nom, et les serveurs de réception doivent ignorer les signatures faites avec elle.", bits),
+				Remediation: []string{"Générez une nouvelle clé DKIM de 2048 bits dans votre messagerie, publiez-la, puis supprimez l’ancienne."},
+			},
 		}, true
 	case bits < 2048:
 		return issue{
@@ -155,6 +175,11 @@ func dkimKeyIssue(asset, record, keyType, key string) (issue, bool) {
 			evidence:    evidence,
 			remediation: []string{"Rotate to a 2048-bit DKIM key when convenient."},
 			references:  []string{refDKIMKeySize},
+			fr: finding.Text{
+				Title:       "La clé DKIM est plus courte que recommandé",
+				Description: fmt.Sprintf("La clé DKIM fait %d bits. Elle est encore acceptée, mais 2048 bits est le minimum recommandé.", bits),
+				Remediation: []string{"Passez à une clé DKIM de 2048 bits dès que possible."},
+			},
 		}, true
 	default:
 		return issue{}, false

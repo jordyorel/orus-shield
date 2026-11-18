@@ -40,13 +40,13 @@ const (
 
 // Checks is the module's catalog.
 var Checks = []module.Check{
-	{ID: CheckHTTPNotRedirected, Category: module.CategoryWeb, Severity: finding.SeverityMedium, Title: "HTTP visitors are sent to HTTPS"},
-	{ID: CheckHSTSMissing, Category: module.CategoryWeb, Severity: finding.SeverityMedium, Title: "Browsers are told to always use HTTPS (HSTS)"},
-	{ID: CheckCSPMissing, Category: module.CategoryWeb, Severity: finding.SeverityLow, Title: "A Content Security Policy is set"},
-	{ID: CheckFramingAllowed, Category: module.CategoryWeb, Severity: finding.SeverityLow, Title: "Pages cannot be framed by other sites"},
-	{ID: CheckNosniffMissing, Category: module.CategoryWeb, Severity: finding.SeverityLow, Title: "Browsers do not guess content types"},
-	{ID: CheckCookieNotSecure, Category: module.CategoryWeb, Severity: finding.SeverityLow, Title: "Cookies are sent over HTTPS only"},
-	{ID: CheckVersionDisclosed, Category: module.CategoryWeb, Severity: finding.SeverityLow, Title: "Server software versions are not revealed"},
+	{ID: CheckHTTPNotRedirected, Category: module.CategoryWeb, Severity: finding.SeverityMedium, Title: "HTTP visitors are sent to HTTPS", TitleFR: "Les visiteurs en HTTP sont redirigés vers HTTPS"},
+	{ID: CheckHSTSMissing, Category: module.CategoryWeb, Severity: finding.SeverityMedium, Title: "Browsers are told to always use HTTPS (HSTS)", TitleFR: "Les navigateurs doivent toujours utiliser HTTPS (HSTS)"},
+	{ID: CheckCSPMissing, Category: module.CategoryWeb, Severity: finding.SeverityLow, Title: "A Content Security Policy is set", TitleFR: "Une politique de sécurité du contenu (CSP) est définie"},
+	{ID: CheckFramingAllowed, Category: module.CategoryWeb, Severity: finding.SeverityLow, Title: "Pages cannot be framed by other sites", TitleFR: "Les pages ne peuvent pas être intégrées par d’autres sites"},
+	{ID: CheckNosniffMissing, Category: module.CategoryWeb, Severity: finding.SeverityLow, Title: "Browsers do not guess content types", TitleFR: "Les navigateurs ne devinent pas le type des contenus"},
+	{ID: CheckCookieNotSecure, Category: module.CategoryWeb, Severity: finding.SeverityLow, Title: "Cookies are sent over HTTPS only", TitleFR: "Les cookies ne circulent qu’en HTTPS"},
+	{ID: CheckVersionDisclosed, Category: module.CategoryWeb, Severity: finding.SeverityLow, Title: "Server software versions are not revealed", TitleFR: "Les versions des logiciels du serveur ne sont pas révélées"},
 }
 
 const (
@@ -201,6 +201,7 @@ type issue struct {
 	evidence    string
 	remediation []string
 	references  []string
+	fr          finding.Text // the customer-facing text in French
 }
 
 func (i issue) finding(target string) finding.Finding {
@@ -217,5 +218,6 @@ func (i issue) finding(target string) finding.Finding {
 		Evidence:      finding.TruncateEvidence(i.evidence),
 		Remediation:   i.remediation,
 		References:    i.references,
+		Translations:  map[string]finding.Text{"fr": i.fr},
 	}
 }

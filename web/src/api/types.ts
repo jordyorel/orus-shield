@@ -126,6 +126,8 @@ export interface Finding {
   last_seen: string;
   status: FindingStatus;
   fixed_at?: string;
+  /** The customer-facing text in other languages ("fr"); the fields above are English. */
+  translations?: Partial<Record<"fr", FindingText>>;
   /** Computed by the API for the dashboard (findingExtras). */
   category?: Category;
   /** Estimated minutes to fix. */
@@ -254,11 +256,19 @@ export interface OrgAsset {
 
 export type Category = "email" | "web" | "tls" | "dns" | "network" | "identity" | "cloud" | "leaks";
 
+/** A finding's text in one language (finding.Text). */
+export interface FindingText {
+  title: string;
+  description: string;
+  remediation?: string[];
+}
+
 /** checkJSON */
 export interface Check {
   target_id?: string;
   id: string;
   title: string;
+  title_fr?: string;
   module: string;
   category: Category;
   severity: Severity;
@@ -347,6 +357,8 @@ export interface Activity {
   domain: string;
   finding_id?: string;
   title?: string;
+  /** The finding's French title, when it has one. */
+  title_fr?: string;
   asset?: string;
   severity?: Severity;
   /** Absent: first seen. */

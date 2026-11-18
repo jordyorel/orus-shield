@@ -102,25 +102,25 @@ func (m *Module) Info() module.Info {
 
 // Checks is the module's catalog: one check per family of services.
 var Checks = []module.Check{
-	familyCheck(remoteDesktop, "No remote desktop exposed"),
-	familyCheck(windowsSharing, "No Windows file sharing exposed"),
-	familyCheck(cleartextAdmin, "No clear-text administration (Telnet) exposed"),
-	familyCheck(orchestration, "No container or cluster API exposed"),
-	familyCheck(database, "No database exposed"),
-	familyCheck(fileSharing, "No file-sharing service exposed"),
-	familyCheck(directory, "No directory service (LDAP) exposed"),
-	familyCheck(broker, "No message broker exposed"),
-	familyCheck(proxy, "No open proxy exposed"),
-	familyCheck(adminWeb, "No admin web port exposed"),
-	familyCheck(voip, "No telephony (SIP) server exposed"),
-	familyCheck(cleartextMail, "No clear-text mail access exposed"),
-	familyCheck(ssh, "SSH not exposed"),
+	familyCheck(remoteDesktop, "No remote desktop exposed", "Aucun bureau à distance exposé"),
+	familyCheck(windowsSharing, "No Windows file sharing exposed", "Aucun partage de fichiers Windows exposé"),
+	familyCheck(cleartextAdmin, "No clear-text administration (Telnet) exposed", "Aucune administration non chiffrée (Telnet) exposée"),
+	familyCheck(orchestration, "No container or cluster API exposed", "Aucune API de conteneurs ou de cluster exposée"),
+	familyCheck(database, "No database exposed", "Aucune base de données exposée"),
+	familyCheck(fileSharing, "No file-sharing service exposed", "Aucun service de partage de fichiers exposé"),
+	familyCheck(directory, "No directory service (LDAP) exposed", "Aucun annuaire (LDAP) exposé"),
+	familyCheck(broker, "No message broker exposed", "Aucun courtier de messages exposé"),
+	familyCheck(proxy, "No open proxy exposed", "Aucun proxy ouvert exposé"),
+	familyCheck(adminWeb, "No admin web port exposed", "Aucun port web d’administration exposé"),
+	familyCheck(voip, "No telephony (SIP) server exposed", "Aucun serveur de téléphonie (SIP) exposé"),
+	familyCheck(cleartextMail, "No clear-text mail access exposed", "Aucun accès à la messagerie non chiffré exposé"),
+	familyCheck(ssh, "SSH not exposed", "SSH non exposé"),
 	// Evaluated by deep scans only.
-	familyCheck(otherService, "No unexpected service exposed"),
+	familyCheck(otherService, "No unexpected service exposed", "Aucun service inattendu exposé"),
 }
 
-func familyCheck(f family, title string) module.Check {
-	return module.Check{ID: f.checkID, Category: module.CategoryNetwork, Severity: f.severity, Title: title}
+func familyCheck(f family, title, titleFR string) module.Check {
+	return module.Check{ID: f.checkID, Category: module.CategoryNetwork, Severity: f.severity, Title: title, TitleFR: titleFR}
 }
 
 // Run implements module.Module. It scans the addresses of the domain and of
@@ -449,10 +449,16 @@ func (o openPort) finding(domain string, a address) finding.Finding {
 			a.host, a.ip, o.svc.port, o.svc.name, banner)),
 		Remediation: o.svc.family.fix,
 	}
+	fr := finding.Text{
+		Title:       fmt.Sprintf("%s accessible depuis internet (port %d)", nameFR(o.svc.name), o.svc.port),
+		Description: o.svc.family.whyFR,
+		Remediation: o.svc.family.fixFR,
+	}
 	if o.id.known() {
 		f.Evidence = finding.TruncateEvidence(f.Evidence + "\nidentified: " + o.id.label())
 		if o.svc.family.checkID == otherService.checkID {
 			f.Title = fmt.Sprintf("%s reachable from the internet (port %d)", o.id.label(), o.svc.port)
+			fr.Title = fmt.Sprintf("%s accessible depuis internet (port %d)", o.id.label(), o.svc.port)
 		}
 	}
 	if o.svc.greets && o.banner == "" && !o.id.known() {
@@ -467,6 +473,12 @@ func (o openPort) finding(domain string, a address) finding.Finding {
 			"Another service may listen there, or a firewall or proxy may answer instead of the server. Check what listens on this port. %s",
 			o.svc.port, o.svc.name, o.svc.family.why)
 		f.Remediation = append([]string{"Check on the server which program listens on this port (for example: ss -ltnp)."}, o.svc.family.fix...)
+		fr.Title = fmt.Sprintf("Port %d ouvert, %s non confirmé", o.svc.port, nameFR(o.svc.name))
+		fr.Description = fmt.Sprintf("Le port %d accepte les connexions, mais rien n’a répondu comme %s le fait toujours lorsqu’un client se connecte. "+
+			"Un autre service écoute peut-être sur ce port, ou un pare-feu ou un proxy répond à la place du serveur. Vérifiez ce qui écoute sur ce port. %s",
+			o.svc.port, nameFR(o.svc.name), o.svc.family.whyFR)
+		fr.Remediation = append([]string{"Vérifiez sur le serveur quel programme écoute sur ce port (par exemple : ss -ltnp)."}, o.svc.family.fixFR...)
 	}
+	f.Translations = map[string]finding.Text{"fr": fr}
 	return f
 }

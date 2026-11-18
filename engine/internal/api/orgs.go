@@ -434,7 +434,8 @@ func (s *Server) posture(w http.ResponseWriter, r *http.Request, req orgRequest,
 type checkJSON struct {
 	TargetID    string    `json:"target_id,omitempty"`
 	ID          string    `json:"id"`
-	Title       string    `json:"title"` // from the module's catalog
+	Title       string    `json:"title"`    // from the module's catalog
+	TitleFR     string    `json:"title_fr"` // the same in French
 	Module      string    `json:"module"`
 	Category    string    `json:"category"`
 	Severity    string    `json:"severity"`
@@ -485,24 +486,26 @@ func intParam(w http.ResponseWriter, r *http.Request, name string, def, lo, hi i
 }
 
 func (s *Server) toCheckJSON(c store.CheckState, targetID string) checkJSON {
-	return checkJSON{TargetID: targetID, ID: c.CheckID, Title: s.checkTitle(c.ModuleID, c.CheckID), Module: c.ModuleID,
+	title, titleFR := s.checkTitle(c.ModuleID, c.CheckID)
+	return checkJSON{TargetID: targetID, ID: c.CheckID, Title: title, TitleFR: titleFR, Module: c.ModuleID,
 		Category: string(c.Category), Severity: string(c.Severity), Status: string(c.Status), Findings: c.Findings, EvaluatedAt: c.EvaluatedAt}
 }
 
-// checkTitle is the catalog title of a check ("DMARC record published"),
-// or its ID when the module is not in the catalog.
-func (s *Server) checkTitle(moduleID, checkID string) string {
+// checkTitle is the catalog title of a check in English and French
+// ("DMARC record published", "Enregistrement DMARC publié"), or its ID when
+// the module is not in the catalog.
+func (s *Server) checkTitle(moduleID, checkID string) (string, string) {
 	for _, info := range s.cfg.Catalog {
 		if info.ID != moduleID {
 			continue
 		}
 		for _, c := range info.Checks {
 			if c.ID == checkID {
-				return c.Title
+				return c.Title, c.TitleFR
 			}
 		}
 	}
-	return checkID
+	return checkID, checkID
 }
 
 // orgChecks lists the latest status of every check of every target: the

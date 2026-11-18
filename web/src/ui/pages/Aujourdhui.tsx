@@ -4,6 +4,7 @@ import { Link, navigate } from "../../router";
 import { appPath } from "../AppShell";
 import { Tick } from "../icons";
 import { COLOR, DIST, byPriority, feedDay, groupIssues, groupVerdict, hostsText, verdictText, worst, type AssetView, type Issue, type IssueGroup } from "../model";
+import { localTitle } from "../lang";
 import { useOrg } from "../OrgData";
 import { AssetSheet, FindingSheet, useFix } from "../sheets";
 import { ScanLine } from "../ScanLine";
@@ -189,20 +190,20 @@ function FeedLine({ a, now }: { a: Activity; now: Date }) {
     cls = "f-ok";
     text = (
       <span>
-        Corrigé sur <b>{a.asset}</b> : {a.title}.
+        Corrigé sur <b>{a.asset}</b> : {localTitle(a.title, a.title_fr)}.
       </span>
     );
   } else if (a.to === "accepted_risk") {
     text = (
       <span>
-        Risque accepté sur <b>{a.asset}</b> : {a.title}.
+        Risque accepté sur <b>{a.asset}</b> : {localTitle(a.title, a.title_fr)}.
       </span>
     );
   } else {
     if (a.severity === "critical" || a.severity === "high") cls = "f-crit";
     text = (
       <span>
-        {a.from === "fixed" ? "Revenu" : "Nouveau problème"} sur <b>{a.asset}</b> : {a.title}.
+        {a.from === "fixed" ? "Revenu" : "Nouveau problème"} sur <b>{a.asset}</b> : {localTitle(a.title, a.title_fr)}.
       </span>
     );
   }

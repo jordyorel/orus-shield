@@ -252,8 +252,19 @@ func (r result) finding(domain string) (finding.Finding, bool) {
 	}
 
 	remediation := defaultRemediation[check]
+	remediationFR := defaultRemediationFR[check]
 	if s := clean(r.Info.Remediation, 1000); s != "" {
 		remediation = append([]string{s}, remediation...)
+		remediationFR = append([]string{"Recommandation de l’éditeur du modèle (en anglais) : " + s}, remediationFR...)
+	}
+	// The template's name and description are the tool's, in English, and
+	// there are thousands: the French text names the kind of problem,
+	// explains it, and quotes the technical detail as such.
+	kind := kindsFR[check]
+	fr := finding.Text{
+		Title:       kind.label + " : " + title,
+		Description: kind.why + " Détail technique (en anglais) : " + desc,
+		Remediation: remediationFR,
 	}
 
 	return finding.Finding{
@@ -269,6 +280,7 @@ func (r result) finding(domain string) (finding.Finding, bool) {
 		Evidence:      finding.TruncateEvidence(ev.String()),
 		Remediation:   remediation,
 		References:    refs,
+		Translations:  map[string]finding.Text{"fr": fr},
 	}, true
 }
 
@@ -298,6 +310,49 @@ var defaultRemediation = map[string][]string{
 	},
 	CheckOutdatedOrEOL: {
 		"Upgrade to a version that still receives security updates.",
+	},
+}
+
+// kindFR names and explains a kind of problem in French.
+type kindFR struct{ label, why string }
+
+var kindsFR = map[string]kindFR{
+	CheckKnownCVE: {"Vulnérabilité connue",
+		"Une vulnérabilité publiée et répertoriée affecte un logiciel détecté à cette adresse. Les attaquants recherchent activement ce type de faille, car les moyens de l’exploiter sont souvent publics."},
+	CheckExposedData: {"Fichier ou donnée exposés",
+		"Un fichier qui ne devrait pas être public (sauvegarde, configuration, journal, données) est accessible depuis internet. Il peut révéler des mots de passe, des clés ou des informations sur vos clients."},
+	CheckTakeover: {"Sous-domaine exposé à une prise de contrôle",
+		"Un enregistrement DNS pointe vers un service tiers qui n’est plus réservé à votre nom : quelqu’un pourrait le réclamer et publier son propre contenu sur votre sous-domaine, par exemple une fausse page de connexion."},
+	CheckMisconfig: {"Erreur de configuration",
+		"Une erreur de configuration a été détectée à cette adresse. Elle peut affaiblir la sécurité du site ou révéler des informations utiles à un attaquant."},
+	CheckExposedPanel: {"Interface d’administration exposée",
+		"Une page de connexion ou un panneau d’administration est accessible depuis internet. Ces pages subissent des tentatives de connexion automatisées en permanence."},
+	CheckOutdatedOrEOL: {"Logiciel obsolète ou en fin de vie",
+		"Un logiciel détecté à cette adresse n’est plus maintenu ou n’est plus à jour : ses failles connues ne seront plus corrigées."},
+}
+
+var defaultRemediationFR = map[string][]string{
+	CheckKnownCVE: {
+		"Mettez à jour le logiciel concerné vers une version qui corrige cette vulnérabilité (voir les références).",
+		"Si la mise à jour n’est pas possible tout de suite, restreignez l’accès (pare-feu, VPN) et appliquez le contournement indiqué par l’éditeur.",
+		"Vérifiez dans les journaux du serveur que la vulnérabilité n’a pas déjà été exploitée.",
+	},
+	CheckExposedData: {
+		"Supprimez le fichier du serveur web, ou interdisez son accès dans la configuration du serveur.",
+		"S’il contient des mots de passe, des clés ou des jetons, considérez-les comme compromis et changez-les.",
+	},
+	CheckTakeover: {
+		"Supprimez l’enregistrement DNS qui pointe vers le service inutilisé, ou réservez de nouveau la ressource vers laquelle il pointe.",
+	},
+	CheckMisconfig: {
+		"Corrigez la configuration décrite ci-dessus ; les références indiquent le réglage sûr.",
+	},
+	CheckExposedPanel: {
+		"Rendez l’interface d’administration accessible uniquement depuis votre réseau ou par un VPN.",
+		"Si elle doit rester publique, exigez des mots de passe robustes et la double authentification.",
+	},
+	CheckOutdatedOrEOL: {
+		"Passez à une version qui reçoit encore des mises à jour de sécurité.",
 	},
 }
 

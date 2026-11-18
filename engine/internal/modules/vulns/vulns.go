@@ -62,12 +62,12 @@ const (
 // Checks is the module's catalog. A finding's severity is the template's;
 // the catalog severity is the check's weight in the posture score.
 var Checks = []module.Check{
-	{ID: CheckKnownCVE, Category: module.CategoryWeb, Severity: finding.SeverityCritical, Title: "No software with a known vulnerability (CVE) is exposed"},
-	{ID: CheckExposedData, Category: module.CategoryWeb, Severity: finding.SeverityHigh, Title: "No sensitive file or data is publicly reachable"},
-	{ID: CheckTakeover, Category: module.CategoryDNS, Severity: finding.SeverityHigh, Title: "Subdomains cannot be taken over"},
-	{ID: CheckMisconfig, Category: module.CategoryWeb, Severity: finding.SeverityMedium, Title: "No known server misconfiguration"},
-	{ID: CheckExposedPanel, Category: module.CategoryWeb, Severity: finding.SeverityLow, Title: "Administration interfaces are not exposed to the internet"},
-	{ID: CheckOutdatedOrEOL, Category: module.CategoryWeb, Severity: finding.SeverityMedium, Title: "No end-of-life software is exposed"},
+	{ID: CheckKnownCVE, Category: module.CategoryWeb, Severity: finding.SeverityCritical, Title: "No software with a known vulnerability (CVE) is exposed", TitleFR: "Aucun logiciel exposé ne présente de vulnérabilité connue (CVE)"},
+	{ID: CheckExposedData, Category: module.CategoryWeb, Severity: finding.SeverityHigh, Title: "No sensitive file or data is publicly reachable", TitleFR: "Aucun fichier ni donnée sensible n’est accessible publiquement"},
+	{ID: CheckTakeover, Category: module.CategoryDNS, Severity: finding.SeverityHigh, Title: "Subdomains cannot be taken over", TitleFR: "Les sous-domaines ne peuvent pas être pris en contrôle"},
+	{ID: CheckMisconfig, Category: module.CategoryWeb, Severity: finding.SeverityMedium, Title: "No known server misconfiguration", TitleFR: "Aucune erreur de configuration connue du serveur"},
+	{ID: CheckExposedPanel, Category: module.CategoryWeb, Severity: finding.SeverityLow, Title: "Administration interfaces are not exposed to the internet", TitleFR: "Les interfaces d’administration ne sont pas exposées sur internet"},
+	{ID: CheckOutdatedOrEOL, Category: module.CategoryWeb, Severity: finding.SeverityMedium, Title: "No end-of-life software is exposed", TitleFR: "Aucun logiciel en fin de vie n’est exposé"},
 }
 
 const (

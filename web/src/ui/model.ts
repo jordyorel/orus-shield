@@ -2,6 +2,7 @@
 // from the API's data. Pure functions: every screen and the tests use them.
 
 import type { Check, Finding, OrgAsset, Severity } from "../api/types";
+import { findingText } from "./lang";
 
 /** The mockup's severity keys, plus "low" (shown "Faible") which it lacks. */
 export type Sev = "crit" | "high" | "med" | "low";
@@ -178,7 +179,8 @@ export function toIssues(findings: Finding[], assets: OrgAsset[]): Issue[] {
   const ips = ipHosts(assets);
   return findings
     .filter((f) => f.severity !== "info")
-    .map((f) => ({
+    .map((f) => ({ f, txt: findingText(f) }))
+    .map(({ f, txt }) => ({
       id: f.id,
       targetId: f.target_id,
       domain: f.target,
@@ -186,15 +188,15 @@ export function toIssues(findings: Finding[], assets: OrgAsset[]): Issue[] {
       sev: sevOf(f.severity),
       fixed: f.status !== "open",
       accepted: f.status === "accepted_risk",
-      title: f.title,
+      title: txt.title,
       host: hostOf(f.asset, f.target, ips),
       module: moduleName(f),
       cat: f.emerging ? "menaces" : catOfModule(f.module_id),
       mins: f.minutes,
       gain: f.gain,
       type: f.emerging ? "menace" : f.module_id === "leaks" ? "fuite" : "vuln",
-      why: f.description,
-      steps: f.remediation ?? [],
+      why: txt.description,
+      steps: txt.remediation ?? [],
       proof: f.evidence,
       cve: f.cve,
       finding: f,

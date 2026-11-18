@@ -626,3 +626,16 @@ func TestCatalogCoversEveryFamily(t *testing.T) {
 		t.Fatalf("Register: %v", err)
 	}
 }
+
+// Every service family is explained in French too, step for step.
+func TestFamiliesHaveFrench(t *testing.T) {
+	families := []family{otherService}
+	for _, s := range catalog {
+		families = append(families, s.family)
+	}
+	for _, f := range families {
+		if f.whyFR == "" || len(f.fixFR) != len(f.fix) {
+			t.Errorf("family %s: French text missing or %d steps for %d", f.checkID, len(f.fixFR), len(f.fix))
+		}
+	}
+}

@@ -139,7 +139,7 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 		// Every new or reopened finding is a candidate; queueAlerts keeps
 		// those at or above the organization's alert level.
 		if previous == nil || *previous == string(finding.StatusFixed) {
-			alerts = append(alerts, AlertFinding{ID: f.ID, Title: f.Title, Asset: f.Asset, Severity: f.Severity, Reopened: previous != nil})
+			alerts = append(alerts, AlertFinding{ID: f.ID, Title: f.Title, TitleFR: f.Translations["fr"].Title, Asset: f.Asset, Severity: f.Severity, Reopened: previous != nil})
 		}
 		switch {
 		case previous == nil:

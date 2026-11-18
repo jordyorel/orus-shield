@@ -322,6 +322,20 @@ describe("dashboard", () => {
       expect(calls.some((c) => c.key === `POST /orgs/${ORG}/targets/t1/scans`)).toBe(true);
     });
 
+    it("shows a problem in French when the finding carries its translation", async () => {
+      const fr = {
+        ...dmarc,
+        translations: { fr: { title: "Aucun enregistrement DMARC", description: "Le domaine ne publie aucune politique DMARC.", remediation: ["Publiez un enregistrement DMARC."] } },
+        remediation: ["Publish a DMARC record."],
+      };
+      orgRoutes({ [`GET /orgs/${ORG}/findings`]: ok({ items: [fr] }) });
+      renderAt(`/orgs/${ORG}/problemes?id=f1`);
+      expect(await screen.findByRole("heading", { name: "Aucun enregistrement DMARC" })).toBeTruthy();
+      expect(screen.getByText("Le domaine ne publie aucune politique DMARC.")).toBeTruthy();
+      expect(screen.getByText("Publiez un enregistrement DMARC.")).toBeTruthy();
+      expect(screen.queryByText("No DMARC record")).toBeNull();
+    });
+
     it("shows a sheet large on demand, and keeps it so", async () => {
       orgRoutes();
       renderAt(`/orgs/${ORG}/problemes?id=f1`);

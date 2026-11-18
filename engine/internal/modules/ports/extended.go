@@ -24,6 +24,12 @@ var otherService = family{
 		"If not, close the port in the firewall or make the service listen on a private network only.",
 		"If it must stay open, keep its software up to date.",
 	},
+	whyFR: "Un service réseau est joignable depuis internet sur ce port. Chaque service exposé est une cible que les attaquants peuvent sonder ; il doit être là volontairement.",
+	fixFR: []string{
+		"Identifiez ce service et vérifiez s’il doit vraiment être joignable depuis internet.",
+		"Sinon, fermez le port dans le pare-feu ou faites écouter le service sur un réseau privé uniquement.",
+		"S’il doit rester ouvert, maintenez son logiciel à jour.",
+	},
 }
 
 // registered are ports above 1024 commonly exposed by mistake, beyond the

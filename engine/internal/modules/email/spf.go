@@ -122,6 +122,11 @@ func checkSPF(ctx context.Context, dns resolver.Resolver, domain string, receive
 			evidence:    strings.Join(records, "\n"),
 			remediation: []string{"Merge all SPF records into a single TXT record starting with v=spf1."},
 			references:  []string{refSPF},
+			fr: finding.Text{
+				Title:       "Plusieurs enregistrements SPF",
+				Description: "Le domaine publie plus d’un enregistrement SPF. Les serveurs de réception considèrent cela comme une erreur permanente et ignorent entièrement SPF : le domaine n’est donc pas protégé.",
+				Remediation: []string{"Fusionnez tous les enregistrements SPF en un seul enregistrement TXT commençant par v=spf1."},
+			},
 		}}, nil
 	}
 
@@ -140,6 +145,11 @@ func checkSPF(ctx context.Context, dns resolver.Resolver, domain string, receive
 			evidence:    fmt.Sprintf("%s\nunrecognized: %s", record, strings.Join(parsed.unknown, " ")),
 			remediation: []string{"Fix or remove the unrecognized terms; check the record with an SPF validator before publishing."},
 			references:  []string{refSPF},
+			fr: finding.Text{
+				Title:       "Enregistrement SPF invalide",
+				Description: "L’enregistrement SPF contient des termes que les serveurs de réception ne comprennent pas. Ils considèrent cela comme une erreur permanente et ignorent entièrement SPF.",
+				Remediation: []string{"Corrigez ou supprimez les termes non reconnus ; vérifiez l’enregistrement avec un validateur SPF avant de le publier."},
+			},
 		}}, nil
 	}
 
@@ -171,6 +181,14 @@ func checkSPF(ctx context.Context, dns resolver.Resolver, domain string, receive
 				"Replace includes of your own servers with ip4:/ip6: ranges, which need no lookup.",
 			},
 			references: []string{refSPF},
+			fr: finding.Text{
+				Title:       "L’enregistrement SPF demande trop de requêtes DNS",
+				Description: fmt.Sprintf("L’évaluation de l’enregistrement SPF demande plus de %d requêtes DNS, inclusions imbriquées comprises. Les serveurs de réception s’arrêtent à %d et considèrent SPF en erreur permanente : des emails légitimes peuvent être rejetés, et l’usurpation n’est pas bloquée.", spfLookupLimit, spfLookupLimit),
+				Remediation: []string{
+					"Supprimez les inclusions (include:) des services que vous n’utilisez plus.",
+					"Remplacez les inclusions de vos propres serveurs par des plages ip4: ou ip6:, qui ne demandent aucune requête.",
+				},
+			},
 		})
 	}
 	return issues, nil
@@ -184,17 +202,28 @@ func spfMissing(domain string, receivesMail bool) issue {
 		description: "The domain publishes no SPF record, so receivers cannot tell which servers are allowed to send mail for it. Anyone can send mail that appears to come from this domain.",
 		references:  []string{refSPF},
 	}
+	i.fr = finding.Text{
+		Title:       "Aucun enregistrement SPF",
+		Description: "Le domaine ne publie aucun enregistrement SPF : les serveurs de réception ne peuvent pas savoir quels serveurs ont le droit d’envoyer des emails en son nom. N’importe qui peut envoyer un email qui semble venir de ce domaine.",
+	}
 	if receivesMail {
 		i.severity = finding.SeverityHigh
 		i.remediation = []string{
 			"List every service that sends mail for the domain (mail provider, newsletter, invoicing...).",
 			"Publish one TXT record such as \"v=spf1 include:<provider> -all\", using the include each provider documents.",
 		}
+		i.fr.Remediation = []string{
+			"Listez tous les services qui envoient des emails pour le domaine (messagerie, lettre d’information, facturation…).",
+			"Publiez un seul enregistrement TXT du type « v=spf1 include:<fournisseur> -all », avec l’inclusion indiquée par chaque fournisseur.",
+		}
 	} else {
 		// No MX: probably no mail at all. Still spoofable, so still a finding.
 		i.severity = finding.SeverityMedium
 		i.remediation = []string{
 			"If the domain never sends mail, publish \"v=spf1 -all\" to declare that no server may send for it.",
+		}
+		i.fr.Remediation = []string{
+			"Si le domaine n’envoie jamais d’emails, publiez « v=spf1 -all » pour déclarer qu’aucun serveur n’a le droit d’envoyer en son nom.",
 		}
 	}
 	return i
@@ -211,18 +240,33 @@ func spfAllIssue(domain, record string, r spfRecord) (issue, bool) {
 		i.title = "SPF allows every server to send mail"
 		i.description = "The SPF record ends with \"+all\" (or a bare \"all\"), which authorizes every server on the internet to send mail for the domain. It is worse than having no SPF record, because spoofed mail now passes SPF."
 		i.remediation = []string{"Replace \"+all\" with \"-all\" after listing your legitimate senders."}
+		i.fr = finding.Text{
+			Title:       "SPF autorise tous les serveurs à envoyer des emails",
+			Description: "L’enregistrement SPF se termine par « +all » (ou « all » seul), ce qui autorise tous les serveurs d’internet à envoyer des emails au nom du domaine. C’est pire que l’absence de SPF, car les emails usurpés passent désormais le contrôle SPF.",
+			Remediation: []string{"Remplacez « +all » par « -all », après avoir listé vos expéditeurs légitimes."},
+		}
 	case "?":
 		i.checkID = CheckSPFNeutralAll
 		i.severity = finding.SeverityMedium
 		i.title = "SPF does not reject unknown senders"
 		i.description = "The SPF record ends with \"?all\" (neutral): mail from unlisted servers is neither accepted nor rejected, so SPF gives almost no protection."
 		i.remediation = []string{"Replace \"?all\" with \"-all\" (or \"~all\" during a transition)."}
+		i.fr = finding.Text{
+			Title:       "SPF ne rejette pas les expéditeurs inconnus",
+			Description: "L’enregistrement SPF se termine par « ?all » (neutre) : les emails envoyés par des serveurs non listés ne sont ni acceptés ni rejetés, SPF n’apporte donc presque aucune protection.",
+			Remediation: []string{"Remplacez « ?all » par « -all » (ou « ~all » pendant une période de transition)."},
+		}
 	case "~":
 		i.checkID = CheckSPFSoftfailAll
 		i.severity = finding.SeverityLow
 		i.title = "SPF only soft-fails unknown senders"
 		i.description = "The SPF record ends with \"~all\" (softfail): mail from unlisted servers is marked as suspicious but usually still delivered. This is acceptable when DMARC is enforced, but \"-all\" is stricter."
 		i.remediation = []string{"Once all legitimate senders are listed, replace \"~all\" with \"-all\"."}
+		i.fr = finding.Text{
+			Title:       "SPF signale les expéditeurs inconnus sans les rejeter",
+			Description: "L’enregistrement SPF se termine par « ~all » (échec léger) : les emails envoyés par des serveurs non listés sont marqués comme suspects, mais le plus souvent quand même distribués. C’est acceptable si DMARC est appliqué, mais « -all » est plus strict.",
+			Remediation: []string{"Une fois tous vos expéditeurs légitimes listés, remplacez « ~all » par « -all »."},
+		}
 	case "":
 		if r.redirect != "" {
 			return issue{}, false // the redirected record decides
@@ -232,6 +276,11 @@ func spfAllIssue(domain, record string, r spfRecord) (issue, bool) {
 		i.title = "SPF record has no default rule"
 		i.description = "The SPF record has no \"all\" mechanism. Mail from unlisted servers gets a neutral result, so SPF gives almost no protection."
 		i.remediation = []string{"End the SPF record with \"-all\"."}
+		i.fr = finding.Text{
+			Title:       "L’enregistrement SPF n’a pas de règle par défaut",
+			Description: "L’enregistrement SPF ne contient pas de mécanisme « all ». Les emails envoyés par des serveurs non listés obtiennent un résultat neutre : SPF n’apporte presque aucune protection.",
+			Remediation: []string{"Terminez l’enregistrement SPF par « -all »."},
+		}
 	default: // "-": strict, nothing to report
 		return issue{}, false
 	}

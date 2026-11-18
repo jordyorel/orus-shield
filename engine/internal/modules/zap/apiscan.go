@@ -33,11 +33,11 @@ const (
 
 // APIChecks is the API module's catalog.
 var APIChecks = []module.Check{
-	{ID: CheckAPIInjection, Category: module.CategoryWeb, Severity: finding.SeverityCritical, Title: "No injection flaw in the API (SQL, command, code, XML)"},
-	{ID: CheckAPIAccess, Category: module.CategoryWeb, Severity: finding.SeverityHigh, Title: "API endpoints require authentication and enforce access control"},
-	{ID: CheckAPIExposure, Category: module.CategoryWeb, Severity: finding.SeverityMedium, Title: "The API does not expose internal details or sensitive data"},
-	{ID: CheckAPIConfig, Category: module.CategoryWeb, Severity: finding.SeverityMedium, Title: "The API is configured safely (CORS, methods)"},
-	{ID: CheckAPIOther, Category: module.CategoryWeb, Severity: finding.SeverityHigh, Title: "No other high-risk API flaw"},
+	{ID: CheckAPIInjection, Category: module.CategoryWeb, Severity: finding.SeverityCritical, Title: "No injection flaw in the API (SQL, command, code, XML)", TitleFR: "Aucune faille d’injection dans l’API (SQL, commande, code, XML)"},
+	{ID: CheckAPIAccess, Category: module.CategoryWeb, Severity: finding.SeverityHigh, Title: "API endpoints require authentication and enforce access control", TitleFR: "Les points d’accès de l’API exigent une authentification et contrôlent les accès"},
+	{ID: CheckAPIExposure, Category: module.CategoryWeb, Severity: finding.SeverityMedium, Title: "The API does not expose internal details or sensitive data", TitleFR: "L’API n’expose ni détails internes ni données sensibles"},
+	{ID: CheckAPIConfig, Category: module.CategoryWeb, Severity: finding.SeverityMedium, Title: "The API is configured safely (CORS, methods)", TitleFR: "L’API est configurée de façon sûre (CORS, méthodes)"},
+	{ID: CheckAPIOther, Category: module.CategoryWeb, Severity: finding.SeverityHigh, Title: "No other high-risk API flaw", TitleFR: "Aucune autre faille à haut risque dans l’API"},
 }
 
 // apiClasses map CWE identifiers to the API checks.
