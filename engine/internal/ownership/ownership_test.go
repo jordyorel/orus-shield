@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -352,4 +353,61 @@ func TestRecheck(t *testing.T) {
 			t.Error("a DNS failure revoked the verification")
 		}
 	})
+}
+
+// authDNS is fakeDNS with name servers: auth is what they answer, while
+// fakeDNS.txt plays a resolver's cache. authErr makes them unreachable.
+type authDNS struct {
+	*fakeDNS
+	auth    map[string][]string
+	authErr error
+}
+
+func (d *authDNS) LookupTXTAuthoritative(ctx context.Context, name, zone string) ([]string, error) {
+	d.calls = append(d.calls, "AUTH "+name+" in "+zone)
+	if d.authErr != nil {
+		return nil, d.authErr
+	}
+	if r, ok := d.auth[name]; ok {
+		return r, nil
+	}
+	return nil, fmt.Errorf("lookup %s: %w", name, resolver.ErrNotFound)
+}
+
+func TestVerifyReadsTheNameServers(t *testing.T) {
+	ctx := context.Background()
+	newAuth := func() (*Verifier, *fakeStore, *authDNS, Instructions) {
+		st := &fakeStore{target: store.Target{ID: "t1", Domain: "example.com", RatePerSec: 50, Exclusions: json.RawMessage("{}")}}
+		dns := &authDNS{fakeDNS: &fakeDNS{txt: map[string][]string{}}, auth: map[string][]string{}}
+		v := New(st, dns)
+		return v, st, dns, mustInstructions(t, v)
+	}
+
+	// A cache still holds an older token; the name servers have the new
+	// one: verified at once.
+	v, st, dns, in := newAuth()
+	dns.txt[in.RecordName] = []string{"orus-verify=old"}
+	dns.auth[in.RecordName] = []string{in.RecordValue}
+	if err := v.Verify(ctx, "t1", "x"); err != nil || !st.target.Verified() {
+		t.Fatalf("Verify with a stale cache = %v", err)
+	}
+	if slices.Contains(dns.calls, in.RecordName) {
+		t.Errorf("the cached lookup was used: %v", dns.calls)
+	}
+
+	// The name servers say it is not there: not verified, even if a cache
+	// still has it (a removed record must not survive in a cache).
+	v, st, dns, in = newAuth()
+	dns.txt[in.RecordName] = []string{in.RecordValue}
+	if err := v.Verify(ctx, "t1", "x"); !errors.Is(err, ErrRecordMissing) || st.target.Verified() {
+		t.Errorf("Verify with the record gone from the zone = %v", err)
+	}
+
+	// No name server answers: an ordinary lookup decides.
+	v, st, dns, in = newAuth()
+	dns.authErr = fmt.Errorf("%w: timeout", resolver.ErrNoAuthority)
+	dns.txt[in.RecordName] = []string{in.RecordValue}
+	if err := v.Verify(ctx, "t1", "x"); err != nil || !st.target.Verified() {
+		t.Errorf("Verify falling back = %v", err)
+	}
 }

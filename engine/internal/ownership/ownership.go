@@ -197,7 +197,7 @@ func recordPresent(ctx context.Context, dns resolver.Resolver, domain, token str
 	if token == "" {
 		return false, nil
 	}
-	records, err := dns.LookupTXT(ctx, RecordName(domain))
+	records, err := lookupRecord(ctx, dns, domain)
 	if errors.Is(err, resolver.ErrNotFound) {
 		return false, nil
 	}
@@ -211,4 +211,20 @@ func recordPresent(ctx context.Context, dns resolver.Resolver, domain, token str
 		}
 	}
 	return false, nil
+}
+
+// lookupRecord reads the verification record from the domain's own name
+// servers when the resolver can (resolver.AuthoritativeTXT): a record just
+// published is seen at once, and a removed one is not kept alive by a
+// cache. When no name server can be asked, it falls back to an ordinary
+// lookup. Their "does not exist" is an answer, not a failure: no fallback.
+func lookupRecord(ctx context.Context, dns resolver.Resolver, domain string) ([]string, error) {
+	name := RecordName(domain)
+	if a, ok := dns.(resolver.AuthoritativeTXT); ok {
+		records, err := a.LookupTXTAuthoritative(ctx, name, domain)
+		if !errors.Is(err, resolver.ErrNoAuthority) {
+			return records, err
+		}
+	}
+	return dns.LookupTXT(ctx, name)
 }
