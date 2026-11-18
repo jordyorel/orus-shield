@@ -136,6 +136,8 @@ describe("public site", () => {
   it("tests a domain from the home page, without an account", async () => {
     const calls = mockApi({ "GET /auth/me": fail(401), "GET /plans": ok({ items: plans }), "POST /quicktest": ok(quick) });
     renderAt("/");
+    expect(await screen.findByRole("heading", { name: "Trouvez vos failles avant les pirates." })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Exemple de résultat : 63 sur 100, 4 problèmes" })).toBeTruthy();
     fireEvent.change(await screen.findByLabelText("Votre nom de domaine"), { target: { value: "https://www.Example.cg/contact" } });
     fireEvent.click(screen.getByRole("button", { name: "Tester mon domaine" }));
     expect(await screen.findByText("Niveau moyen, 1 point faible à régler.")).toBeTruthy();
@@ -164,6 +166,20 @@ describe("public site", () => {
     expect(await screen.findByText("Publiez un enregistrement DMARC.")).toBeTruthy();
     expect(screen.getByText("Le rapport est aussi parti à votre adresse email.")).toBeTruthy();
     expect(calls.find((c) => c.key === "POST /quicktest/q1/unlock")?.body).toEqual({ email: "boss@example.cg", marketing: false });
+  });
+
+  it("keeps the public test for visitors: a signed-in customer goes to the dashboard", async () => {
+    orgRoutes({ "GET /plans": ok({ items: plans }) });
+    renderAt("/");
+    expect(await screen.findByRole("link", { name: "Aller à mon tableau de bord" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Bon retour, Jordy." })).toBeTruthy();
+    // The radar shows the customer's own score, and the profile is one click away.
+    expect(await screen.findByRole("img", { name: "Votre score : 74 sur 100" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Mon profil" }).getAttribute("href")).toBe(`/orgs/${ORG}/profil`);
+    expect(screen.queryByLabelText("Votre nom de domaine")).toBeNull();
+    expect(screen.queryByRole("link", { name: "Test gratuit" })).toBeNull();
+    renderAt("/test?domaine=example.cg");
+    await waitFor(() => expect(window.location.pathname).toBe(`/orgs/${ORG}/aujourdhui`));
   });
 
   it("says plainly why a domain cannot be tested", async () => {
@@ -361,6 +377,9 @@ describe("dashboard", () => {
     orgRoutes();
     const { unmount } = renderAt(`/orgs/${ORG}/aujourdhui`);
     const fold = await screen.findByRole("button", { name: "Réduire le menu" });
+    // The profile sits at the foot of the rail, above the fold toggle.
+    expect(document.querySelector('#rail a.railprofile')?.getAttribute("href")).toBe(`/orgs/${ORG}/profil`);
+    expect(document.querySelector("#rail a.railprofile")?.nextElementSibling).toBe(fold);
     expect(fold.getAttribute("aria-expanded")).toBe("true");
     fireEvent.click(fold);
     expect(document.querySelector(".shell.railmin")).toBeTruthy();

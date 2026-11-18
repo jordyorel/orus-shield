@@ -62,7 +62,9 @@ export function App() {
   // Pages open to everyone.
   if (path === "/") return <Page><AccueilPage /></Page>;
   if (path === "/tarifs") return <Page><TarifsPage /></Page>;
-  if (path === "/test") return <Page><TestPage /></Page>;
+  // The public test is for visitors: a signed-in customer's domains are
+  // tested in depth on their dashboard.
+  if (path === "/test") return state.status === "signed-in" ? <Redirect to="/app" /> : <Page><TestPage /></Page>;
   if (path === "/conditions") return <Page><ConditionsPage /></Page>;
   if (path === "/confidentialite") return <Page><ConfidentialitePage /></Page>;
   if (path === "/traitement-des-donnees") return <Page><TraitementPage /></Page>;

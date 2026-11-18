@@ -2,7 +2,7 @@
 // payment (paiement), with their shared header and footer.
 
 import { useEffect, useState } from "react";
-import type { Plan } from "../../api/types";
+import type { Overview, Plan, Severity } from "../../api/types";
 import { useAuth } from "../../auth";
 import { Link, navigate, useLocation } from "../../router";
 import { api, ApiError } from "../../api/client";
@@ -10,7 +10,7 @@ import { Lock, Logo, MODS, ModIcon, Moon, Soon, Tick } from "../icons";
 import { LangSwitch } from "../LangSwitch";
 import { locale, tr } from "../../i18n";
 import { openCheckout } from "../paddle";
-import { money } from "../model";
+import { COLOR, DIST, initials, money, SEV, type Sev } from "../model";
 import { cleanDomain } from "../prefill";
 import { useBodyClass, useUI } from "../ui";
 import { limitRows } from "./Reglages";
@@ -28,16 +28,20 @@ export function PubHead({ cur }: { cur: "accueil" | "tarifs" | "legal" | "test" 
         <Link to="/" aria-current={cur === "accueil" ? "page" : undefined}>
           {tr("Accueil", "Home")}
         </Link>
-        <Link to="/test" aria-current={cur === "test" ? "page" : undefined}>
-          {tr("Test gratuit", "Free test")}
-        </Link>
+        {state.status !== "signed-in" && (
+          <Link to="/test" aria-current={cur === "test" ? "page" : undefined}>
+            {tr("Test gratuit", "Free test")}
+          </Link>
+        )}
         <Link to="/tarifs" aria-current={cur === "tarifs" ? "page" : undefined}>
           {tr("Tarifs", "Pricing")}
         </Link>
         {state.status === "signed-in" ? (
-          <Link className="btn sm" to="/app">
-            {tr("Mon tableau de bord", "My dashboard")}
-          </Link>
+          <>
+            <Link className="btn sm" to="/app">
+              {tr("Mon tableau de bord", "My dashboard")}
+            </Link>
+          </>
         ) : (
           <>
             <Link to="/connexion">{tr("Se connecter", "Sign in")}</Link>
@@ -50,6 +54,12 @@ export function PubHead({ cur }: { cur: "accueil" | "tarifs" | "legal" | "test" 
         <button className="iconbtn" type="button" aria-label={tr("Changer de thème", "Change theme")} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
           <Moon />
         </button>
+        {/* The profile closes the header, at the far right, as in the dashboard. */}
+        {state.status === "signed-in" && state.me.orgs[0] && (
+          <Link className="iconbtn avatar" to={`/orgs/${encodeURIComponent(state.me.orgs[0].org_id)}/profil`} aria-label={tr("Mon profil", "My profile")} title={tr("Mon profil", "My profile")}>
+            {initials(state.me.name, state.me.email)}
+          </Link>
+        )}
       </nav>
     </header>
   );
@@ -68,10 +78,26 @@ export function PubFoot() {
   );
 }
 
-/** The static radar of the hero: the empty map of a perimeter. */
-export function HeroRadar({ scanning = false }: { scanning?: boolean }) {
+/** RadarDot is a problem drawn on the radar: the further from the centre,
+ * the more serious (DIST), in its severity's colour. */
+export interface RadarDot {
+  sev: Sev;
+  label: string;
+}
+
+/** The radar of the hero: the map of a perimeter. With dots and a score
+ * it shows a result (an example for visitors, the customer's own once
+ * signed in); without, the empty map (sign-in pages). */
+export function HeroRadar({ scanning = false, score, dots = [], label }: { scanning?: boolean; score?: number | null | undefined; dots?: RadarDot[]; label?: string | undefined }) {
+  // Spread the dots around the circle, starting top right, so they never
+  // overlap whatever their number.
+  const at = (i: number, d: RadarDot) => {
+    const a = ((-60 + (i * 360) / Math.max(dots.length, 1)) * Math.PI) / 180;
+    const r = DIST[d.sev];
+    return [150 + r * Math.cos(a), 150 + r * Math.sin(a)] as const;
+  };
   return (
-    <svg className={"hradar" + (scanning ? " scanning" : "")} viewBox="0 0 300 300" role="img" aria-label={tr("Carte du périmètre", "Map of the attack surface")}>
+    <svg className={"hradar" + (scanning ? " scanning" : "")} viewBox="0 0 300 300" role="img" aria-label={label ?? tr("Carte du périmètre", "Map of the attack surface")}>
       <circle cx="150" cy="150" r="128" fill="none" stroke="var(--ring)" strokeWidth="1.8" strokeDasharray="3 6" strokeLinecap="round" />
       <circle cx="150" cy="150" r="100" fill="none" stroke="var(--ring)" strokeWidth="1.8" />
       <circle cx="150" cy="150" r="74" fill="none" stroke="var(--ring)" strokeWidth="1.8" />
@@ -79,9 +105,99 @@ export function HeroRadar({ scanning = false }: { scanning?: boolean }) {
         <path d="M150 150 L150 22 A128 128 0 0 1 240 59 Z" fill="var(--azur)" opacity=".14" />
         <line x1="150" y1="150" x2="150" y2="22" stroke="var(--azur)" strokeWidth="2" strokeLinecap="round" />
       </g>
+      {dots.map((d, i) => {
+        const [x, y] = at(i, d);
+        return (
+          <g key={i} className="pt" style={{ animationDelay: `${0.4 + i * 0.25}s` }}>
+            <circle cx={x} cy={y} r="8" fill={COLOR[d.sev]} stroke="var(--bg)" strokeWidth="3" />
+          </g>
+        );
+      })}
       <circle cx="150" cy="150" r="44" fill="var(--surface)" stroke="var(--ring)" strokeWidth="1.8" />
-      <image href="/logo-mark.png" x="132" y="134" width="36" height="33" />
+      {score === undefined ? (
+        <image href="/logo-mark.png" x="132" y="134" width="36" height="33" />
+      ) : (
+        <>
+          <text className="core" x="150" y="156" textAnchor="middle" fontSize="30">
+            {score ?? "–"}
+          </text>
+          <text x="150" y="172" textAnchor="middle" fontSize="10" fill="var(--ink2)">
+            {tr("sur 100", "out of 100")}
+          </text>
+        </>
+      )}
     </svg>
+  );
+}
+
+/** SampleResult is the hero's picture for visitors: an example of what a
+ * test finds, marked as such (never presented as a real result). */
+function SampleResult() {
+  const dots: RadarDot[] = [
+    { sev: "crit", label: tr("Certificat expiré", "Expired certificate") },
+    { sev: "high", label: tr("Emails usurpables (pas de DMARC)", "Spoofable email (no DMARC)") },
+    { sev: "med", label: tr("HTTPS non imposé", "HTTPS not enforced") },
+    { sev: "med", label: tr("Versions de logiciels visibles", "Software versions shown") },
+  ];
+  return (
+    <>
+      <HeroRadar scanning score={63} dots={dots} label={tr("Exemple de résultat : 63 sur 100, 4 problèmes", "Example result: 63 out of 100, 4 problems")} />
+      <div className="herocard">
+        <p className="plankicker">{tr("Exemple · votre-entreprise.cg", "Example · your-company.com")}</p>
+        <ul>
+          {dots.map((d) => (
+            <li key={d.label}>
+              <i style={{ background: COLOR[d.sev] }} aria-hidden="true" />
+              {d.label}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </>
+  );
+}
+
+/** MyPerimeter is the hero's picture once signed in: the customer's own
+ * score and open problems (first organization), and the way to today's
+ * actions. Without data (no scan yet, or MFA still to set up) it falls
+ * back to the empty map and the way to the dashboard. */
+function MyPerimeter() {
+  const { state } = useAuth();
+  const org = state.status === "signed-in" ? state.me.orgs[0] : undefined;
+  const [ov, setOv] = useState<Overview | null>(null);
+  useEffect(() => {
+    if (!org) return;
+    const ac = new AbortController();
+    api.overview(org.org_id, 84, ac.signal).then(setOv, () => setOv(null));
+    return () => ac.abort();
+  }, [org?.org_id]);
+  if (!org) return <HeroRadar />;
+  const counts: [Severity, Sev][] = [
+    ["critical", "crit"],
+    ["high", "high"],
+    ["medium", "med"],
+    ["low", "low"],
+  ];
+  const open = counts.reduce((n, [k]) => n + (ov?.open_findings[k] ?? 0), 0);
+  // One dot per open problem, the most serious first, twelve at most.
+  const dots: RadarDot[] = counts.flatMap(([k, sev]) => Array.from({ length: ov?.open_findings[k] ?? 0 }, () => ({ sev, label: SEV[sev][0] }))).slice(0, 12);
+  return (
+    <>
+      <HeroRadar score={ov ? ov.score : undefined} dots={dots} label={ov?.score != null ? tr(`Votre score : ${ov.score} sur 100`, `Your score: ${ov.score} out of 100`) : undefined} />
+      <div className="herocard">
+        <p className="plankicker">{org.org_name}</p>
+        <p className="herostat">
+          {!ov
+            ? tr("Ouvrez votre tableau de bord pour voir votre sécurité.", "Open your dashboard to see your security.")
+            : open === 0
+              ? tr("Aucun problème ouvert.", "No open problem.")
+              : tr(`${open} problème${open > 1 ? "s" : ""} ouvert${open > 1 ? "s" : ""}.`, `${open} open problem${open > 1 ? "s" : ""}.`)}
+        </p>
+        <Link className="link" to={`/orgs/${encodeURIComponent(org.org_id)}/aujourdhui`}>
+          {tr("Voir mes actions du jour", "See today’s actions")}
+        </Link>
+      </div>
+    </>
   );
 }
 
@@ -132,6 +248,11 @@ export function AccueilPage() {
   const plans = usePlans();
   const ess = plans.find((p) => p.id === "sme");
   const [demo, setDemo] = useState("");
+  // The public test is for visitors; a signed-in customer goes to their
+  // dashboard, where their domains are tested in depth.
+  const { state } = useAuth();
+  const signedIn = state.status === "signed-in";
+  const first = state.status === "signed-in" ? state.me.name.split(/\s+/)[0] : "";
   return (
     <>
       <main>
@@ -139,13 +260,32 @@ export function AccueilPage() {
           <PubHead cur="accueil" />
           <section className="hero">
             <div>
-              <h1>{tr("Voyez votre entreprise comme un attaquant la voit.", "See your business the way an attacker sees it.")}</h1>
+              <h1>
+                {signedIn
+                  ? first
+                    ? tr(`Bon retour, ${first}.`, `Welcome back, ${first}.`)
+                    : tr("Bon retour.", "Welcome back.")
+                  : tr("Trouvez vos failles avant les pirates.", "Find your security gaps before attackers do.")}
+              </h1>
               <p className="herosub">
-                {tr(
-                  "Orus Shield surveille vos domaines, vos emails et vos serveurs, puis vous dit quoi corriger en premier, en français et sans jargon.",
-                  "Orus Shield watches your domains, your email and your servers, then tells you what to fix first, in plain language.",
-                )}
+                {signedIn
+                  ? tr(
+                      "Votre sécurité en un coup d’œil : votre score, vos problèmes ouverts, et ce qu’il faut faire aujourd’hui.",
+                      "Your security at a glance: your score, your open problems, and what to do today.",
+                    )
+                  : tr(
+                      "Orus Shield vérifie chaque semaine vos domaines, vos emails et vos serveurs, puis vous dit quoi corriger en premier, étape par étape et sans jargon.",
+                      "Orus Shield checks your domains, your email and your servers every week, then tells you what to fix first, step by step and without jargon.",
+                    )}
               </p>
+              {signedIn ? (
+                <div className="actions">
+                  <Link className="btn" to="/app">
+                    {tr("Aller à mon tableau de bord", "Go to my dashboard")}
+                  </Link>
+                </div>
+              ) : (
+              <>
               {/* The public test: the domain goes to /test, which runs it. */}
               <form
                 className="addrow"
@@ -179,10 +319,10 @@ export function AccueilPage() {
                   "Free, no account: your score out of 100 in 20 seconds. Passive checks only, from public data.",
                 )}
               </p>
+              </>
+              )}
             </div>
-            <div className="herovis">
-              <HeroRadar />
-            </div>
+            <div className="herovis">{signedIn ? <MyPerimeter /> : <SampleResult />}</div>
           </section>
 
           <section className="band">

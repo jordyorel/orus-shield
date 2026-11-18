@@ -64,7 +64,8 @@ at a time, each with its address (`settingsPath`, `?s=domaines|alertes|equipe|ab
 Scans by default), and its sliders drawn by us (night shown in the hour's track); Abonnement as a
 plan card (state chip, price, next date), usage tiles and the comparison with "Votre offre"; on
 desktop the rail carries the only logo and folds to its icons ("Réduire le menu", kept in
-localStorage `orus.rail`, tab names as tooltips).
+localStorage `orus.rail`, tab names as tooltips), with the profile at its foot, above the toggle (name
+and email unfolded, avatar folded; the top bar's avatar stays on phones only).
 Anything without a real source (WhatsApp, data leaks, payment providers, public domain test,
 Monday summary, deep profile, invoices, account deletion, regenerating recovery codes) stays
 in place, greyed, with a "Bientôt" badge: never simulated. Backend for it (migration 0016):
@@ -304,7 +305,12 @@ only on Gratuit). The dashboard checks the TXT record again by itself every 30 s
 after a failed check.
 
 Public domain test (decided 2026-11-18, the one exception to the rule above, for acquisition): `/test`
-(and the home page's form) tests any domain without an account (`POST /api/v1/quicktest`, package
+(and the home page's form) tests any domain without an account, for visitors only (signed in, the form
+gives way to "Aller à mon tableau de bord", the menu hides "Test gratuit" and /test redirects to /app).
+The home page's hero (2026-11-18, beyond the mockup): "Trouvez vos failles avant les pirates."; its radar
+shows an example result for visitors (score 63, four problems, marked "Exemple"), and once signed in
+the customer's own score and one dot per open problem (`MyPerimeter`, first organization's overview,
+"Bon retour, <name>."); the public header shows the profile avatar when signed in (`POST /api/v1/quicktest`, package
 `quicktest`, run in the API process, outside the queue, belonging to no organization). Its boundary:
 the passive email, tls and web modules only, on the name and its www (no discovery, ports or
 vulnerabilities: those still need an account and a verified domain), behind `quicktest.Gate` (public

@@ -261,7 +261,8 @@ button.hm:hover,button.hm:focus-visible,.hm.na:hover{outline:2px solid var(--ink
 .avatar{text-decoration:none;font-weight:700;font-size:14px;color:var(--azur-ink);background:color-mix(in srgb,var(--azur) 14%,var(--surface))}
 body.public .rail,body.public .top,body.public .tabs{display:none}
 body.public .shell{grid-template-columns:1fr}
-body.public main{max-width:1120px;padding-bottom:40px}
+body.public main{max-width:1360px;padding-bottom:40px}
+@media (min-width:900px){body.public main{padding-left:48px;padding-right:48px}.herovis{max-width:460px}}
 .pubhead{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 0}
 .pubhead .brand{text-decoration:none;color:var(--ink);margin:0}
 .pubhead nav{display:flex;align-items:center;gap:4px 18px;flex-wrap:wrap;font-size:15px}
@@ -277,6 +278,13 @@ a.btn.ghost{color:var(--ink)}
 .hero .addrow{margin-top:24px;max-width:520px}
 .herovis{max-width:400px;width:100%;margin:0 auto}
 .hradar{display:block;width:100%;height:auto;overflow:visible}
+.hradar .core{font-family:'Bricolage Grotesque Variable',sans-serif;font-weight:700;fill:var(--ink)}
+.herocard{margin:14px auto 0;max-width:340px;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:14px 18px;box-shadow:var(--shadow)}
+.herocard ul{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:6px;font-size:14px}
+.herocard li{display:flex;align-items:center;gap:8px}
+.herocard li i{width:10px;height:10px;border-radius:50%;flex:none}
+.herostat{margin:6px 0 4px;font-family:'Bricolage Grotesque Variable',sans-serif;font-size:20px;font-weight:700}
+.pubhead .avatar{min-height:40px;width:40px;display:inline-grid;place-items:center;border-radius:12px}
 .hradar .sweep{transform-origin:150px 150px;opacity:0}
 .hradar.scanning .sweep{opacity:1;animation:rot 1.6s linear infinite}
 .hradar .pt{opacity:0;animation:pop .45s cubic-bezier(.3,1.6,.5,1) forwards;transform-box:fill-box;transform-origin:center}
@@ -718,12 +726,21 @@ button.asset:hover{transform:translateY(-2px);border-color:var(--azur)}
  .rail{display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh;padding:18px 12px;border-right:1px solid var(--line);overflow:hidden}
  .rail .logo{display:flex;flex-direction:row;align-items:center;gap:10px;height:52px;padding:0 13px;margin-bottom:14px;text-decoration:none;color:var(--ink)}
  .railname{font-family:'Bricolage Grotesque Variable',sans-serif;font-weight:700;font-size:17px;white-space:nowrap}
- .rail a:not(.logo){flex-direction:row;justify-content:flex-start;gap:14px;min-height:48px;padding:0 15px;font-size:15px;white-space:nowrap}
- .railtoggle{margin-top:auto;display:flex;align-items:center;gap:14px;min-height:44px;padding:0 15px;border:0;border-radius:14px;background:none;color:var(--ink2);font-size:14px;white-space:nowrap;cursor:pointer;transition:background .2s,color .2s}
+ .rail a:not(.logo):not(.railprofile){flex-direction:row;justify-content:flex-start;gap:14px;min-height:48px;padding:0 15px;font-size:15px;white-space:nowrap}
+ .top .topavatar{display:none}
+ .rail .railprofile{margin-top:auto;display:flex;flex-direction:row;font-size:14px;align-items:center;gap:12px;min-height:56px;padding:0 9px;border-radius:14px;text-decoration:none;color:var(--ink);transition:background .2s}
+ .rail .railprofile:hover,.rail .railprofile[aria-current]{background:var(--soft)}
+ .railprofile .avatar{flex:none;display:grid;place-items:center;width:36px;height:36px;border-radius:12px}
+ .railwho{display:grid;min-width:0;line-height:1.25}
+ .railwho b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .railwho small{font-size:12px;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .railmin .railwho{display:none}
+ .railmin .rail .railprofile{justify-content:center;padding:0}
+ .railtoggle{display:flex;align-items:center;gap:14px;min-height:44px;padding:0 15px;border:0;border-radius:14px;background:none;color:var(--ink2);font-size:14px;white-space:nowrap;cursor:pointer;transition:background .2s,color .2s}
  .railtoggle:hover{background:var(--soft);color:var(--ink)}
  .railtoggle svg{flex:none;transition:transform .25s}
  .railmin .navl,.railmin .railname,.railmin .railtoggle span{display:none}
- .railmin .rail a:not(.logo),.railmin .rail .logo,.railmin .railtoggle{justify-content:center;padding:0}
+ .railmin .rail a:not(.logo):not(.railprofile),.railmin .rail .logo,.railmin .railtoggle{justify-content:center;padding:0}
  .railmin .railtoggle svg{transform:rotate(180deg)}
  /* The rail carries the logo: the top bar's would repeat it beside. */
  .top .brand{display:none}

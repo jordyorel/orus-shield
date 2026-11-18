@@ -127,6 +127,23 @@ export function AppShell({ view, children }: { view: string; children: ReactNode
             </span>
           </Link>
           <NavLinks orgId={org.org_id} current={view} folded={folded} />
+          {/* The profile at the foot of the rail, above the fold toggle
+              (desktop; on a phone it stays in the top bar). */}
+          <Link
+            className="railprofile"
+            to={appPath(org.org_id, "profil")}
+            aria-current={view === "profil" ? "page" : undefined}
+            aria-label={tr("Mon profil", "My profile")}
+            title={folded ? me.name || me.email : undefined}
+          >
+            <span className="avatar" aria-hidden="true">
+              {initials(me.name, me.email)}
+            </span>
+            <span className="railwho" aria-hidden="true">
+              <b>{me.name || tr("Mon profil", "My profile")}</b>
+              <small>{me.email}</small>
+            </span>
+          </Link>
           <button
             className="railtoggle"
             type="button"
@@ -141,7 +158,6 @@ export function AppShell({ view, children }: { view: string; children: ReactNode
             <Fold />
             <span>{folded ? tr("Déplier le menu", "Expand the menu") : tr("Réduire le menu", "Collapse the menu")}</span>
           </button>
-        
         </nav>
         <div>
           <header className="top">
@@ -160,7 +176,7 @@ export function AppShell({ view, children }: { view: string; children: ReactNode
               <Search />
               {tr("Rechercher", "Search")} <kbd>Ctrl K</kbd>
             </button>
-            <Link className="iconbtn avatar" to={appPath(org.org_id, "profil")} aria-label={tr("Mon profil", "My profile")}>
+            <Link className="iconbtn avatar topavatar" to={appPath(org.org_id, "profil")} aria-label={tr("Mon profil", "My profile")}>
               {initials(me.name, me.email)}
             </Link>
             <button className="iconbtn" id="theme" type="button" aria-label={tr("Changer de thème", "Change theme")} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
