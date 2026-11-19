@@ -100,7 +100,8 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 
 	seen := make([]string, 0, len(r.Findings))
 	created, reopened := 0, 0
-	var alerts []AlertFinding // opened or reopened by this scan, worth an email
+	var alerts []AlertFinding   // opened or reopened by this scan, worth an email
+	var opened []WebhookFinding // the same, for webhooks
 	for _, f := range r.Findings {
 		f.FirstSeen, f.LastSeen, f.Status = at, at, finding.StatusOpen
 		if err := f.Validate(); err != nil {
@@ -140,6 +141,8 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 		// those at or above the organization's alert level.
 		if previous == nil || *previous == string(finding.StatusFixed) {
 			alerts = append(alerts, AlertFinding{ID: f.ID, Title: f.Title, TitleFR: f.Translations["fr"].Title, Asset: f.Asset, Severity: f.Severity, Reopened: previous != nil})
+			opened = append(opened, WebhookFinding{ID: f.ID, ModuleID: f.ModuleID, CheckID: f.CheckID, Severity: string(f.Severity),
+				Title: f.Title, TitleFR: f.Translations["fr"].Title, Asset: f.Asset, Reopened: previous != nil})
 		}
 		switch {
 		case previous == nil:
@@ -158,6 +161,7 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 	}
 
 	var fixed int64
+	var fixedList []WebhookFinding
 	unobserved := 0
 	if len(r.Succeeded) > 0 && r.Unobserved != nil {
 		kept, err := unobservedFindings(ctx, tx, targetID, r, seen)
@@ -170,22 +174,33 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 		seen = append(seen, kept...)
 	}
 	if len(r.Succeeded) > 0 {
-		// One statement marks the findings fixed and records one event per
-		// finding, from the rows the UPDATE returns.
-		tag, err := tx.Exec(ctx, `
+		// One statement marks the findings fixed, records one event per
+		// finding, and returns them (for webhooks).
+		rows, err := tx.Query(ctx, `
 			WITH fixed AS (
 				UPDATE findings SET status = 'fixed', fixed_at = $4,
 					data = data || jsonb_build_object('status', 'fixed', 'fixed_at', $4::timestamptz)
 				WHERE target_id = $1 AND status = 'open' AND module_id = ANY($2) AND NOT (id = ANY($3))
-				RETURNING org_id, target_id, id
+				RETURNING org_id, target_id, id, module_id, check_id, severity,
+					data->>'title' AS title, coalesce(data->'translations'->'fr'->>'title', '') AS title_fr, data->>'asset' AS asset
+			), events AS (
+				INSERT INTO finding_events (org_id, target_id, finding_id, at, from_status, to_status, actor, scan_id)
+				SELECT org_id, target_id, id, $4, 'open', 'fixed', $5, $6 FROM fixed
 			)
-			INSERT INTO finding_events (org_id, target_id, finding_id, at, from_status, to_status, actor, scan_id)
-			SELECT org_id, target_id, id, $4, 'open', 'fixed', $5, $6 FROM fixed`,
+			SELECT id, module_id, check_id, severity, title, title_fr, asset FROM fixed`,
 			targetID, r.Succeeded, seen, at, r.WorkerID, r.ScanID)
 		if err != nil {
 			return fmt.Errorf("finish scan %s: mark fixed findings: %w", r.ScanID, err)
 		}
-		fixed = tag.RowsAffected()
+		fixedList, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (WebhookFinding, error) {
+			var f WebhookFinding
+			err := row.Scan(&f.ID, &f.ModuleID, &f.CheckID, &f.Severity, &f.Title, &f.TitleFR, &f.Asset)
+			return f, err
+		})
+		if err != nil {
+			return fmt.Errorf("finish scan %s: mark fixed findings: %w", r.ScanID, err)
+		}
+		fixed = int64(len(fixedList))
 	}
 
 	assets, err := saveAssets(ctx, tx, orgID, targetID, domain, at, r)
@@ -204,6 +219,12 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 	if err != nil {
 		return fmt.Errorf("finish scan %s: %w", r.ScanID, err)
 	}
+	// Webhooks: the scan's events to every endpoint subscribed to them.
+	hooked, err := queueWebhookEvents(ctx, tx, scanEvents{orgID: orgID, targetID: targetID, scanID: r.ScanID, domain: domain, at: at,
+		opened: opened, fixed: fixedList, score: score, findings: len(r.Findings)})
+	if err != nil {
+		return fmt.Errorf("finish scan %s: %w", r.ScanID, err)
+	}
 	// The first scan of a domain also sends its summary (every offer).
 	summaries, err := queueFirstScanSummary(ctx, tx, orgID, targetID, r.ScanID, domain, at, score)
 	if err != nil {
@@ -219,7 +240,7 @@ func (s *Store) FinishScan(ctx context.Context, r ScanResult) error {
 			"scan_id": r.ScanID, "attempt": r.Attempt,
 			"succeeded": succeeded, "failed": failed,
 			"findings": len(r.Findings), "new": created, "fixed": fixed, "reopened": reopened,
-			"unobserved": unobserved, "alerts": len(alerts), "notified": notified, "summaries": summaries,
+			"unobserved": unobserved, "alerts": len(alerts), "notified": notified, "summaries": summaries, "webhooks": hooked,
 			"assets": assets.reported, "assets_new": assets.created, "assets_back": assets.back, "assets_gone": assets.gone,
 			"assets_unobserved": assets.unobserved,
 			"score":             score,

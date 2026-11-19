@@ -16,6 +16,7 @@ import { sinceText } from "../model";
 import { useOrg } from "../OrgData";
 import { CloseButton } from "../sheets";
 import { useUI } from "../ui";
+import { WebhooksBlock } from "./Webhooks";
 
 const EXPIRY: [number, () => string][] = [
   [0, () => tr("Jamais", "Never")],
@@ -341,6 +342,7 @@ export function ApiKeysSection() {
       )}
 
       <QuickStart orgId={org.org_id} />
+      <WebhooksBlock />
     </>
   );
 }

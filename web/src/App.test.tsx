@@ -495,6 +495,32 @@ describe("dashboard", () => {
     expect(screen.getByText("orus_abcdefg…")).toBeTruthy();
   });
 
+  it("adds a webhook and shows its signing secret once", async () => {
+    const pro: Subscription = { ...subscription, plan: plans[2]!, status: "active", until: null };
+    const hook = { id: "w1", url: "https://hooks.acme.com/orus", events: ["finding.opened"], created_by: "user:x", created_at: "2026-11-18T10:00:00Z", last_delivery_at: null, last_status: null, last_error: null };
+    let added = false;
+    const calls = orgRoutes(
+      {
+        [`GET /orgs/${ORG}/apikeys`]: ok({ items: [] }),
+        [`GET /orgs/${ORG}/webhooks`]: () => ({ status: 200, json: { items: added ? [hook] : [] } }),
+        [`POST /orgs/${ORG}/webhooks`]: () => {
+          added = true;
+          return { status: 201, json: { webhook: hook, secret: "whsec_the_secret" } };
+        },
+      },
+      pro,
+    );
+    renderAt(`/orgs/${ORG}/reglages?s=api`);
+    fireEvent.click(await screen.findByRole("button", { name: "+ Ajouter un webhook" }));
+    fireEvent.change(await screen.findByLabelText("Adresse de réception"), { target: { value: "https://hooks.acme.com/orus" } });
+    fireEvent.click(screen.getByLabelText(/Scan terminé/));
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter le webhook" }));
+    expect(await screen.findByText("whsec_the_secret")).toBeTruthy();
+    expect(calls.find((c) => c.key === `POST /orgs/${ORG}/webhooks`)?.body).toEqual({ url: "https://hooks.acme.com/orus", events: ["finding.opened", "scan.finished"] });
+    expect(await screen.findByText("https://hooks.acme.com/orus")).toBeTruthy();
+    expect(screen.getByText("Jamais appelé")).toBeTruthy();
+  });
+
   it("lists the domains, then offers to add one", async () => {
     orgRoutes();
     renderAt(`/orgs/${ORG}/actifs`);

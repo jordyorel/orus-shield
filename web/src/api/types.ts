@@ -518,3 +518,15 @@ export interface OpenAPIDoc {
   paths: Record<string, Record<string, OpenAPIOperation>>;
   components?: { schemas?: Record<string, OpenAPISchema> };
 }
+
+/** webhookJSON: an outgoing webhook endpoint, never its secret. */
+export interface Webhook {
+  id: string;
+  url: string;
+  events: string[];
+  created_by: string;
+  created_at: string;
+  last_delivery_at: string | null;
+  last_status: number | null;
+  last_error: string | null;
+}

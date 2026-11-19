@@ -433,7 +433,18 @@ documented in OpenAPI 3.1 (`engine/internal/api/openapi.json`, embedded, served 
 `GET /api/v1/openapi.json`; French texts in `x-*-fr` extensions); `TestOpenAPIMatchesTheServer` calls
 every documented operation with a key, so the document cannot drift from the routes. The dashboard
 renders it at `/docs/api` (`ui/pages/docs.tsx`), linked from Réglages > API and the public footer.
-Next: signed outgoing webhooks, Slack and Teams.
+Outgoing webhooks (same offers; Réglages > API, `ui/pages/Webhooks.tsx`; migration 0032): an admin
+declares HTTPS endpoints and their events (`finding.opened` for new or reopened findings,
+`finding.fixed`, `scan.finished`; `ping` for "Envoyer un test"). FinishScan queues the deliveries in
+its transaction (`webhook_deliveries`, at most 100 per-finding events per scan and endpoint); the
+worker delivers them (package `webhook`, like notify: lease, retries at 1 min, 5 min, 30 min, 2 h,
+dropped after a day or when the offer no longer includes it) as JSON `{id, type, created_at, org_id,
+data}` signed `Orus-Signature: t=<unix>,v1=<hex HMAC-SHA256 of "t.body">`, with Orus-Event and
+Orus-Delivery headers. The secret (`whsec_…`) is shown once and sealed under ORUS_CREDENTIALS_KEY
+(bound to the organization and URL; the API cannot read it back; without the key, webhooks are
+neither created nor delivered). The URL is the customer's: only public addresses are dialed
+(resolved at each delivery, `quicktest.Public`), https only, no redirect followed, 10 s, the answer
+read up to 64 KB. Each endpoint shows its last delivery's status. Next: Slack and Teams.
 
 Internal agents (step J, Sur devis, plan.Agents): an admin creates an agent in Actifs >
 Réseaux internes with a name and private ranges (RFC 1918 or IPv6 ULA, at most a /20; migration

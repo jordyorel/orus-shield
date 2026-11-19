@@ -823,6 +823,14 @@ body.pay main{max-width:1120px;padding:0 18px 48px}
 .keyopt input{margin-top:3px;accent-color:var(--azur)}
 .keyopt span{display:grid;gap:2px}
 .keyopt small{color:var(--ink2);font-size:13px}
+.keyopt b code{font:11.5px ui-monospace,Menlo,monospace;color:var(--ink2);background:var(--soft);padding:1px 6px;border-radius:6px;margin-left:4px;font-weight:500}
+.hooklist li{grid-template-areas:'icon main main' 'icon scope act'}
+@media (min-width:700px){.hooklist li{grid-template-columns:auto minmax(0,1fr) auto auto;grid-template-areas:'icon main scope act'}}
+.hooklist .keybadge{font-size:18px;font-weight:700}
+.hookurl{font:13px ui-monospace,Menlo,monospace;overflow-wrap:anywhere;background:none!important;padding:0!important;color:var(--ink)!important}
+.hooklist .stchip{grid-area:scope;justify-self:start}
+@media (min-width:700px){.hooklist .stchip{justify-self:end}}
+.hookacts{grid-area:act;display:flex;gap:8px;justify-self:end;flex-wrap:wrap}
 /* /docs/api */
 .doclayout{display:grid;gap:24px;margin-top:20px}
 @media (min-width:1000px){.doclayout{grid-template-columns:260px minmax(0,1fr);align-items:start}}

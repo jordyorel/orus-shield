@@ -17,6 +17,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/ownership"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 	"github.com/jordyorel/orus-shield/engine/internal/threats"
+	"github.com/jordyorel/orus-shield/engine/internal/webhook"
 	"github.com/jordyorel/orus-shield/engine/internal/worker"
 )
 
@@ -63,6 +64,13 @@ func run(log *slog.Logger) error {
 		go notify.New(st, *cfg.smtp, cfg.publicURL, log.With("component", "notify")).Run(ctx, notify.DefaultInterval)
 	} else {
 		log.Warn("ORUS_SMTP_ADDR is not set: email alerts will not be sent")
+	}
+	// Outgoing webhooks: signed deliveries from their outbox. The
+	// endpoints' secrets are sealed under the API's ORUS_CREDENTIALS_KEY.
+	if cfg.worker.Credentials != nil {
+		go webhook.New(st, cfg.worker.Credentials, log.With("component", "webhook")).Run(ctx, webhook.DefaultInterval)
+	} else {
+		log.Warn("ORUS_CREDENTIALS_KEY is not set: webhooks will not be delivered")
 	}
 	if cfg.nuclei.Binary == "" {
 		log.Warn("ORUS_NUCLEI_BIN is not set: the vulns module (known vulnerabilities) will fail")

@@ -1,4 +1,4 @@
-import type { Activity, Agent, APIKey, OpenAPIDoc, DeclaredAPI, TestAccount, AuthActivity, Check, DeviceSession, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, OrgSettings, Overview, Plan, QuickProblem, QuickResult, RecoveryCodes, Role, Scan, ScheduleInput, Subscription, Target } from "./types";
+import type { Activity, Agent, APIKey, OpenAPIDoc, Webhook, DeclaredAPI, TestAccount, AuthActivity, Check, DeviceSession, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, OrgSettings, Overview, Plan, QuickProblem, QuickResult, RecoveryCodes, Role, Scan, ScheduleInput, Subscription, Target } from "./types";
 import type { Exclusions } from "../exclusions";
 import { getLang } from "../i18n";
 
@@ -122,6 +122,11 @@ export const api = {
   createApiKey: (orgId: string, name: string, scope: "read" | "write", expiresInDays: number) =>
     request<{ key: APIKey; secret: string }>("POST", `${org(orgId)}/apikeys`, { name, scope, expires_in_days: expiresInDays }),
   revokeApiKey: (orgId: string, id: string) => request<void>("DELETE", `${org(orgId)}/apikeys/${encodeURIComponent(id)}`),
+  webhooks: (orgId: string) => request<List<Webhook>>("GET", `${org(orgId)}/webhooks`),
+  createWebhook: (orgId: string, url: string, events: string[]) =>
+    request<{ webhook: Webhook; secret: string }>("POST", `${org(orgId)}/webhooks`, { url, events }),
+  deleteWebhook: (orgId: string, id: string) => request<void>("DELETE", `${org(orgId)}/webhooks/${encodeURIComponent(id)}`),
+  testWebhook: (orgId: string, id: string) => request<void>("POST", `${org(orgId)}/webhooks/${encodeURIComponent(id)}/test`),
   /** billingSync records the subscription of a finished checkout at once, without waiting for Paddle's webhook. */
   billingSync: (orgId: string, transactionId: string) =>
     request<{ state: "active" | "pending" }>("POST", `${org(orgId)}/billing/sync`, { transaction_id: transactionId }),

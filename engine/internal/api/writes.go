@@ -55,6 +55,10 @@ func (s *Server) writeRoutes(mux *http.ServeMux) {
 	write("GET "+base+"/apikeys", s.listAPIKeys)
 	write("POST "+base+"/apikeys", s.createAPIKey)
 	write("DELETE "+base+"/apikeys/{key}", s.revokeAPIKey)
+	write("GET "+base+"/webhooks", s.listWebhooks)
+	write("POST "+base+"/webhooks", s.createWebhook)
+	write("DELETE "+base+"/webhooks/{webhook}", s.deleteWebhook)
+	write("POST "+base+"/webhooks/{webhook}/test", s.pingWebhook)
 	// The audit log names who did what: admins only, like writes.
 	write("GET "+base+"/audit", s.auditLog)
 }
