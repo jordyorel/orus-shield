@@ -323,10 +323,16 @@ after a failed check.
 Public domain test (decided 2026-11-18, the one exception to the rule above, for acquisition): `/test`
 (and the home page's form) tests any domain without an account, for visitors only (signed in, the form
 gives way to "Aller à mon tableau de bord", the menu hides "Test gratuit" and /test redirects to /app).
-The home page's hero (2026-11-18, beyond the mockup): "Trouvez vos failles avant les pirates."; its radar
-shows an example result for visitors (score 63, four problems, marked "Exemple"), and once signed in
-the customer's own score and one dot per open problem (`MyPerimeter`, first organization's overview,
-"Bon retour, <name>."); the public header shows the profile avatar when signed in. Guides (`/guides`,
+The home page (`ui/pages/home.tsx`, rebuilt 2026-11-19 on the structure of established security
+products, studied first): a hero with the public test and a real dashboard screenshot (once signed in,
+"Bon retour, <name>." and the customer's own score, `MyPerimeter`), a strip of what we check, three
+feature blocks with screenshots (Actifs, Aujourd'hui, a problem's sheet), a grid of twelve
+capabilities linked to guides or pricing, three steps, integrations (Slack and Teams "Bientôt"), the
+trust band, a pricing teaser, an FAQ and a closing test. Nothing invented: no customer logos, ratings
+or reviews until real ones exist. The screenshots (`web/public/screens/*.jpg`, 1600 px) are the real
+dashboard rendered on an example domain. The public header has menus (Produit, Ressources, each link
+with a line of explanation; a Menu button on phones) and the footer columns (Produit, Ressources,
+Légal); the profile avatar ends the header when signed in. Guides (`/guides`,
 `ui/pages/guides.tsx`, content for search engines leading to the test): DMARC, SPF, TLS certificate,
 HTTPS and security headers, each a whole text in French and in English, with its own title and meta
 description (`useMeta`); they state only standard facts (records, dig, openssl, nginx, Apache). The

@@ -6,50 +6,91 @@ import type { Overview, Plan, Severity } from "../../api/types";
 import { useAuth } from "../../auth";
 import { Link, navigate, useLocation } from "../../router";
 import { api, ApiError } from "../../api/client";
-import { Lock, Logo, MODS, ModIcon, Moon, Soon, Tick } from "../icons";
+import { Lock, Logo, Moon, Tick } from "../icons";
 import { LangSwitch } from "../LangSwitch";
 import { locale, tr } from "../../i18n";
 import { openCheckout } from "../paddle";
 import { COLOR, DIST, initials, money, SEV, type Sev } from "../model";
-import { cleanDomain } from "../prefill";
+
 import { useBodyClass, useUI } from "../ui";
 import { limitRows } from "./Reglages";
+
+/** NavMenu is one menu of the public header: a button that opens a panel
+ * of links, each with a line of explanation (as most product sites do). It
+ * opens on hover and on click, and closes with Escape or on leaving. */
+function NavMenu({ label, items, current }: { label: string; items: [string, string, string][]; current?: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={"navmenu" + (open ? " open" : "")} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)} onKeyDown={(e) => e.key === "Escape" && setOpen(false)}>
+      <button type="button" aria-expanded={open} aria-current={current ? "page" : undefined} onClick={() => setOpen(!open)}>
+        {label}
+        <svg className="caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      <div className="navpanel" role="menu">
+        {items.map(([to, t, d]) => (
+          <Link key={to} to={to} role="menuitem" onClick={() => setOpen(false)}>
+            <b>{t}</b>
+            <small>{d}</small>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** productMenu and resourceMenu are the header's menus, shared with the
+ * footer's columns. */
+function productMenu(): [string, string, string][] {
+  return [
+    ["/guides/dmarc", tr("Emails", "Email"), tr("SPF, DKIM, DMARC : empêcher l’usurpation", "SPF, DKIM, DMARC: stop spoofing")],
+    ["/guides/certificat-tls", tr("Certificats et chiffrement", "Certificates and encryption"), tr("Expiration, chaîne, versions de TLS", "Expiry, chain, TLS versions")],
+    ["/guides/securiser-site", tr("Sites web", "Websites"), tr("HTTPS, HSTS, en-têtes de sécurité", "HTTPS, HSTS, security headers")],
+    ["/tarifs", tr("Ports et vulnérabilités", "Ports and vulnerabilities"), tr("Services exposés, CVE connues, menaces émergentes", "Exposed services, known CVEs, emerging threats")],
+    ["/tarifs", tr("Applications et API", "Applications and APIs"), tr("Tests applicatifs, scans authentifiés", "Application tests, authenticated scans")],
+    ["/tarifs", tr("Réseaux internes", "Internal networks"), tr("Un agent sur votre réseau, sans port à ouvrir", "An agent on your network, no port to open")],
+  ];
+}
+function resourceMenu(): [string, string, string][] {
+  return [
+    ["/test", tr("Test gratuit", "Free test"), tr("Votre score sur 100 en 20 secondes, sans compte", "Your score out of 100 in 20 seconds, no account")],
+    ["/guides", tr("Guides de sécurité", "Security guides"), tr("Vérifier et corriger, étape par étape", "Check and fix, step by step")],
+    ["/docs/api", tr("Documentation de l’API", "API documentation"), tr("Clés, routes, webhooks signés", "Keys, routes, signed webhooks")],
+  ];
+}
 
 export function PubHead({ cur }: { cur: "accueil" | "tarifs" | "legal" | "test" | "guides" | "docs" }) {
   const { theme, setTheme } = useUI();
   const { state } = useAuth();
+  const [mobile, setMobile] = useState(false);
+  const signedIn = state.status === "signed-in";
+  const resources = resourceMenu().filter(([to]) => !(signedIn && to === "/test"));
   return (
-    <header className="pubhead">
+    <header className={"pubhead" + (mobile ? " mobileopen" : "")}>
       <Link className="brand" to="/">
         <Logo />
         <span>Orus Shield</span>
       </Link>
-      <nav aria-label={tr("Site", "Site")}>
-        <Link to="/" aria-current={cur === "accueil" ? "page" : undefined}>
-          {tr("Accueil", "Home")}
-        </Link>
-        {state.status !== "signed-in" && (
-          <Link to="/test" aria-current={cur === "test" ? "page" : undefined}>
-            {tr("Test gratuit", "Free test")}
-          </Link>
-        )}
-        <Link to="/guides" aria-current={cur === "guides" ? "page" : undefined}>
-          {tr("Guides", "Guides")}
-        </Link>
+      <button className="iconbtn menubtn" type="button" aria-expanded={mobile} aria-controls="pubnav" aria-label={tr("Menu", "Menu")} onClick={() => setMobile(!mobile)}>
+        <span aria-hidden="true">{mobile ? "✕" : "☰"}</span>
+      </button>
+      <nav id="pubnav" aria-label={tr("Site", "Site")}>
+        <NavMenu label={tr("Produit", "Product")} items={productMenu()} />
+        <NavMenu label={tr("Ressources", "Resources")} items={resources} current={cur === "guides" || cur === "docs" || cur === "test"} />
         <Link to="/tarifs" aria-current={cur === "tarifs" ? "page" : undefined}>
           {tr("Tarifs", "Pricing")}
         </Link>
-        {state.status === "signed-in" ? (
-          <>
-            <Link className="btn sm" to="/app">
-              {tr("Mon tableau de bord", "My dashboard")}
-            </Link>
-          </>
+        <span className="navsep" aria-hidden="true" />
+        {signedIn ? (
+          <Link className="btn sm" to="/app">
+            {tr("Mon tableau de bord", "My dashboard")}
+          </Link>
         ) : (
           <>
             <Link to="/connexion">{tr("Se connecter", "Sign in")}</Link>
             <Link className="btn sm" to="/inscription">
-              {tr("Créer un compte", "Create an account")}
+              {tr("Essai gratuit", "Free trial")}
             </Link>
           </>
         )}
@@ -58,7 +99,7 @@ export function PubHead({ cur }: { cur: "accueil" | "tarifs" | "legal" | "test" 
           <Moon />
         </button>
         {/* The profile closes the header, at the far right, as in the dashboard. */}
-        {state.status === "signed-in" && state.me.orgs[0] && (
+        {signedIn && state.me.orgs[0] && (
           <Link className="iconbtn avatar" to={`/orgs/${encodeURIComponent(state.me.orgs[0].org_id)}/profil`} aria-label={tr("Mon profil", "My profile")} title={tr("Mon profil", "My profile")}>
             {initials(state.me.name, state.me.email)}
           </Link>
@@ -68,17 +109,43 @@ export function PubHead({ cur }: { cur: "accueil" | "tarifs" | "legal" | "test" 
   );
 }
 
+/** PubFoot: the brand and its promise, then columns of links. */
 export function PubFoot() {
+  // The public test is for visitors, here as in the header.
+  const { state } = useAuth();
+  const resources = resourceMenu().filter(([to]) => !(state.status === "signed-in" && to === "/test"));
+  const cols: [string, [string, string][]][] = [
+    [tr("Produit", "Product"), productMenu().map(([to, t]) => [to, t])],
+    [tr("Ressources", "Resources"), [...resources.map(([to, t]): [string, string] => [to, t]), ["/tarifs", tr("Tarifs", "Pricing")]]],
+    [
+      tr("Légal", "Legal"),
+      [
+        ["/conditions", tr("Conditions d’utilisation", "Terms of use")],
+        ["/confidentialite", tr("Confidentialité", "Privacy")],
+        ["/traitement-des-donnees", tr("Traitement des données", "Data processing")],
+      ],
+    ],
+  ];
   return (
     <footer className="pubfoot">
-      <span>Orus Shield</span>
-      <span>
-        <Link to="/guides">{tr("Guides", "Guides")}</Link>
-        <Link to="/docs/api">{tr("API", "API")}</Link>
-        <Link to="/conditions">{tr("Conditions d’utilisation", "Terms of use")}</Link>
-        <Link to="/confidentialite">{tr("Confidentialité", "Privacy")}</Link>
-        <Link to="/tarifs">{tr("Tarifs", "Pricing")}</Link>
-      </span>
+      <div className="footbrand">
+        <Link className="brand" to="/">
+          <Logo />
+          <span>Orus Shield</span>
+        </Link>
+        <p>{tr("La sécurité de ce que votre entreprise expose sur internet, expliquée simplement.", "The security of what your business exposes on the internet, explained simply.")}</p>
+      </div>
+      {cols.map(([title, links]) => (
+        <div key={title} className="footcol">
+          <p>{title}</p>
+          {links.map(([to, t]) => (
+            <Link key={to + t} to={to}>
+              {t}
+            </Link>
+          ))}
+        </div>
+      ))}
+      <p className="footcopy">© {new Date().getFullYear()} Orus Shield</p>
     </footer>
   );
 }
@@ -135,38 +202,11 @@ export function HeroRadar({ scanning = false, score, dots = [], label }: { scann
   );
 }
 
-/** SampleResult is the hero's picture for visitors: an example of what a
- * test finds, marked as such (never presented as a real result). */
-function SampleResult() {
-  const dots: RadarDot[] = [
-    { sev: "crit", label: tr("Certificat expiré", "Expired certificate") },
-    { sev: "high", label: tr("Emails usurpables (pas de DMARC)", "Spoofable email (no DMARC)") },
-    { sev: "med", label: tr("HTTPS non imposé", "HTTPS not enforced") },
-    { sev: "med", label: tr("Versions de logiciels visibles", "Software versions shown") },
-  ];
-  return (
-    <>
-      <HeroRadar scanning score={63} dots={dots} label={tr("Exemple de résultat : 63 sur 100, 4 problèmes", "Example result: 63 out of 100, 4 problems")} />
-      <div className="herocard">
-        <p className="plankicker">{tr("Exemple · votre-entreprise.cg", "Example · your-company.com")}</p>
-        <ul>
-          {dots.map((d) => (
-            <li key={d.label}>
-              <i style={{ background: COLOR[d.sev] }} aria-hidden="true" />
-              {d.label}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </>
-  );
-}
-
 /** MyPerimeter is the hero's picture once signed in: the customer's own
  * score and open problems (first organization), and the way to today's
  * actions. Without data (no scan yet, or MFA still to set up) it falls
  * back to the empty map and the way to the dashboard. */
-function MyPerimeter() {
+export function MyPerimeter() {
   const { state } = useAuth();
   const org = state.status === "signed-in" ? state.me.orgs[0] : undefined;
   const [ov, setOv] = useState<Overview | null>(null);
@@ -247,180 +287,6 @@ export function features(p: Plan | undefined): string[] {
 }
 
 const discount = () => tr("À l’année, jusqu’à 20 % de moins", "Yearly, up to 20% less");
-
-export function AccueilPage() {
-  useBodyClass(["public"]);
-  const plans = usePlans();
-  const ess = plans.find((p) => p.id === "sme");
-  const [demo, setDemo] = useState("");
-  // The public test is for visitors; a signed-in customer goes to their
-  // dashboard, where their domains are tested in depth.
-  const { state } = useAuth();
-  const signedIn = state.status === "signed-in";
-  const first = state.status === "signed-in" ? state.me.name.split(/\s+/)[0] : "";
-  return (
-    <>
-      <main>
-        <div className="view">
-          <PubHead cur="accueil" />
-          <section className="hero">
-            <div>
-              <h1>
-                {signedIn
-                  ? first
-                    ? tr(`Bon retour, ${first}.`, `Welcome back, ${first}.`)
-                    : tr("Bon retour.", "Welcome back.")
-                  : tr("Trouvez vos failles avant les pirates.", "Find your security gaps before attackers do.")}
-              </h1>
-              <p className="herosub">
-                {signedIn
-                  ? tr(
-                      "Votre sécurité en un coup d’œil : votre score, vos problèmes ouverts, et ce qu’il faut faire aujourd’hui.",
-                      "Your security at a glance: your score, your open problems, and what to do today.",
-                    )
-                  : tr(
-                      "Orus Shield vérifie chaque semaine vos domaines, vos emails et vos serveurs, puis vous dit quoi corriger en premier, étape par étape et sans jargon.",
-                      "Orus Shield checks your domains, your email and your servers every week, then tells you what to fix first, step by step and without jargon.",
-                    )}
-              </p>
-              {signedIn ? (
-                <div className="actions">
-                  <Link className="btn" to="/app">
-                    {tr("Aller à mon tableau de bord", "Go to my dashboard")}
-                  </Link>
-                </div>
-              ) : (
-              <>
-              {/* The public test: the domain goes to /test, which runs it. */}
-              <form
-                className="addrow"
-                noValidate
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const d = cleanDomain(demo);
-                  navigate(d ? `/test?domaine=${encodeURIComponent(d)}` : "/test");
-                }}
-              >
-                <label className="vh" htmlFor="demo-in">
-                  {tr("Votre nom de domaine", "Your domain name")}
-                </label>
-                <input
-                  id="demo-in"
-                  type="text"
-                  inputMode="url"
-                  autoComplete="off"
-                  spellCheck={false}
-                  placeholder={tr("votre-entreprise.cg", "your-company.com")}
-                  value={demo}
-                  onChange={(e) => setDemo(e.target.value)}
-                />
-                <button className="btn" type="submit">
-                  {tr("Tester mon domaine", "Test my domain")}
-                </button>
-              </form>
-              <p className="sub">
-                {tr(
-                  "Gratuit et sans compte : votre score sur 100 en 20 secondes. Contrôles passifs seulement, à partir de données publiques.",
-                  "Free, no account: your score out of 100 in 20 seconds. Passive checks only, from public data.",
-                )}
-              </p>
-              </>
-              )}
-            </div>
-            <div className="herovis">{signedIn ? <MyPerimeter /> : <SampleResult />}</div>
-          </section>
-
-          <section className="band">
-            <h2>{tr("Ce que nous vérifions", "What we check")}</h2>
-            <ul className="feat">
-              {MODS.map((m) => (
-                <li key={m.key}>
-                  <ModIcon>{m.icon}</ModIcon>
-                  <div>
-                    <p className="mt">
-                      {m.title}
-                      {m.module === null && <Soon />}
-                    </p>
-                    <p className="md">{m.desc}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section className="band two">
-            <div>
-              <h2>{tr("Du problème à la correction", "From problem to fix")}</h2>
-              <ol className="path">
-                <li>
-                  <b>{tr("Ajoutez votre domaine", "Add your domain")}</b>
-                  <span>{tr("Nous trouvons vos sous-domaines et vos serveurs.", "We find your subdomains and your servers.")}</span>
-                </li>
-                <li>
-                  <b>{tr("Prouvez qu’il est à vous", "Prove it is yours")}</b>
-                  <span>{tr("Un enregistrement DNS, et les contrôles complets démarrent.", "One DNS record, and the full checks start.")}</span>
-                </li>
-                <li>
-                  <b>{tr("Corrigez, étape par étape", "Fix it, step by step")}</b>
-                  <span>{tr("Chaque problème vient avec sa marche à suivre. Nous revérifions ensuite.", "Every problem comes with its steps. We check again afterwards.")}</span>
-                </li>
-              </ol>
-            </div>
-            <div className="sample" aria-hidden="true">
-              <p className="mt">{tr("Protéger vos emails contre l’usurpation", "Protect your email against spoofing")}</p>
-              <p className="md">{tr("exemple.cg, environ 15 min", "example.com, about 15 min")}</p>
-              <div className="stepline">
-                <b style={{ width: "50%" }} />
-              </div>
-              <div className="stepbtn on">
-                <i>
-                  <Tick />
-                </i>
-                <span>{tr("Lire les rapports DMARC pendant deux semaines.", "Read the DMARC reports for two weeks.")}</span>
-              </div>
-              <div className="stepbtn">
-                <i />
-                <span>{tr("Passer la règle à « quarantine », puis à « reject ».", "Move the policy to “quarantine”, then to “reject”.")}</span>
-              </div>
-            </div>
-          </section>
-
-          <section className="band dark">
-            <h2>{tr("Nous ne testons que ce qui vous appartient", "We only test what belongs to you")}</h2>
-            <ul className="trust">
-              <li>
-                <b>{tr("Propriété prouvée", "Proven ownership")}</b>
-                <span>{tr("Aucun test actif sans preuve que le domaine et le serveur sont à vous.", "No active test without proof that the domain and the server are yours.")}</span>
-              </li>
-              <li>
-                <b>{tr("Vos limites respectées", "Your limits respected")}</b>
-                <span>{tr("Vous choisissez la vitesse, les horaires et ce qu’on ne touche pas.", "You choose the speed, the hours and what we leave alone.")}</span>
-              </li>
-              <li>
-                <b>{tr("Tout est tracé", "Everything is logged")}</b>
-                <span>{tr("Chaque scan est enregistré : qui l’a lancé, sur quoi, et quand.", "Every scan is recorded: who started it, on what, and when.")}</span>
-              </li>
-            </ul>
-          </section>
-
-          <section className="band cta">
-            <h2>{tr(`Essentiel à partir de ${price(ess, "mois")} par mois`, `Essential from ${price(ess, "mois")} a month`)}</h2>
-            <p className="sub">{tr("Un audit gratuit pour commencer. Paiement par carte ou PayPal.", "A free audit to start. Pay by card or PayPal.")}</p>
-            <div className="actions" style={{ justifyContent: "center" }}>
-              <Link className="btn" to="/tarifs">
-                {tr("Voir les tarifs", "See pricing")}
-              </Link>
-              <Link className="btn ghost" to="/app">
-                {tr("Voir le tableau de bord", "See the dashboard")}
-              </Link>
-            </div>
-          </section>
-          <PubFoot />
-        </div>
-      </main>
-    </>
-  );
-}
 
 export function TarifsPage() {
   useBodyClass(["public"]);

@@ -137,9 +137,10 @@ describe("public site", () => {
     const calls = mockApi({ "GET /auth/me": fail(401), "GET /plans": ok({ items: plans }), "POST /quicktest": ok(quick) });
     renderAt("/");
     expect(await screen.findByRole("heading", { name: "Trouvez vos failles avant les pirates." })).toBeTruthy();
-    expect(screen.getByRole("img", { name: "Exemple de résultat : 63 sur 100, 4 problèmes" })).toBeTruthy();
+    // The hero shows the real product (a screenshot), not an invented result.
+    expect(screen.getByRole("img", { name: /Le tableau de bord Orus Shield/ })).toBeTruthy();
     fireEvent.change(await screen.findByLabelText("Votre nom de domaine"), { target: { value: "https://www.Example.cg/contact" } });
-    fireEvent.click(screen.getByRole("button", { name: "Tester mon domaine" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Tester mon domaine" })[0]!);
     expect(await screen.findByText("Niveau moyen, 1 problème à corriger.")).toBeTruthy();
     expect(window.location.pathname + window.location.search).toBe("/test?domaine=www.example.cg");
     expect(calls.find((c) => c.key === "POST /quicktest")?.body).toEqual({ domain: "www.example.cg" });
