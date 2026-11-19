@@ -8,6 +8,30 @@ import { AuthProvider } from "./auth";
 import { navigate } from "./router";
 import { fail, mockApi, ok } from "./test/fetch";
 
+// Scalar (the API reference renderer) is a large Vue application that jsdom
+// does not need to run: the stub shows what the page hands it, the document
+// already in the reader's language.
+vi.mock("./ui/pages/scalar", () => ({
+  default: ({ doc }: { doc: { info: { description?: string }; tags?: { name: string }[]; paths: Record<string, Record<string, { summary?: string; parameters?: { description?: string }[] }>> } }) => (
+    <div data-testid="scalar">
+      <p>{doc.info.description}</p>
+      {(doc.tags ?? []).map((t) => (
+        <h2 key={t.name}>{t.name}</h2>
+      ))}
+      {Object.values(doc.paths).flatMap((m) =>
+        Object.values(m).map((op) => (
+          <section key={op.summary}>
+            <h3>{op.summary}</h3>
+            {(op.parameters ?? []).map((p) => (
+              <p key={p.description}>{p.description}</p>
+            ))}
+          </section>
+        )),
+      )}
+    </div>
+  ),
+}));
+
 const ORG = "o1";
 
 const me: Me = {
@@ -229,9 +253,9 @@ describe("public site", () => {
     mockApi({ "GET /auth/me": fail(401), "GET /openapi.json": ok(doc) });
     renderAt("/docs/api");
     expect(await screen.findByRole("heading", { name: "Lister les problèmes" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Problèmes" })).toBeTruthy();
     expect(screen.getByText("Votre organisation.")).toBeTruthy();
-    expect(screen.getByText("résultats")).toBeTruthy();
-    expect(screen.getAllByText("Finding").length).toBeGreaterThan(0);
+    expect(screen.getByText("Lisez vos **résultats**.")).toBeTruthy();
   });
 
   it("says plainly why a domain cannot be tested", async () => {

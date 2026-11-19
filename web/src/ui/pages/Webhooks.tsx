@@ -235,7 +235,7 @@ export function WebhooksBlock() {
       )}
       {hooks && hooks.length === 0 && <p className="hint">{tr("Aucun webhook pour l’instant.", "No webhook yet.")}</p>}
       <p className="md" style={{ marginTop: 10 }}>
-        <a href="/docs/api#webhooks" target="_blank" rel="noopener">
+        <a href="/docs/api#description/webhooks" target="_blank" rel="noopener">
           {tr("Format des événements et vérification de la signature", "Event format and signature check")}
         </a>
       </p>

@@ -3,16 +3,17 @@
   "info": {
     "title": "Orus Shield API",
     "version": "1.0.0",
-    "description": "Read your organization's security results and act on them from your own tools.\n\nAuthenticate with an API key created in Settings > API (Pro and custom plans): `Authorization: Bearer orus_…`. A key reaches its organization only. A **read** key reads every route below; a **write** key may also start a scan and change a finding's status (operations marked `x-scope: write`). Members, billing, settings and test accounts are never reachable with a key.\n\nLimits: 120 requests per minute per key (429 beyond, with Retry-After). Lists are returned as `{\"items\": [...]}`. Errors are `{\"error\": \"…\", \"code\": \"…\"}`; `code` is present when the client can act on it.",
+    "description": "Read your organization's security results and act on them from your own tools: a ticketing system, a SIEM, a script, an automation (Zapier, Make, n8n).\n\n## Authentication\n\nCreate an API key in **Settings > API** of your dashboard (Pro and custom plans). It is shown once: keep it in a secret manager, never in code. Send it with every request:\n\n```bash\ncurl -H \"Authorization: Bearer $ORUS_API_KEY\" https://<your-server>/api/v1/orgs/<org>/overview\n```\n\nA key reaches its own organization only (404 elsewhere). A **read** key reads every route of this reference; a **write** key may also start a scan and change a finding's status (operations marked \"Write key\"). Members, billing, settings, test accounts and the keys themselves are never reachable with a key. A key stops working when it is revoked, when it expires, or when the plan no longer includes the API (403 `plan_limit`). Every request made with a key appears in the audit log as `api_key:<name>`.\n\n## Errors\n\nErrors are JSON: `{\"error\": \"a sentence for humans\", \"code\": \"for_your_code\"}`. `code` is present when your code can act on it.\n\n| Status | Meaning |\n|---|---|\n| 400 | The request is malformed (`code` says why) |\n| 401 | No key, or an unknown, revoked or expired one (`invalid_key`) |\n| 403 | The key is valid but may not do this: `plan_limit` (the plan no longer includes the API) or `read_only_key` (a read key on a write route) |\n| 404 | Not found in this key's organization |\n| 409 | Conflicts with the current state (e.g. the domain is not verified) |\n| 429 | Too many requests (`rate_limited`): wait for `Retry-After` seconds |\n\n## Rate limits\n\n120 requests per minute per key. Beyond, the API answers 429 with a `Retry-After` header. Lists are returned whole as `{\"items\": [...]}`.\n\n## Webhooks\n\nWebhooks push events to your tools as they happen, instead of polling. Declare an HTTPS endpoint in **Settings > API > Webhooks** and choose its events:\n\n| Event | When |\n|---|---|\n| `finding.opened` | A scan finds a new problem, or one that comes back after a fix (`reopened: true`) |\n| `finding.fixed` | A scan no longer sees a problem |\n| `scan.finished` | A scan is over: score, problems opened and fixed |\n| `ping` | \"Send a test\" in the dashboard |\n\nEach event is a `POST` with a JSON body (see the Webhooks section of this reference for every payload):\n\n```json\n{\n  \"id\": \"evt_0193…\",\n  \"type\": \"finding.opened\",\n  \"created_at\": \"2026-11-19T08:00:00Z\",\n  \"org_id\": \"0193…\",\n  \"data\": { \"scan_id\": \"…\", \"target_id\": \"…\", \"domain\": \"example.com\", \"finding\": { \"id\": \"…\", \"severity\": \"high\", \"title\": \"No DMARC record\", \"asset\": \"example.com\" } }\n}\n```\n\nand these headers: `Orus-Event` (the type), `Orus-Delivery` (unique per delivery: use it to ignore a duplicate), `Orus-Signature`.\n\n### Checking the signature\n\n`Orus-Signature` is `t=<unix time>,v1=<hex>`, where `v1` is the HMAC-SHA256 of `<t>.<raw body>` keyed with the endpoint's whole secret (`whsec_…`, shown once when you created it). Recompute it on the **raw** body, compare in constant time, and refuse a `t` older than 5 minutes.\n\n```javascript\nimport crypto from \"node:crypto\";\n\nfunction verify(rawBody, header, secret) {\n  const parts = Object.fromEntries(header.split(\",\").map((p) => p.split(\"=\")));\n  if (Math.abs(Date.now() / 1000 - Number(parts.t)) > 300) return false;\n  const expected = crypto.createHmac(\"sha256\", secret).update(`${parts.t}.${rawBody}`).digest(\"hex\");\n  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(parts.v1 ?? \"\"));\n}\n```\n\n```python\nimport hashlib, hmac, time\n\ndef verify(raw_body: bytes, header: str, secret: str) -> bool:\n    parts = dict(p.split(\"=\", 1) for p in header.split(\",\"))\n    if abs(time.time() - int(parts[\"t\"])) > 300:\n        return False\n    expected = hmac.new(secret.encode(), parts[\"t\"].encode() + b\".\" + raw_body, hashlib.sha256).hexdigest()\n    return hmac.compare_digest(expected, parts.get(\"v1\", \"\"))\n```\n\n### Delivery\n\nAnswer with any 2xx within 10 seconds; the body is ignored. Otherwise we try again after 1 minute, 5 minutes, 30 minutes and 2 hours, and drop the event after a day. Redirects are not followed. A scan sends at most 100 finding events per endpoint. The endpoint's last status shows in Settings > API.\n\n## Changelog\n\n- **1.0.0** (2026-11): API keys, read routes, starting scans and changing a finding's status; signed webhooks.",
     "contact": {
       "name": "Orus Shield"
     },
-    "x-description-fr": "Lisez les résultats de sécurité de votre organisation et agissez dessus depuis vos propres outils.\n\nAuthentifiez-vous avec une clé d’API créée dans Réglages > API (offres Pro et Sur devis) : `Authorization: Bearer orus_…`. Une clé n’atteint que son organisation. Une clé **lecture** lit toutes les routes ci-dessous ; une clé **écriture** peut aussi lancer un scan et changer le statut d’un problème (opérations marquées `x-scope: write`). L’équipe, la facturation, les réglages et les comptes de test ne sont jamais accessibles avec une clé.\n\nLimites : 120 requêtes par minute et par clé (429 au-delà, avec Retry-After). Les listes sont renvoyées sous la forme `{\"items\": [...]}`. Les erreurs sont `{\"error\": \"…\", \"code\": \"…\"}` ; `code` est présent quand le client peut agir dessus."
+    "x-description-fr": "Lisez les résultats de sécurité de votre organisation et agissez dessus depuis vos propres outils : un outil de tickets, un SIEM, un script, une automatisation (Zapier, Make, n8n).\n\n## Authentification\n\nCréez une clé d’API dans **Réglages > API** de votre tableau de bord (offres Pro et Sur devis). Elle n’est affichée qu’une fois : gardez-la dans un coffre à secrets, jamais dans le code. Envoyez-la à chaque requête :\n\n```bash\ncurl -H \"Authorization: Bearer $ORUS_API_KEY\" https://<votre-serveur>/api/v1/orgs/<org>/overview\n```\n\nUne clé n’atteint que son organisation (404 ailleurs). Une clé **lecture** lit toutes les routes de cette référence ; une clé **écriture** peut aussi lancer un scan et changer le statut d’un problème (opérations marquées « Clé écriture »). L’équipe, la facturation, les réglages, les comptes de test et les clés elles-mêmes ne sont jamais accessibles avec une clé. Une clé cesse de fonctionner quand elle est révoquée, quand elle expire, ou quand l’offre n’inclut plus l’API (403 `plan_limit`). Chaque requête faite avec une clé apparaît dans le journal d’audit sous `api_key:<nom>`.\n\n## Erreurs\n\nLes erreurs sont en JSON : `{\"error\": \"une phrase pour les humains\", \"code\": \"pour_votre_code\"}`. `code` est présent quand votre code peut agir dessus.\n\n| Statut | Signification |\n|---|---|\n| 400 | La requête est mal formée (`code` dit pourquoi) |\n| 401 | Pas de clé, ou une clé inconnue, révoquée ou expirée (`invalid_key`) |\n| 403 | La clé est valide mais ne peut pas faire cela : `plan_limit` (l’offre n’inclut plus l’API) ou `read_only_key` (une clé lecture sur une route d’écriture) |\n| 404 | Introuvable dans l’organisation de cette clé |\n| 409 | Contraire à l’état actuel (par exemple, le domaine n’est pas vérifié) |\n| 429 | Trop de requêtes (`rate_limited`) : attendez `Retry-After` secondes |\n\n## Limites\n\n120 requêtes par minute et par clé. Au-delà, l’API répond 429 avec un en-tête `Retry-After`. Les listes sont renvoyées entières, sous la forme `{\"items\": [...]}`.\n\n## Webhooks\n\nLes webhooks envoient les événements à vos outils au moment où ils arrivent, sans que vous ayez à interroger l’API. Déclarez une adresse HTTPS dans **Réglages > API > Webhooks** et choisissez ses événements :\n\n| Événement | Quand |\n|---|---|\n| `finding.opened` | Un scan trouve un nouveau problème, ou un problème qui revient après une correction (`reopened: true`) |\n| `finding.fixed` | Un scan ne voit plus un problème |\n| `scan.finished` | Un scan est terminé : score, problèmes ouverts et corrigés |\n| `ping` | « Envoyer un test » dans le tableau de bord |\n\nChaque événement est un `POST` avec un corps JSON (la section Webhooks de cette référence détaille chaque contenu) :\n\n```json\n{\n  \"id\": \"evt_0193…\",\n  \"type\": \"finding.opened\",\n  \"created_at\": \"2026-11-19T08:00:00Z\",\n  \"org_id\": \"0193…\",\n  \"data\": { \"scan_id\": \"…\", \"target_id\": \"…\", \"domain\": \"example.com\", \"finding\": { \"id\": \"…\", \"severity\": \"high\", \"title\": \"No DMARC record\", \"asset\": \"example.com\" } }\n}\n```\n\net ces en-têtes : `Orus-Event` (le type), `Orus-Delivery` (unique par envoi : il permet d’ignorer un doublon), `Orus-Signature`.\n\n### Vérifier la signature\n\n`Orus-Signature` vaut `t=<heure unix>,v1=<hex>`, où `v1` est le HMAC-SHA256 de `<t>.<corps brut>` avec, pour clé, le secret entier de l’adresse (`whsec_…`, affiché une fois à sa création). Recalculez-le sur le corps **brut**, comparez en temps constant, et refusez un `t` de plus de 5 minutes.\n\n```javascript\nimport crypto from \"node:crypto\";\n\nfunction verify(rawBody, header, secret) {\n  const parts = Object.fromEntries(header.split(\",\").map((p) => p.split(\"=\")));\n  if (Math.abs(Date.now() / 1000 - Number(parts.t)) > 300) return false;\n  const expected = crypto.createHmac(\"sha256\", secret).update(`${parts.t}.${rawBody}`).digest(\"hex\");\n  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(parts.v1 ?? \"\"));\n}\n```\n\n```python\nimport hashlib, hmac, time\n\ndef verify(raw_body: bytes, header: str, secret: str) -> bool:\n    parts = dict(p.split(\"=\", 1) for p in header.split(\",\"))\n    if abs(time.time() - int(parts[\"t\"])) > 300:\n        return False\n    expected = hmac.new(secret.encode(), parts[\"t\"].encode() + b\".\" + raw_body, hashlib.sha256).hexdigest()\n    return hmac.compare_digest(expected, parts.get(\"v1\", \"\"))\n```\n\n### Livraison\n\nRépondez par un code 2xx en moins de 10 secondes ; le corps de la réponse est ignoré. Sinon, nous réessayons après 1 minute, 5 minutes, 30 minutes et 2 heures, puis l’événement est abandonné au bout d’un jour. Les redirections ne sont pas suivies. Un scan envoie au plus 100 événements de problème par adresse. Le dernier statut de chaque adresse s’affiche dans Réglages > API.\n\n## Historique des versions\n\n- **1.0.0** (2026-11) : clés d’API, routes de lecture, lancement de scans et changement du statut d’un problème ; webhooks signés."
   },
   "servers": [
     {
       "url": "/api/v1",
-      "description": "This Orus Shield server"
+      "description": "This Orus Shield server",
+      "x-description-fr": "Ce serveur Orus Shield"
     }
   ],
   "security": [
@@ -1560,7 +1561,8 @@
       "apiKey": {
         "type": "http",
         "scheme": "bearer",
-        "description": "An API key from Settings > API: `orus_…`."
+        "description": "An API key from Settings > API: `orus_…`.",
+        "x-description-fr": "Une clé d’API créée dans Réglages > API : `orus_…`."
       }
     },
     "schemas": {
@@ -2092,6 +2094,574 @@
             "format": "date-time"
           }
         }
+      },
+      "WebhookFinding": {
+        "type": "object",
+        "description": "The finding an event is about.",
+        "required": [
+          "id",
+          "module_id",
+          "check_id",
+          "severity",
+          "title",
+          "asset"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The finding's ID, as in `GET /orgs/{org}/findings`."
+          },
+          "module_id": {
+            "type": "string",
+            "description": "The module that found it (email, tls, web, ports, vulns…)."
+          },
+          "check_id": {
+            "type": "string",
+            "description": "The check it failed."
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "title": {
+            "type": "string",
+            "description": "Title in English."
+          },
+          "title_fr": {
+            "type": "string",
+            "description": "Title in French, when known."
+          },
+          "asset": {
+            "type": "string",
+            "description": "The host, URL or service concerned."
+          },
+          "reopened": {
+            "type": "boolean",
+            "description": "`finding.opened` only: true when the problem comes back after a fix."
+          }
+        }
+      },
+      "FindingOpenedEvent": {
+        "type": "object",
+        "description": "Sent for each new or reopened finding of a scan (at most 100 per scan and endpoint).",
+        "required": [
+          "id",
+          "type",
+          "created_at",
+          "org_id",
+          "data"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The event's ID (`evt_…`)."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "finding.opened"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "org_id": {
+            "type": "string",
+            "description": "Your organization's ID."
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "scan_id",
+              "target_id",
+              "domain",
+              "finding"
+            ],
+            "properties": {
+              "scan_id": {
+                "type": "string"
+              },
+              "target_id": {
+                "type": "string",
+                "description": "The domain's ID, as in `GET /orgs/{org}/targets`."
+              },
+              "domain": {
+                "type": "string"
+              },
+              "finding": {
+                "$ref": "#/components/schemas/WebhookFinding"
+              }
+            }
+          }
+        }
+      },
+      "FindingFixedEvent": {
+        "type": "object",
+        "description": "Sent for each finding a scan no longer sees (at most 100 per scan and endpoint).",
+        "required": [
+          "id",
+          "type",
+          "created_at",
+          "org_id",
+          "data"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The event's ID (`evt_…`)."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "finding.fixed"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "org_id": {
+            "type": "string",
+            "description": "Your organization's ID."
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "scan_id",
+              "target_id",
+              "domain",
+              "finding"
+            ],
+            "properties": {
+              "scan_id": {
+                "type": "string"
+              },
+              "target_id": {
+                "type": "string",
+                "description": "The domain's ID, as in `GET /orgs/{org}/targets`."
+              },
+              "domain": {
+                "type": "string"
+              },
+              "finding": {
+                "$ref": "#/components/schemas/WebhookFinding"
+              }
+            }
+          }
+        }
+      },
+      "ScanFinishedEvent": {
+        "type": "object",
+        "description": "Sent once per finished scan.",
+        "required": [
+          "id",
+          "type",
+          "created_at",
+          "org_id",
+          "data"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The event's ID (`evt_…`)."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "scan.finished"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "org_id": {
+            "type": "string",
+            "description": "Your organization's ID."
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "scan_id",
+              "target_id",
+              "domain",
+              "score",
+              "findings",
+              "opened",
+              "fixed"
+            ],
+            "properties": {
+              "scan_id": {
+                "type": "string"
+              },
+              "target_id": {
+                "type": "string",
+                "description": "The domain's ID, as in `GET /orgs/{org}/targets`."
+              },
+              "domain": {
+                "type": "string"
+              },
+              "score": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "The domain's posture score after the scan, 0 to 100; null when no check applied."
+              },
+              "findings": {
+                "type": "integer",
+                "description": "Findings the scan reported."
+              },
+              "opened": {
+                "type": "integer",
+                "description": "Findings opened or reopened by the scan."
+              },
+              "fixed": {
+                "type": "integer",
+                "description": "Findings the scan saw fixed."
+              }
+            }
+          }
+        }
+      },
+      "PingEvent": {
+        "type": "object",
+        "description": "Sent by \"Send a test\" in Settings > API.",
+        "required": [
+          "id",
+          "type",
+          "created_at",
+          "org_id",
+          "data"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The event's ID (`evt_…`)."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "ping"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "org_id": {
+            "type": "string",
+            "description": "Your organization's ID."
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string",
+                "example": "Orus Shield webhook test"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {
+    "finding.opened": {
+      "post": {
+        "summary": "A problem is opened",
+        "x-summary-fr": "Un problème apparaît",
+        "description": "A scan found a new problem, or one that came back after a fix (`reopened`).",
+        "x-description-fr": "Un scan a trouvé un nouveau problème, ou un problème revenu après une correction (`reopened`).",
+        "parameters": [
+          {
+            "name": "Orus-Event",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The event's type.",
+            "x-description-fr": "Le type de l’événement."
+          },
+          {
+            "name": "Orus-Delivery",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Unique per delivery: ignore one you already processed.",
+            "x-description-fr": "Unique par envoi : ignorez un envoi déjà traité."
+          },
+          {
+            "name": "Orus-Signature",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "t=1763539200,v1=5f2b…"
+            },
+            "description": "`t=<unix time>,v1=<hex HMAC-SHA256 of \"t.body\">` with the endpoint's secret.",
+            "x-description-fr": "`t=<heure unix>,v1=<HMAC-SHA256 en hex de \"t.corps\">` avec le secret de l’adresse."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FindingOpenedEvent"
+              },
+              "example": {
+                "id": "evt_0193a2b4-3333-7e2f-9a10-5b6c7d8e9f01",
+                "type": "finding.opened",
+                "created_at": "2026-11-19T08:00:00Z",
+                "org_id": "0193a2b4-4444-7e2f-9a10-5b6c7d8e9f01",
+                "data": {
+                  "scan_id": "0193a2b4-7c1d-7e2f-9a10-5b6c7d8e9f01",
+                  "target_id": "0193a2b4-1111-7e2f-9a10-5b6c7d8e9f01",
+                  "domain": "example.com",
+                  "finding": {
+                    "id": "0193a2b4-2222-7e2f-9a10-5b6c7d8e9f01",
+                    "module_id": "email",
+                    "check_id": "email-dmarc-missing",
+                    "severity": "high",
+                    "title": "No DMARC record",
+                    "title_fr": "Aucun enregistrement DMARC",
+                    "asset": "example.com",
+                    "reopened": false
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Received. Any other answer, or none within 10 seconds, is retried.",
+            "x-description-fr": "Reçu. Toute autre réponse, ou aucune en 10 secondes, est réessayée."
+          }
+        },
+        "security": []
+      }
+    },
+    "finding.fixed": {
+      "post": {
+        "summary": "A problem is fixed",
+        "x-summary-fr": "Un problème est corrigé",
+        "description": "A scan no longer sees the problem.",
+        "x-description-fr": "Un scan ne voit plus le problème.",
+        "parameters": [
+          {
+            "name": "Orus-Event",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The event's type.",
+            "x-description-fr": "Le type de l’événement."
+          },
+          {
+            "name": "Orus-Delivery",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Unique per delivery: ignore one you already processed.",
+            "x-description-fr": "Unique par envoi : ignorez un envoi déjà traité."
+          },
+          {
+            "name": "Orus-Signature",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "t=1763539200,v1=5f2b…"
+            },
+            "description": "`t=<unix time>,v1=<hex HMAC-SHA256 of \"t.body\">` with the endpoint's secret.",
+            "x-description-fr": "`t=<heure unix>,v1=<HMAC-SHA256 en hex de \"t.corps\">` avec le secret de l’adresse."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FindingFixedEvent"
+              },
+              "example": {
+                "id": "evt_0193a2b4-3333-7e2f-9a10-5b6c7d8e9f01",
+                "type": "finding.fixed",
+                "created_at": "2026-11-19T08:00:00Z",
+                "org_id": "0193a2b4-4444-7e2f-9a10-5b6c7d8e9f01",
+                "data": {
+                  "scan_id": "0193a2b4-7c1d-7e2f-9a10-5b6c7d8e9f01",
+                  "target_id": "0193a2b4-1111-7e2f-9a10-5b6c7d8e9f01",
+                  "domain": "example.com",
+                  "finding": {
+                    "id": "0193a2b4-2222-7e2f-9a10-5b6c7d8e9f01",
+                    "module_id": "email",
+                    "check_id": "email-dmarc-missing",
+                    "severity": "high",
+                    "title": "No DMARC record",
+                    "title_fr": "Aucun enregistrement DMARC",
+                    "asset": "example.com"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Received. Any other answer, or none within 10 seconds, is retried.",
+            "x-description-fr": "Reçu. Toute autre réponse, ou aucune en 10 secondes, est réessayée."
+          }
+        },
+        "security": []
+      }
+    },
+    "scan.finished": {
+      "post": {
+        "summary": "A scan is finished",
+        "x-summary-fr": "Un scan est terminé",
+        "description": "A scan's summary: score, problems opened and fixed.",
+        "x-description-fr": "Le résumé d’un scan : score, problèmes ouverts et corrigés.",
+        "parameters": [
+          {
+            "name": "Orus-Event",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The event's type.",
+            "x-description-fr": "Le type de l’événement."
+          },
+          {
+            "name": "Orus-Delivery",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Unique per delivery: ignore one you already processed.",
+            "x-description-fr": "Unique par envoi : ignorez un envoi déjà traité."
+          },
+          {
+            "name": "Orus-Signature",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "t=1763539200,v1=5f2b…"
+            },
+            "description": "`t=<unix time>,v1=<hex HMAC-SHA256 of \"t.body\">` with the endpoint's secret.",
+            "x-description-fr": "`t=<heure unix>,v1=<HMAC-SHA256 en hex de \"t.corps\">` avec le secret de l’adresse."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanFinishedEvent"
+              },
+              "example": {
+                "id": "evt_0193a2b4-3333-7e2f-9a10-5b6c7d8e9f01",
+                "type": "scan.finished",
+                "created_at": "2026-11-19T08:00:00Z",
+                "org_id": "0193a2b4-4444-7e2f-9a10-5b6c7d8e9f01",
+                "data": {
+                  "scan_id": "0193a2b4-7c1d-7e2f-9a10-5b6c7d8e9f01",
+                  "target_id": "0193a2b4-1111-7e2f-9a10-5b6c7d8e9f01",
+                  "domain": "example.com",
+                  "score": 74,
+                  "findings": 6,
+                  "opened": 1,
+                  "fixed": 2
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Received. Any other answer, or none within 10 seconds, is retried.",
+            "x-description-fr": "Reçu. Toute autre réponse, ou aucune en 10 secondes, est réessayée."
+          }
+        },
+        "security": []
+      }
+    },
+    "ping": {
+      "post": {
+        "summary": "Test event",
+        "x-summary-fr": "Événement de test",
+        "description": "Sent by \"Send a test\", to check the endpoint.",
+        "x-description-fr": "Envoyé par « Envoyer un test », pour vérifier l’adresse.",
+        "parameters": [
+          {
+            "name": "Orus-Event",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The event's type.",
+            "x-description-fr": "Le type de l’événement."
+          },
+          {
+            "name": "Orus-Delivery",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Unique per delivery: ignore one you already processed.",
+            "x-description-fr": "Unique par envoi : ignorez un envoi déjà traité."
+          },
+          {
+            "name": "Orus-Signature",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "t=1763539200,v1=5f2b…"
+            },
+            "description": "`t=<unix time>,v1=<hex HMAC-SHA256 of \"t.body\">` with the endpoint's secret.",
+            "x-description-fr": "`t=<heure unix>,v1=<HMAC-SHA256 en hex de \"t.corps\">` avec le secret de l’adresse."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PingEvent"
+              },
+              "example": {
+                "id": "evt_0193a2b4-3333-7e2f-9a10-5b6c7d8e9f01",
+                "type": "ping",
+                "created_at": "2026-11-19T08:00:00Z",
+                "org_id": "0193a2b4-4444-7e2f-9a10-5b6c7d8e9f01",
+                "data": {
+                  "message": "Orus Shield webhook test"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Received. Any other answer, or none within 10 seconds, is retried.",
+            "x-description-fr": "Reçu. Toute autre réponse, ou aucune en 10 secondes, est réessayée."
+          }
+        },
+        "security": []
       }
     }
   }

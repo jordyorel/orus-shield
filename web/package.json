@@ -17,6 +17,7 @@
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "5.3.0",
     "@fontsource-variable/figtree": "5.3.0",
+    "@scalar/api-reference-react": "0.9.88",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },

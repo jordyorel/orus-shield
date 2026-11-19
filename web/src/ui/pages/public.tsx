@@ -30,7 +30,7 @@ function NavMenu({ label, items, current }: { label: string; items: [string, str
       </button>
       <div className="navpanel" role="menu">
         {items.map(([to, t, d]) => (
-          <Link key={to} to={to} role="menuitem" onClick={() => setOpen(false)}>
+          <Link key={to + t} to={to} role="menuitem" onClick={() => setOpen(false)}>
             <b>{t}</b>
             <small>{d}</small>
           </Link>

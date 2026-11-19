@@ -438,7 +438,11 @@ these requests (no Sec-Fetch-Site), and a page cannot use a key it does not know
 documented in OpenAPI 3.1 (`engine/internal/api/openapi.json`, embedded, served at
 `GET /api/v1/openapi.json`; French texts in `x-*-fr` extensions); `TestOpenAPIMatchesTheServer` calls
 every documented operation with a key, so the document cannot drift from the routes. The dashboard
-renders it at `/docs/api` (`ui/pages/docs.tsx`), linked from Réglages > API and the public footer.
+renders it at `/docs/api` with Scalar (`ui/pages/docs.tsx`, `ui/pages/scalar.tsx`, loaded on that page only), linked
+from Réglages > API and the public footer. The document's description holds the guides (authentication, errors, limits,
+webhooks with signature checks in Node and Python, changelog) and its OpenAPI 3.1 `webhooks` section every event's payload;
+`localize` swaps in the x-*-fr texts and Scalar's own labels follow the page's language. Guide anchors are
+`#description/<heading>` (Réglages > API links `#description/webhooks`).
 Outgoing webhooks (same offers; Réglages > API, `ui/pages/Webhooks.tsx`; migration 0032): an admin
 declares HTTPS endpoints and their events (`finding.opened` for new or reopened findings,
 `finding.fixed`, `scan.finished`; `ping` for "Envoyer un test"). FinishScan queues the deliveries in
@@ -578,6 +582,7 @@ tools below before the roadmap step listed for it.
 | golang.org/x/crypto | argon2id password hashing (stdlib only has PBKDF2, which is not memory-hard) | Adopted (BSD-3-Clause, maintained by the Go team) | Step 7.6 |
 | Redis or Valkey | Shared rate limiting and cache across workers | Defer until several workers run; check Redis's current license first, prefer Valkey (BSD) if in doubt | After step 4 |
 | Nuclei | Template-based vulnerability detection (MIT; nuclei-templates MIT) | Adopted 2026-11-12 as a pinned external binary (v3.11.1, templates v10.5.1, `deploy/nuclei/install.sh`), not as a library (hundreds of dependencies). Module `vulns`, active. All its traffic goes through `gateproxy` (one gate call per request, with its path; TLS terminated so HTTPS paths are seen); HTTP templates only, no code/headless/file/JS templates, intrusive, DoS, brute force, default-login and fuzzing tags excluded, no interactsh, throwaway HOME, no inherited environment. Production must also run it without direct network access (its only route: the proxy) | Done |
+| Scalar | API reference at `/docs/api` (`@scalar/api-reference-react`) | Adopted 2026-11-19 (MIT), exact version 0.9.88 (api-reference 1.77.0, two weeks old). Why: search, a sidebar following the reading, examples in several languages, schema trees and a try-it console are weeks of work by hand. Bundled from our origin and lazy-loaded on that page only (about 500 KB gzipped). Everything reaching a third party is off: telemetry, fonts.scalar.com, proxy.scalar.com, MCP, the AI agent, developer tools; its colours and fonts come from our tokens. Under a strict `style-src 'self'` its default theme and toast styles are refused, harmlessly (our variables replace the theme) | Done |
 | OWASP ZAP | Deep web application testing (deep profile, module `zap`) | Adopted 2026-11-12 (Apache-2.0): Docker image `zaproxy/zap-stable` pinned by digest (build 20261026, `deploy/zap/install.sh`), driven by its automation framework (plan written as JSON), `-silent`, no capabilities, bounded memory/CPU/processes; its upstream proxy is `gateproxy` (one gate call per request). Production must also deny the container any other network access | Done |
 | naabu / native Go | Port discovery | Preferred for the ports module (native TCP connect scan, or naabu, MIT) | Step 6 |
 | Nmap | Service fingerprinting | Do not integrate until its license (NPSL) has been reviewed for commercial SaaS use | Undecided |
