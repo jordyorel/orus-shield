@@ -33,9 +33,16 @@ const SessionCookie = "__Host-orus_session"
 // Login rate limit: failures (passwords and codes alike) counted over
 // LoginWindow.
 const (
-	LoginWindow       = 15 * time.Minute
-	MaxFailuresPerKey = 5  // per email
-	MaxFailuresPerIP  = 20 // per client address
+	LoginWindow = 15 * time.Minute
+	// MaxFailuresPerKey blocks an address for an email after 5 failures:
+	// someone guessing a password from one place. Counted per email and
+	// address, so an attacker cannot lock the real user out by failing on
+	// purpose from elsewhere.
+	MaxFailuresPerKey = 5
+	// MaxFailuresPerEmail blocks the email from everywhere: a guessing
+	// attack spread over many addresses. Far above what a person types.
+	MaxFailuresPerEmail = 50
+	MaxFailuresPerIP    = 20 // per client address, any email
 )
 
 const (
@@ -439,11 +446,11 @@ func (s *Service) authenticate(ctx context.Context, rawEmail, pw string, c Clien
 // underLoginLimit returns ErrRateLimited when email or the client address
 // had too many recent failures (passwords and codes alike).
 func (s *Service) underLoginLimit(ctx context.Context, email string, c Client) error {
-	byEmail, byIP, err := s.auth.RecentFailures(ctx, email, c.IP, s.cfg.Now().Add(-LoginWindow))
+	f, err := s.auth.RecentFailures(ctx, email, c.IP, s.cfg.Now().Add(-LoginWindow))
 	if err != nil {
 		return err
 	}
-	if byEmail >= MaxFailuresPerKey || byIP >= MaxFailuresPerIP {
+	if f.ByEmailFromIP >= MaxFailuresPerKey || f.ByEmail >= MaxFailuresPerEmail || f.ByIP >= MaxFailuresPerIP {
 		return ErrRateLimited
 	}
 	return nil

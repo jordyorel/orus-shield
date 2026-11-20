@@ -177,9 +177,9 @@ func TestRecentFailures(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	byEmail, byIP, err := auth.RecentFailures(ctx, "a@example.com", "192.0.2.1", time.Now().Add(-time.Minute))
-	if err != nil || byEmail != 2 || byIP != 2 {
-		t.Errorf("RecentFailures = %d, %d, %v; want 2, 2", byEmail, byIP, err)
+	f, err := auth.RecentFailures(ctx, "a@example.com", "192.0.2.1", time.Now().Add(-time.Minute))
+	if err != nil || f.ByEmail != 2 || f.ByEmailFromIP != 1 || f.ByIP != 2 {
+		t.Errorf("RecentFailures = %+v, %v; want 2 by email, 1 from this address, 2 by address", f, err)
 	}
 	if _, err := s.pool.Exec(ctx, "DELETE FROM auth_log"); err == nil || !strings.Contains(err.Error(), "append-only") {
 		t.Errorf("DELETE auth_log = %v, want append-only refusal", err)

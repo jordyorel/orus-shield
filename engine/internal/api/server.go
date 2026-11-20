@@ -18,6 +18,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -41,6 +42,11 @@ type Config struct {
 	// TrustedOrigins are other origins allowed to send state-changing
 	// requests (a dashboard served on another port in development).
 	TrustedOrigins []string
+	// TrustedProxies are the reverse proxies in front of the API
+	// (ORUS_TRUSTED_PROXIES). A request from one of them carries the
+	// client's address in X-Forwarded-For; anyone else's header is ignored.
+	// Empty: the TCP peer is the client (no proxy).
+	TrustedProxies []netip.Prefix
 	// Now is the clock; tests replace it.
 	Now func() time.Time
 	// DNS is the resolver used for ownership verification; nil means the
@@ -156,7 +162,7 @@ func (s *Server) Handler() (http.Handler, error) {
 	csrf.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "cross-origin request refused")
 	}))
-	return s.recoverPanics(securityHeaders(limitBody(csrf.Handler(mux)))), nil
+	return s.recoverPanics(realClient(s.cfg.TrustedProxies, securityHeaders(limitBody(csrf.Handler(mux))))), nil
 }
 
 func (s *Server) routes(mux *http.ServeMux) {
@@ -203,6 +209,42 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// realClient sets r.RemoteAddr to the client's address when the request
+// comes through a trusted proxy, so every per-address limit (logins,
+// signups, the public test) counts clients, not the proxy. The address is
+// the right-most entry of X-Forwarded-For that is not a trusted proxy: the
+// entries to its left are whatever the client sent and can be forged.
+func realClient(proxies []netip.Prefix, next http.Handler) http.Handler {
+	if len(proxies) == 0 {
+		return next
+	}
+	trusted := func(a netip.Addr) bool {
+		for _, p := range proxies {
+			if p.Contains(a.Unmap()) {
+				return true
+			}
+		}
+		return false
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		peer, err := netip.ParseAddrPort(r.RemoteAddr)
+		if err == nil && trusted(peer.Addr()) {
+			hops := strings.Split(strings.Join(r.Header.Values("X-Forwarded-For"), ","), ",")
+			for i := len(hops) - 1; i >= 0; i-- {
+				a, err := netip.ParseAddr(strings.TrimSpace(hops[i]))
+				if err != nil {
+					break // malformed: keep the proxy's own address
+				}
+				if !trusted(a) {
+					r.RemoteAddr = netip.AddrPortFrom(a.Unmap(), 0).String()
+					break
+				}
+			}
+		}
 		next.ServeHTTP(w, r)
 	})
 }

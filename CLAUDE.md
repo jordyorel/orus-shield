@@ -283,10 +283,22 @@ These are the product. A breach of them is a bug, never a trade-off.
    `.env` files are git-ignored.
 6. **Never scan real third-party systems in tests.** Tests use local fixtures, test servers
    (`httptest`, fake DNS resolvers) or targets the project owns.
+   **Public addresses only (2026-11-20, from our own pentest):** a verified customer may point their domain at
+   127.0.0.1, 10.x or 169.254.169.254 (cloud metadata). The worker wraps every scan's gate in `publicOnly`
+   (`quicktest.Public`): no module, passive or active, reaches a non-public address; the refusal is skipped like
+   an exclusion, kept unobserved and audited (`ip.not_verified`, reason "not a public address").
 7. **Treat everything a target returns as untrusted input**: bound sizes, set timeouts,
    never execute or eval it.
 8. **The AI layer explains, it never invents.** Scanners produce facts; AI only interprets
    findings that exist.
+
+Security review (2026-11-20, a pentest of our own code and local instance): fixed server-side request forgery
+through a customer's DNS (above), Go 1.27.4 (GO-2026-6859, an HTTP/1 server crash), the client address behind a
+reverse proxy (`ORUS_TRUSTED_PROXIES`: only a trusted proxy's X-Forwarded-For is believed, its right-most
+untrusted entry, so per-address limits count clients) and account lockout (the login limit holds per email and
+address, 5 failures, with a ceiling of 50 per email from anywhere and 20 per address). The production headers of
+the site (CSP, HSTS...) are in `deploy/web/` (README and a Caddyfile); checked on the build: no violation, except
+Scalar's own two styles on /docs/api, harmless.
 
 ## Go conventions
 

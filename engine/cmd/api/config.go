@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"sort"
 	"strings"
 
@@ -18,6 +19,7 @@ type config struct {
 	databaseURL    string
 	addr           string
 	trustedOrigins []string
+	trustedProxies []netip.Prefix
 	mfaKey         []byte
 	credentialsKey []byte
 	paddle         paddle.Config
@@ -34,6 +36,8 @@ type config struct {
 //	ORUS_API_TRUSTED_ORIGINS  comma-separated origins allowed to send
 //	                          state-changing requests besides the API's own
 //	                          (e.g. http://localhost:5173 in development)
+//	ORUS_TRUSTED_PROXIES      reverse proxies in front of the API (addresses or CIDRs,
+//	                          comma-separated); only their X-Forwarded-For is believed
 //	ORUS_MFA_KEY              required: 32 random bytes in base64, the key
 //	                          that encrypts TOTP secrets in the database
 //	                          (generate with: openssl rand -base64 32).
@@ -95,6 +99,25 @@ func loadConfig(getenv func(string) string) (config, error) {
 		if o = strings.TrimSpace(o); o != "" {
 			cfg.trustedOrigins = append(cfg.trustedOrigins, o)
 		}
+	}
+	// The reverse proxies in front of the API: only their X-Forwarded-For
+	// is believed (addresses or CIDR prefixes, comma-separated).
+	for _, p := range strings.Split(getenv("ORUS_TRUSTED_PROXIES"), ",") {
+		if p = strings.TrimSpace(p); p == "" {
+			continue
+		}
+		if !strings.Contains(p, "/") {
+			a, err := netip.ParseAddr(p)
+			if err != nil {
+				return config{}, fmt.Errorf("ORUS_TRUSTED_PROXIES: %q is not an address or a CIDR prefix", p)
+			}
+			p = netip.PrefixFrom(a, a.BitLen()).String()
+		}
+		pr, err := netip.ParsePrefix(p)
+		if err != nil {
+			return config{}, fmt.Errorf("ORUS_TRUSTED_PROXIES: %q is not an address or a CIDR prefix", p)
+		}
+		cfg.trustedProxies = append(cfg.trustedProxies, pr.Masked())
 	}
 	if cfg.publicURL, err = mailer.PublicURLFromEnv(getenv); err != nil {
 		return config{}, err

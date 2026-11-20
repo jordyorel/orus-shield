@@ -149,6 +149,12 @@ func (r response) cookie(name string) *http.Cookie {
 // do sends a request as the API's own dashboard would: same origin.
 func (e *env) do(method, path, session string, body any) response {
 	e.t.Helper()
+	return e.doFrom("192.0.2.1:4000", method, path, session, body)
+}
+
+// doFrom is do from another client address.
+func (e *env) doFrom(addr, method, path, session string, body any) response {
+	e.t.Helper()
 	var rd io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -158,7 +164,7 @@ func (e *env) do(method, path, session string, body any) response {
 		rd = bytes.NewReader(b)
 	}
 	req := httptest.NewRequest(method, path, rd)
-	req.RemoteAddr = "192.0.2.1:4000"
+	req.RemoteAddr = addr
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -258,6 +264,23 @@ func TestLoginRateLimit(t *testing.T) {
 	e.now = e.now.Add(loginWindow + time.Minute)
 	if r := e.do("POST", "/api/v1/auth/login", "", loginRequest{Email: "alice@example.com", Password: testPassword}); r.status != http.StatusOK {
 		t.Errorf("after the window = %d, want 200", r.status)
+	}
+}
+
+// Failing on purpose from elsewhere does not lock the real user out:
+// the limit holds per email and address (a ceiling per email remains for
+// attacks spread over many addresses).
+func TestLoginLimitDoesNotLockOutTheOwner(t *testing.T) {
+	e := newEnv(t)
+	e.user("alice@example.com", e.org("Acme"), store.RoleAdmin)
+	for range maxFailuresPerKey + 3 {
+		e.doFrom("198.51.100.66:4000", "POST", "/api/v1/auth/login", "", loginRequest{Email: "alice@example.com", Password: "wrong password!!"})
+	}
+	if r := e.doFrom("198.51.100.66:4000", "POST", "/api/v1/auth/login", "", loginRequest{Email: "alice@example.com", Password: testPassword}); r.status != http.StatusTooManyRequests {
+		t.Errorf("the attacker's address = %d, want 429", r.status)
+	}
+	if r := e.do("POST", "/api/v1/auth/login", "", loginRequest{Email: "alice@example.com", Password: testPassword}); r.status != http.StatusOK {
+		t.Errorf("the owner, from her own address = %d, want 200", r.status)
 	}
 }
 

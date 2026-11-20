@@ -83,3 +83,18 @@ func TestLoadConfigPaddle(t *testing.T) {
 		t.Error("unknown environment accepted")
 	}
 }
+
+func TestTrustedProxiesConfig(t *testing.T) {
+	const key = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=" // 32 bytes
+	env := func(v string) func(string) string {
+		m := map[string]string{"ORUS_DATABASE_URL": "postgres://x", "ORUS_MFA_KEY": key, "ORUS_TRUSTED_PROXIES": v}
+		return func(k string) string { return m[k] }
+	}
+	cfg, err := loadConfig(env(" 10.0.0.1 , 10.0.1.7/24,"))
+	if err != nil || len(cfg.trustedProxies) != 2 || cfg.trustedProxies[0].String() != "10.0.0.1/32" || cfg.trustedProxies[1].String() != "10.0.1.0/24" {
+		t.Errorf("proxies = %v, %v", cfg.trustedProxies, err)
+	}
+	if _, err := loadConfig(env("proxy.internal")); err == nil {
+		t.Error("a name instead of an address was accepted")
+	}
+}

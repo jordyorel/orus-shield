@@ -316,17 +316,26 @@ func logAuth(ctx context.Context, q querier, e AuthEvent) error {
 
 // RecentFailures counts failed logins since since, for one email and for
 // one IP: the inputs of the login rate limit.
-func (a *Auth) RecentFailures(ctx context.Context, email, ip string, since time.Time) (byEmail, byIP int, err error) {
+func (a *Auth) RecentFailures(ctx context.Context, email, ip string, since time.Time) (f Failures, err error) {
 	err = a.inTx(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `SELECT
 			(SELECT count(*) FROM auth_log WHERE action = $1 AND email = $2 AND at > $4),
+			(SELECT count(*) FROM auth_log WHERE action = $1 AND email = $2 AND ip = $3 AND at > $4),
 			(SELECT count(*) FROM auth_log WHERE action = $1 AND ip = $3 AND at > $4)`,
-			AuthLoginFailed, email, ip, since).Scan(&byEmail, &byIP)
+			AuthLoginFailed, email, ip, since).Scan(&f.ByEmail, &f.ByEmailFromIP, &f.ByIP)
 	})
 	if err != nil {
-		return 0, 0, fmt.Errorf("recent login failures: %w", err)
+		return Failures{}, fmt.Errorf("recent login failures: %w", err)
 	}
-	return byEmail, byIP, nil
+	return f, nil
+}
+
+// Failures are the recent failed logins (passwords and codes) counted for
+// the login rate limit.
+type Failures struct {
+	ByEmail       int // for the email, from anywhere
+	ByEmailFromIP int // for the email, from this address
+	ByIP          int // from this address, any email
 }
 
 // CreateSession opens a session for a user without a second factor, valid
