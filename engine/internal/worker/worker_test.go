@@ -37,6 +37,7 @@ type fakeStore struct {
 	deepUsed  int      // deep scans already run this month
 	deepMarks []string // scans marked deep
 	apis      []store.API
+	emails    []string
 	cred      *store.Credential
 	sealed    []byte
 	audit     []store.AuditEntry
@@ -130,6 +131,12 @@ func (f *fakeStore) TargetAPIs(ctx context.Context, targetID string) ([]store.AP
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.apis, nil
+}
+
+func (f *fakeStore) LeakEmails(ctx context.Context, targetID string) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.emails, nil
 }
 
 func (f *fakeStore) TargetCredential(ctx context.Context, targetID string) (*store.Credential, []byte, error) {
@@ -994,6 +1001,34 @@ func TestAPIsReachOnlyAPIScanners(t *testing.T) {
 				t.Errorf("other module got the APIs: %s", other)
 			}
 		})
+	}
+}
+
+// The domain's addresses reach only the leak modules, and only once the
+// domain is verified: no address of a domain that may be someone else's is
+// looked up.
+func TestEmailsReachOnlyLeakModulesOfAVerifiedDomain(t *testing.T) {
+	for _, verified := range []bool{true, false} {
+		var leak, other string
+		leakMod := &fakeModule{info: module.Info{ID: "leaks", Name: "Leaks", Kind: module.KindPassive, UsesEmails: true}, run: func(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+			leak = string(req.Config)
+			return nil, nil
+		}}
+		plain := &fakeModule{info: module.Info{ID: "plain", Name: "Plain", Kind: module.KindPassive}, run: func(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+			other = string(req.Config)
+			return nil, nil
+		}}
+		w, st := setup(t, verified, "{}", leakMod, plain)
+		st.emails = []string{"alice@example.com"}
+		if _, err := w.RunOnce(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(leak, "alice@example.com"); got != verified {
+			t.Errorf("verified=%v: leak module config = %s", verified, leak)
+		}
+		if strings.Contains(other, "alice@example.com") {
+			t.Errorf("other module got the addresses: %s", other)
+		}
 	}
 }
 

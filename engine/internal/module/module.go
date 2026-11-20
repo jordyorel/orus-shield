@@ -53,6 +53,10 @@ type Info struct {
 	// UsesAPIs marks a module that scans the target's declared APIs
 	// (RunConfig.APIs); the worker loads them only for such modules.
 	UsesAPIs bool
+	// UsesEmails marks a module that checks the domain's email addresses
+	// (RunConfig.Emails): the worker loads them only for such modules, and
+	// only for a verified domain.
+	UsesEmails bool
 	// DeepOnly marks a module of the deep profile only (the deep web
 	// scan). A scan runs deep only when it includes such a module: the
 	// full scans the deep profile schedules, or a full manual scan; a
@@ -248,6 +252,10 @@ type RunConfig struct {
 	// for modules with Info.UsesCredentials when the offer includes
 	// authenticated scans. Never log it.
 	Auth *ScanAuth `json:"auth,omitempty"`
+	// Emails are the domain's addresses to check for data leaks (members
+	// of the organization on the domain, addresses its admins declared),
+	// for modules with Info.UsesEmails, on a verified domain only.
+	Emails []string `json:"emails,omitempty"`
 }
 
 // ScanAuth is a test account: a header, or a login form.

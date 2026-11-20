@@ -70,6 +70,7 @@ func (s *Server) orgRoutes(mux *http.ServeMux) {
 	read("/targets/{target}", s.targetOnly(s.getTarget))
 	read("/targets/{target}/assets", s.targetOnly(s.listAssets))
 	read("/targets/{target}/apis", s.targetOnly(s.listAPIs))
+	read("/targets/{target}/leak-addresses", s.targetOnly(s.listLeakAddresses))
 	read("/targets/{target}/scans", s.targetOnly(s.listScans))
 	read("/scans/{scan}", s.getScan)
 	read("/targets/{target}/findings", s.targetOnly(s.listFindings))

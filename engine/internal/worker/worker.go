@@ -46,6 +46,7 @@ type Store interface {
 	DeepScansSince(ctx context.Context, orgID string, since time.Time) (int, error)
 	MarkScanDeep(ctx context.Context, scanID string, attempt int) error
 	TargetAPIs(ctx context.Context, targetID string) ([]store.API, error)
+	LeakEmails(ctx context.Context, targetID string) ([]string, error)
 	TargetCredential(ctx context.Context, targetID string) (*store.Credential, []byte, error)
 	ClaimAgentResult(ctx context.Context) (store.AgentResult, bool, error)
 }
@@ -255,9 +256,12 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 	if offer.AuthScans && w.includesModuleWith(sc.Modules, func(i module.Info) bool { return i.UsesCredentials }) {
 		auth = w.testAccount(scanCtx, target, log)
 	}
-	configs := map[[2]bool]json.RawMessage{}
+	// The domain's addresses (leaks module), loaded below once the domain
+	// is known to be verified: no address is checked before.
+	var emails []string
+	configs := map[[3]bool]json.RawMessage{}
 	configFor := func(i module.Info) (json.RawMessage, error) {
-		k := [2]bool{i.UsesAPIs, i.UsesCredentials}
+		k := [3]bool{i.UsesAPIs, i.UsesCredentials, i.UsesEmails}
 		if c, ok := configs[k]; ok {
 			return c, nil
 		}
@@ -267,6 +271,9 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 		}
 		if i.UsesCredentials {
 			c.Auth = auth
+		}
+		if i.UsesEmails {
+			c.Emails = emails
 		}
 		b, err := json.Marshal(c)
 		configs[k] = b
@@ -280,6 +287,11 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 		return w.fail(ctx, sc, fmt.Sprintf("load hostnames: %v", err))
 	}
 	mt.Hosts = capHosts(known, offer.HostsPerScan)
+	if mt.Verified && w.includesModuleWith(sc.Modules, func(i module.Info) bool { return i.UsesEmails }) {
+		if emails, err = w.store.LeakEmails(scanCtx, target.ID); err != nil {
+			return w.fail(ctx, sc, fmt.Sprintf("load leak addresses: %v", err))
+		}
+	}
 
 	// Active modules get a stricter gate, built on first use: it only lets
 	// them reach IPs whose ownership is proven (rule 1, per IP).

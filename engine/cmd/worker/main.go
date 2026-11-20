@@ -52,7 +52,7 @@ func run(log *slog.Logger) error {
 	}
 
 	// One resolver for modules and ownership checks (ORUS_DNS_SERVER).
-	registry, err := all.Registry(cfg.dns, all.Options{Nuclei: cfg.nuclei, ZAP: cfg.zap})
+	registry, err := all.Registry(cfg.dns, all.Options{Nuclei: cfg.nuclei, ZAP: cfg.zap, Leaks: cfg.leaks})
 	if err != nil {
 		return err
 	}

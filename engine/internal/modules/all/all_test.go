@@ -11,7 +11,7 @@ func TestRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Registry: %v", err)
 	}
-	for _, id := range []string{"email", "tls", "ports", "cdn", "web", "discovery", "vulns", "zap", "api"} {
+	for _, id := range []string{"email", "tls", "ports", "cdn", "web", "discovery", "vulns", "zap", "api", "leaks"} {
 		if _, ok := reg.Get(id); !ok {
 			t.Errorf("module %q is missing", id)
 		}

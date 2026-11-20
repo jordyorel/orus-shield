@@ -4,12 +4,14 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/mailer"
+	"github.com/jordyorel/orus-shield/engine/internal/modules/leaks"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/vulns"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/zap"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
@@ -29,6 +31,7 @@ type config struct {
 	dns       *resolver.System
 	nuclei    vulns.Config
 	zap       zap.Config
+	leaks     leaks.Config
 }
 
 // loadConfig reads the configuration through getenv (os.Getenv in
@@ -59,6 +62,9 @@ type config struct {
 //	ORUS_ZAP_NETWORK      docker run --network (e.g. host on Linux); optional
 //	ORUS_ZAP_WORKDIR      absolute directory for the runs' files, mountable by
 //	                      Docker (Colima: under the home directory); optional
+//	ORUS_XON_BASE_URL     XposedOrNot's API (leaks module); default its public
+//	                      https API. Only https, or http on the loopback (tests)
+//	ORUS_XON_API_KEY      an XposedOrNot key for paid tiers; optional (free tier)
 func loadConfig(getenv func(string) string) (config, error) {
 	var c config
 	c.databaseURL = getenv("ORUS_DATABASE_URL")
@@ -107,6 +113,9 @@ func loadConfig(getenv func(string) string) (config, error) {
 	}
 	if c.dns, err = resolver.FromEnv(getenv); err != nil {
 		return config{}, fmt.Errorf("ORUS_DNS_SERVER: %w", err)
+	}
+	if c.leaks, err = leaksConfig(getenv); err != nil {
+		return config{}, err
 	}
 	if c.nuclei, err = nucleiFromEnv(getenv); err != nil {
 		return config{}, err
@@ -159,4 +168,19 @@ func zapFromEnv(getenv func(string) string) (zap.Config, error) {
 		return zap.Config{}, fmt.Errorf("ORUS_ZAP_WORKDIR=%q: want an absolute path", cfg.WorkDir)
 	}
 	return cfg, nil
+}
+
+// leaksConfig reads how the leaks module reaches XposedOrNot. The address
+// gets email addresses of customers: https only (http on the loopback, for
+// a local fake).
+func leaksConfig(getenv func(string) string) (leaks.Config, error) {
+	c := leaks.Config{BaseURL: getenv("ORUS_XON_BASE_URL"), APIKey: getenv("ORUS_XON_API_KEY")}
+	if c.BaseURL == "" {
+		return c, nil
+	}
+	u, err := url.Parse(c.BaseURL)
+	if err != nil || u.Host == "" || (u.Scheme != "https" && !(u.Scheme == "http" && (u.Hostname() == "127.0.0.1" || u.Hostname() == "localhost"))) {
+		return leaks.Config{}, fmt.Errorf("ORUS_XON_BASE_URL=%q: want an https URL", c.BaseURL)
+	}
+	return c, nil
 }
