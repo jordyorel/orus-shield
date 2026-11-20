@@ -71,7 +71,9 @@ the table (`FindingSheet inline`, the first one by default), on a narrower one i
 ticked stays in Ouverts while its verification is followed. Actifs: the strip (assets against the plan, at risk, exposed
 services, certificates) and tabs Noms d'hôte, Services, Certificats, Domaines as tables (an asset view now
 carries its IPs and its certificate, `toAssets`); "+ Ajouter un domaine" in the page head. Rapports (interactive: hovering, tapping or the arrow keys pick a week, whose tooltip gives its score and its
-change; a heat map cell shows its problems in a tooltip, lights up its row and column, and opens its asset): the
+change; a heat map
+cell shows its problems in a tooltip the pointer can reach (`ui/linger.ts`, every tooltip of the site: it
+lingers 280 ms and stays open while hovered; each problem in it opens its sheet), lights up its row and column, and opens its asset): the
 score as one bar per ISO week (S41…) over the whole period (`weeklySlots`: a week before any scan is an
 empty dashed slot; the tooltip shows on hover only, the latest value sits above its bar), the checks by family as a table (passed out of
 evaluated, a bar of passed and failed), the heat map as a compact table (open problems per asset and family,
@@ -100,15 +102,14 @@ at the period's start, against today's); Réglages in sections reached from a me
 at a time, each with its address (`settingsPath`, `?s=domaines|alertes|equipe|abonnement|apparence`,
 Scans by default; on desktop the sections are a menu on the left and the settings a reading column
 of about 780 px, each setting a row with its name and explanation on the left and its control on the
-right: When to scan, the alert level; the coverage counts the checks that exist, "4 sur 4", and names
-the one to come, data leaks, instead of counting it missing), domains are a list ended by
+right: When to scan, the alert level; the coverage counts the checks that exist, "5 sur 5" since data leaks shipped), domains are a list ended by
 "+ Ajouter un domaine" (`AddDomainRow`, in Actifs and Réglages > Domaines; it opens the add and verify
 flow in place, already open while a domain waits for verification), and its sliders drawn by us (night shown in the hour's track); Abonnement as a
 plan card (state chip, price, next date), usage tiles and the comparison with "Votre offre"; on
 desktop the rail carries the only logo and folds to its icons ("Réduire le menu", kept in
 localStorage `orus.rail`, tab names as tooltips), with the profile at its foot, above the toggle (name
 and email unfolded, avatar folded; the top bar's avatar stays on phones only).
-Anything without a real source (WhatsApp, data leaks, payment providers, public domain test,
+Anything without a real source (WhatsApp, payment providers, public domain test,
 Monday summary, deep profile, invoices, account deletion, regenerating recovery codes) stays
 in place, greyed, with a "Bientôt" badge: never simulated. Backend for it (migration 0016):
 `users.name`, `PATCH /auth/me`, `GET /auth/sessions`, `DELETE /auth/sessions/{id}`,
@@ -137,6 +138,20 @@ worker reads the recipient's `users.lang` at delivery (`Store.RecipientLang`, Fr
 emails sent from the site (reset, signup, invitation) use the recipient account's language, else
 the page's, which the dashboard sends as `Accept-Language`; a signup keeps its page's language on
 the new account (migration 0029).
+
+Data leaks (2026-11-20, roadmap G step 1): the passive `leaks` module asks XposedOrNot (XON,
+breach-analytics per address) whether the domain's addresses appear in known breaches: the organization's
+members whose address is on a verified domain (or under it) and the addresses admins declare in Réglages >
+Domaines (`/targets/{target}/leak-addresses`, migration 0033, 15 per domain, admins only to change). The
+worker loads them only for modules with `module.Info.UsesEmails`, as `module.RunConfig.Emails`, and only once
+the domain is verified; at most 20 addresses a run, paced for XON's limits, a 429 leaves the rest unreached
+(their findings keep their state). Checks: `leak-password-exposed` (high when the breach stored passwords in
+clear or easy to crack, else medium) and `leak-email-exposed` (low: other data only). Only breach metadata is
+kept (name, year, kinds of data), never a password; a leak finding is tied to the registered domain (Fuites
+column). XON's terms require attribution (finding evidence, the sheet's source line, Réglages) and a
+licensing agreement for commercial use: to obtain before selling the feature (free tier for development;
+`ORUS_XON_BASE_URL`, `ORUS_XON_API_KEY` for a paid key, worker only). Step 2, whole-domain monitoring, needs
+XON's MSSP offer (xonThreatIntel+). The privacy texts name XON as a sub-processor (lawyer to confirm).
 
 ## How to work on this repo
 

@@ -1689,3 +1689,22 @@ body.docsbody main>.view{max-width:calc(var(--w-site) + 96px)}
  .railmin .orgav,.railmin .railprofile .avatar{width:32px;height:32px}
  .railmin .navcnt{top:4px;right:8px}
 }
+/* Réglages > Domaines: addresses watched for data leaks */
+.leakbox{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line2)}
+.leakhead{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.leaklist{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px}
+.leaklist li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 10px;border-radius:var(--r-sm);background:var(--sub);font-size:13px}
+.leaklist .link{font-size:12.5px;min-height:0}
+.leakadd{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+.leakadd .cselect{flex:1 1 220px}
+.leakadd .err{flex-basis:100%;margin:0}
+/* Tooltips the pointer can reach, read and click (useLinger) */
+.wtip,.htip{pointer-events:auto;user-select:text}
+.htip::before{content:"";position:absolute;left:0;right:0;height:14px;bottom:-14px}
+.htip.below::before{bottom:auto;top:-14px}
+.wtip::before{content:"";position:absolute;left:0;right:0;height:14px;bottom:-14px}
+.htiplink{all:unset;display:flex;gap:7px;align-items:baseline;cursor:pointer;border-radius:4px;padding:1px 4px;margin:0 -4px}
+.htiplink:hover,.htiplink:focus-visible{background:rgba(255,255,255,.12);text-decoration:underline}
+.htipmore{all:unset;cursor:pointer;margin-top:4px;font-size:12px;font-weight:600;color:#9DB8FF}
+.htipmore:hover,.htipmore:focus-visible{text-decoration:underline}
+:root[data-theme=dark] .htipmore{color:var(--azur-ink)}

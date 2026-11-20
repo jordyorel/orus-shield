@@ -530,3 +530,11 @@ export interface Webhook {
   last_status: number | null;
   last_error: string | null;
 }
+
+/** leakAddressJSON: an address declared on a domain for leak monitoring. */
+export interface LeakAddress {
+  id: string;
+  email: string;
+  created_by: string;
+  created_at: string;
+}

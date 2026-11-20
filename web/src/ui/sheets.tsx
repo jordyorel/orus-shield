@@ -337,6 +337,15 @@ export function FindingSheet({ id, targetId, inline = false }: { id: string; tar
           {tr("Copier", "Copy")}
         </button>
       </div>
+      {i.moduleId === "leaks" && (
+        <p className="hint srcnote">
+          {tr("Source des fuites : ", "Source of the leaks: ")}
+          <a href="https://xposedornot.com" target="_blank" rel="noopener noreferrer">
+            XposedOrNot
+          </a>
+          {tr(". Nous ne stockons que le nom des fuites et les types de données exposées, jamais de mot de passe.", ". We keep only the breaches' names and the kinds of data exposed, never a password.")}
+        </p>
+      )}
       {!i.fixed && <ShareBlock i={i} copy={copy} />}
       {!i.fixed && (
         <p className="hint">

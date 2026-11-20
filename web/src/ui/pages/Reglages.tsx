@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../../api/client";
-import type { DeclaredAPI, Member, OrgSettings, Plan, Role, Target, TestAccount } from "../../api/types";
+import type { DeclaredAPI, LeakAddress, Member, OrgSettings, Plan, Role, Target, TestAccount } from "../../api/types";
 import { formatExclusions, parseExclusions } from "../../exclusions";
 import { labeled, tr } from "../../i18n";
 import { Link, useLocation } from "../../router";
@@ -48,7 +48,6 @@ export function limitRows(plans: Plan[]): [string, ...string[]][] {
   const n = (v: number, unit: string) => (v === 0 ? tr("Illimité", "Unlimited") : `${v.toLocaleString(tr("fr-FR", "en-GB"))} ${unit}`.trim());
   const yes = tr("Oui", "Yes");
   const no = tr("Non", "No");
-  const soon = tr("Bientôt", "Soon");
   return [
     [tr("Domaines", "Domains"), ...col((p) => n(p.domains, ""))],
     [tr("Actifs surveillés", "Monitored assets"), ...col((p) => n(p.hosts_per_scan, tr("par domaine", "per domain")))],
@@ -60,7 +59,7 @@ export function limitRows(plans: Plan[]): [string, ...string[]][] {
     [tr("API publique (clés d’accès)", "Public API (access keys)"), ...col((p) => (p.public_api ? yes : no))],
     [tr("Scan authentifié (compte de test)", "Authenticated scan (test account)"), ...col((p) => (p.auth_scans ? yes : no))],
     [tr("Réseaux internes (agents)", "Internal networks (agents)"), ...col((p) => (p.agents ? yes : tr("Sur devis", "Custom plan")))],
-    [tr("Fuites de données", "Data leaks"), soon, soon, soon],
+    [tr("Fuites de données", "Data leaks"), yes, yes, yes],
     [tr("Menaces émergentes", "Emerging threats"), ...col((p) => (p.threats ? yes : no))],
     [tr("Alertes email", "Email alerts"), ...col((p) => (p.alerts ? yes : no))],
     [tr("Rapports PDF", "PDF reports"), ...col((p) => (p.reports ? tr("Direction et Technique", "Executive and Technical") : no))],
@@ -738,6 +737,7 @@ function Domains({ targets }: { targets: Target[] }) {
                 </button>
               </div>
             )}
+            <LeakAddresses target={t} />
             <TargetAPIs target={t} />
             <TestAccountPanel target={t} />
           </div>
@@ -907,6 +907,112 @@ function TargetAPIs({ target }: { target: Target }) {
             {tr("Ajouter", "Add")}
           </button>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** LeakAddresses: the addresses of a domain watched for data leaks
+ * (XposedOrNot). The team's members on the domain are watched without
+ * being listed here; admins add others (contact@, compta@...). */
+function LeakAddresses({ target }: { target: Target }) {
+  const { org, isAdmin } = useOrg();
+  const { toast } = useUI();
+  const [list, setList] = useState<LeakAddress[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [email, setEmail] = useState("");
+  const [err, setErr] = useState("");
+  const load = () =>
+    api.leakAddresses(org.org_id, target.id).then(
+      (r) => setList(r.items),
+      () => setList([]),
+    );
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target.id]);
+  const add = async () => {
+    setErr("");
+    try {
+      await api.addLeakAddress(org.org_id, target.id, email.trim());
+      setEmail("");
+      setAdding(false);
+      toast(tr("Adresse ajoutée : elle sera vérifiée au prochain scan", "Address added: it will be checked at the next scan"));
+      void load();
+    } catch (e) {
+      setErr(
+        e instanceof ApiError && e.code === "bad_email"
+          ? tr(`L’adresse doit être sur ${target.domain} ou un de ses sous-domaines.`, `The address must be on ${target.domain} or one of its subdomains.`)
+          : e instanceof ApiError && e.code === "exists"
+            ? tr("Cette adresse est déjà surveillée.", "This address is already watched.")
+            : e instanceof ApiError && e.code === "too_many_addresses"
+              ? tr("15 adresses au plus par domaine : retirez-en une d’abord.", "15 addresses at most per domain: remove one first.")
+              : tr("Adresse non enregistrée, réessayez.", "Address not saved, try again."),
+      );
+    }
+  };
+  const remove = async (a: LeakAddress) => {
+    if (!window.confirm(tr(`Ne plus surveiller ${a.email} ?`, `Stop watching ${a.email}?`))) return;
+    try {
+      await api.removeLeakAddress(org.org_id, target.id, a.id);
+      toast(tr("Adresse retirée", "Address removed"));
+      void load();
+    } catch {
+      toast(tr("Suppression impossible pour le moment", "Removal is not possible right now"));
+    }
+  };
+  return (
+    <div className="leakbox">
+      <div className="leakhead">
+        <p className="md">
+          {tr("Adresses surveillées pour les fuites : ", "Addresses watched for leaks: ")}
+          <b>{list.length ? list.length : tr("aucune déclarée", "none declared")}</b>
+        </p>
+        {isAdmin && (
+          <button className="link" type="button" onClick={() => setAdding(!adding)}>
+            {adding ? tr("Annuler", "Cancel") : tr("Ajouter une adresse", "Add an address")}
+          </button>
+        )}
+      </div>
+      <p className="hint">
+        {tr(
+          `Les membres de l’équipe dont l’adresse est sur ${target.domain} sont surveillés d’office. Données : XposedOrNot.`,
+          `Team members whose address is on ${target.domain} are watched automatically. Data: XposedOrNot.`,
+        )}
+      </p>
+      {list.length > 0 && (
+        <ul className="leaklist">
+          {list.map((a) => (
+            <li key={a.id}>
+              <span className="mono">{a.email}</span>
+              {isAdmin && (
+                <button className="link" type="button" onClick={() => void remove(a)}>
+                  {tr("Retirer", "Remove")}
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {adding && (
+        <form
+          className="leakadd"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void add();
+          }}
+        >
+          <label className="vh" htmlFor={"leak-" + target.id}>
+            {tr("Adresse à surveiller", "Address to watch")}
+          </label>
+          <input id={"leak-" + target.id} className="cselect" type="email" inputMode="email" autoComplete="off" placeholder={`contact@${target.domain}`} value={email} onChange={(e) => setEmail(e.target.value)} />
+          <button className="btn sm" type="submit">
+            {tr("Ajouter", "Add")}
+          </button>
+          <p className="err" role="alert">
+            {err}
+          </p>
+        </form>
       )}
     </div>
   );

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Activity } from "../../api/types";
 import { Link, navigate } from "../../router";
 import { appPath, settingsPath } from "../AppShell";
-import { Soon, Tick } from "../icons";
+import { Tick } from "../icons";
 import { G, Ico } from "../glyphs";
 import { PROGRESS_DAYS, SEV, byPriority, families, feedDay, groupIssues, groupVerdict, hostsText, progressOf, scoreLevel, verdictText, type IssueGroup } from "../model";
 import { getLang, locale, tr } from "../../i18n";
@@ -10,6 +10,7 @@ import { localTitle } from "../lang";
 import { useOrg } from "../OrgData";
 import { FindingSheet, ScoreSheet, useFix } from "../sheets";
 import { scanTimes, useScanNow, when } from "../ScanLine";
+import { useLinger } from "../linger";
 import { useUI } from "../ui";
 import { AddPanel } from "./Actifs";
 
@@ -521,13 +522,6 @@ export function AujourdhuiPage() {
                 </div>
               );
             })}
-            <div className="famrow off">
-              <b>{tr("Fuites de données", "Data leaks")}</b>
-              <span className="track" />
-              <span>
-                <Soon />
-              </span>
-            </div>
           </div>
         </section>
       </div>
@@ -575,7 +569,10 @@ const SEVVAR: Record<"crit" | "high" | "med" | "low", string> = { crit: "var(--c
  * the line and its labels. The pointer (or the arrow keys) picks a day: a
  * guide line, its point and a tooltip with its score and change. */
 function TrendChart({ points }: { points: { at: string; score: number | null }[] }) {
-  const [hover, setHover] = useState<number | null>(null);
+  // The tooltip lingers so the pointer can reach and read it (useLinger).
+  const tip = useLinger<number>();
+  const hover = tip.value;
+  const setHover = tip.show;
   const pts = points.filter((p): p is { at: string; score: number } => p.score !== null);
   if (pts.length < 2) return <p className="panelnote">{tr("La courbe apparaît après deux scans.", "The curve appears after two scans.")}</p>;
   const W = 640;
@@ -609,7 +606,7 @@ function TrendChart({ points }: { points: { at: string; score: number | null }[]
         if (e.key === "ArrowLeft") setHover(Math.max(0, (hover ?? n - 1) - 1));
         if (e.key === "ArrowRight") setHover(Math.min(n - 1, (hover ?? n - 2) + 1));
       }}
-      onBlur={() => setHover(null)}
+      onBlur={tip.leave}
     >
       <svg
         className="trend"
@@ -618,7 +615,7 @@ function TrendChart({ points }: { points: { at: string; score: number | null }[]
         aria-label={tr(`Score de ${pts[0]!.score} à ${last.score}`, `Score from ${pts[0]!.score} to ${last.score}`)}
         onPointerMove={pick}
         onPointerDown={pick}
-        onPointerLeave={() => setHover(null)}
+        onPointerLeave={tip.leave}
       >
         <defs>
           <linearGradient id="trendfill" x1="0" x2="0" y1="0" y2="1">
@@ -656,6 +653,8 @@ function TrendChart({ points }: { points: { at: string; score: number | null }[]
         <div
           className="wtip"
           role="status"
+          onPointerEnter={tip.hold}
+          onPointerLeave={tip.leave}
           style={
             {
               left: `${(hx / W) * 100}%`,

@@ -801,6 +801,21 @@ describe("dashboard", () => {
     expect(screen.getByText("_dmarc.example.cg: no TXT record")).toBeTruthy();
   });
 
+  it("keeps the heat map's tooltip open under the pointer, and opens a problem from it", async () => {
+    orgRoutes();
+    renderAt(`/orgs/${ORG}/rapports`);
+    const cell = await screen.findByRole("button", { name: /^example\.cg, Emails : 1 problème/ });
+    fireEvent.mouseEnter(cell);
+    const tip = screen.getByRole("tooltip");
+    // The pointer leaves the cell for the tooltip: it stays open.
+    fireEvent.mouseLeave(cell.closest(".hm3wrap")!);
+    fireEvent.mouseEnter(tip);
+    await new Promise((r) => setTimeout(r, 400));
+    expect(screen.getByRole("tooltip")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "No DMARC record" }));
+    await waitFor(() => expect(document.getElementById("sheet-title")?.textContent).toBe("No DMARC record"));
+  });
+
   it("browses the weekly score chart, empty weeks included", async () => {
     orgRoutes();
     renderAt(`/orgs/${ORG}/rapports`);
@@ -1011,6 +1026,28 @@ describe("dashboard", () => {
       base_url: "https://api.example.cg/v1",
       spec_url: "https://api.example.cg/openapi.json",
     });
+  });
+
+  it("watches an address of a domain for data leaks", async () => {
+    const calls = orgRoutes({
+      [`GET /orgs/${ORG}/members`]: ok({ items: [] }),
+      [`GET /orgs/${ORG}/targets/t1/leak-addresses`]: ok({ items: [] }),
+      [`POST /orgs/${ORG}/targets/t1/leak-addresses`]: (b) =>
+        (b as { email: string }).email.endsWith("@example.cg")
+          ? { status: 201, json: { id: "l1", email: (b as { email: string }).email, created_by: "x", created_at: "" } }
+          : { status: 400, json: { error: "bad", code: "bad_email" } },
+    });
+    renderAt(`/orgs/${ORG}/reglages?s=domaines`);
+    expect(await screen.findByText(/sont surveillés d’office. Données : XposedOrNot/)).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Ajouter une adresse" }));
+    const input = screen.getByLabelText("Adresse à surveiller");
+    fireEvent.change(input, { target: { value: "compta@gmail.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter" }));
+    expect(await screen.findByText(/L’adresse doit être sur example.cg/)).toBeTruthy();
+    fireEvent.change(input, { target: { value: "compta@example.cg" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ajouter" }));
+    await waitFor(() => expect(calls.filter((c) => c.key === `POST /orgs/${ORG}/targets/t1/leak-addresses`)).toHaveLength(2));
+    expect(calls.filter((c) => c.key === `POST /orgs/${ORG}/targets/t1/leak-addresses`)[1]?.body).toEqual({ email: "compta@example.cg" });
   });
 
   it("stores a test account with consent, and never shows its secret", async () => {

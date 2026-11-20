@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { tr } from "../../i18n";
 import { useLocation } from "../../router";
-import { Search, Soon, Tick } from "../icons";
+import { Search, Tick } from "../icons";
 import { CATNAME, groupIssues, groupVerdict, hostsText, RANK, SEV, verdictText, type IssueType, type Sev } from "../model";
 import { useOrg } from "../OrgData";
 import { FindingSheet, useFix } from "../sheets";
@@ -98,6 +98,7 @@ export function ProblemesPage() {
     ["all", tr("Tous les types", "All types")],
     ["vuln", tr("Vulnérabilités", "Vulnerabilities")],
     ["menace", tr("Menaces émergentes", "Emerging threats")],
+    ["fuite", tr("Fuites de données", "Data leaks")],
   ];
   const filtered = sevs.length > 0 || type !== "all" || needle !== "";
 
@@ -124,9 +125,6 @@ export function ProblemesPage() {
             <span className="ctabn">{pool.filter((i) => tabOf(i) === k).length}</span>
           </button>
         ))}
-        <span className="ctabsoon">
-          {tr("Fuites de données", "Data leaks")} <Soon />
-        </span>
       </nav>
 
       <div className={"psplit" + (wide && current ? " on" : "")}>

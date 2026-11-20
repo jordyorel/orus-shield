@@ -192,7 +192,7 @@ export const MODS: { key: "emails" | "tls" | "ports" | "fuites" | "menaces"; mod
   },
   {
     key: "fuites",
-    module: null,
+    module: "leaks",
     get title() {
       return tr("Fuites de données", "Data leaks");
     },

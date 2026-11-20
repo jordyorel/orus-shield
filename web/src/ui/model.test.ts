@@ -48,6 +48,9 @@ describe("hostOf", () => {
     ["192.0.2.10:3389", "srv.example.cg"],
     ["[2001:db8::1]:22", "2001:db8::1"],
   ])("%s -> %s", (a, want) => expect(hostOf(a, "example.cg", ips)).toBe(want));
+  it("ties a leaked address to the registered domain", () => {
+    expect(hostOf("compta@mail.example.cg", "example.cg", ips)).toBe("example.cg");
+  });
 });
 
 describe("toIssues and toAssets", () => {

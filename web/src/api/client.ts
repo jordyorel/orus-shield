@@ -1,4 +1,4 @@
-import type { Activity, Agent, APIKey, OpenAPIDoc, Webhook, DeclaredAPI, TestAccount, AuthActivity, Check, DeviceSession, Finding, FindingStatus, Instructions, Invitation, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OrgAsset, OrgSettings, Overview, Plan, QuickProblem, QuickResult, RecoveryCodes, Role, Scan, ScheduleInput, Subscription, Target } from "./types";
+import type { Activity, Agent, APIKey, AuthActivity, Check, DeclaredAPI, DeviceSession, Finding, FindingStatus, Instructions, Invitation, LeakAddress, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OpenAPIDoc, OrgAsset, OrgSettings, Overview, Plan, QuickProblem, QuickResult, RecoveryCodes, Role, Scan, ScheduleInput, Subscription, Target, TestAccount, Webhook } from "./types";
 import type { Exclusions } from "../exclusions";
 import { getLang } from "../i18n";
 
@@ -140,6 +140,12 @@ export const api = {
     request<List<DeclaredAPI>>("GET", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/apis`, undefined, signal),
   createAPI: (orgId: string, targetId: string, a: { name: string; kind: string; base_url: string; spec_url?: string; spec?: string }) =>
     request<DeclaredAPI>("POST", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/apis`, a),
+  leakAddresses: (orgId: string, targetId: string, signal?: AbortSignal) =>
+    request<List<LeakAddress>>("GET", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/leak-addresses`, undefined, signal),
+  addLeakAddress: (orgId: string, targetId: string, email: string) =>
+    request<LeakAddress>("POST", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/leak-addresses`, { email }),
+  removeLeakAddress: (orgId: string, targetId: string, id: string) =>
+    request<void>("DELETE", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/leak-addresses/${encodeURIComponent(id)}`),
   testAccount: (orgId: string, targetId: string, signal?: AbortSignal) =>
     request<TestAccount>("GET", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/credential`, undefined, signal),
   setTestAccount: (

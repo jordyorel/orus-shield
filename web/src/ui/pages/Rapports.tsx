@@ -5,9 +5,10 @@ import { reportURL } from "../../api/client";
 import { Link } from "../../router";
 import { settingsPath } from "../AppShell";
 import { getLang, tr } from "../../i18n";
-import { CATNAME, CATS, SEV, catState, evaluatedCats, weeklySlots, type AssetView, type Cat, type CellState, type Issue } from "../model";
+import { CATNAME, CATS, SEV, families, catState, evaluatedCats, weeklySlots, type AssetView, type Cat, type CellState, type Issue } from "../model";
 import { useOrg } from "../OrgData";
-import { AssetSheet } from "../sheets";
+import { AssetSheet, FindingSheet } from "../sheets";
+import { useLinger } from "../linger";
 import { useUI } from "../ui";
 
 /** isoWeek is the ISO 8601 week number of d. */
@@ -25,7 +26,10 @@ function isoWeek(d: Date): number {
  * up and a tooltip gives its score and the change from the week before. */
 function WeekBars({ slots, now }: { slots: (number | null)[]; now: Date }) {
   const n = slots.length;
-  const [hover, setHover] = useState<number | null>(null);
+  // The tooltip lingers so the pointer can reach and read it (useLinger).
+  const tip = useLinger<number>();
+  const hover = tip.value;
+  const setHover = tip.show;
   const known = slots.filter((v): v is number => v !== null);
   if (!known.length) return <p className="panelnote">{tr("Le graphique apparaît après le premier scan.", "The chart appears after the first scan.")}</p>;
   const W = 640;
@@ -60,7 +64,7 @@ function WeekBars({ slots, now }: { slots: (number | null)[]; now: Date }) {
         if (e.key === "ArrowLeft") setHover(Math.max(0, (hover ?? n - 1) - 1));
         if (e.key === "ArrowRight") setHover(Math.min(n - 1, (hover ?? n - 2) + 1));
       }}
-      onBlur={() => setHover(null)}
+      onBlur={tip.leave}
     >
       <svg
         className="trend"
@@ -69,7 +73,7 @@ function WeekBars({ slots, now }: { slots: (number | null)[]; now: Date }) {
         aria-label={tr(`Score par semaine, ${known.length} semaine${known.length > 1 ? "s" : ""} de scans`, `Score by week, ${known.length} week${known.length > 1 ? "s" : ""} of scans`)}
         onPointerMove={pick}
         onPointerDown={pick}
-        onPointerLeave={() => setHover(null)}
+        onPointerLeave={tip.leave}
       >
         {ticks.map((t) => (
           <g key={t}>
@@ -107,6 +111,8 @@ function WeekBars({ slots, now }: { slots: (number | null)[]; now: Date }) {
         <div
           className="wtip"
           role="status"
+          onPointerEnter={tip.hold}
+          onPointerLeave={tip.leave}
           style={
             {
               left: `${(cx / W) * 100}%`,
@@ -146,7 +152,10 @@ function WeekBars({ slots, now }: { slots: (number | null)[]; now: Date }) {
  * row and column; a click opens the asset. */
 function HeatTable({ assets, issues, evaluated }: { assets: AssetView[]; issues: Issue[]; evaluated: Map<string, Set<Cat>> }) {
   const { showSheet } = useUI();
-  const [cur, setCur] = useState<{ a: string; c: Cat; x: number; y: number; below: boolean } | null>(null);
+  // The tooltip lingers so the pointer can reach it, read it and click a
+  // problem in it (useLinger).
+  const tip = useLinger<{ a: string; c: Cat; x: number; y: number; below: boolean }>();
+  const cur = tip.value;
   const host = useRef<HTMLDivElement>(null);
   const point = (a: string, c: Cat, el: HTMLElement) => {
     const h = host.current?.getBoundingClientRect();
@@ -154,13 +163,13 @@ function HeatTable({ assets, issues, evaluated }: { assets: AssetView[]; issues:
     // Below the cell when the space above is short: the sticky top bar
     // (52 px) would hide the tooltip.
     const below = r.top < 52 + 170;
-    if (h) setCur({ a, c, x: r.left - h.left + r.width / 2, y: (below ? r.bottom : r.top) - h.top, below });
+    if (h) tip.show({ a, c, x: r.left - h.left + r.width / 2, y: (below ? r.bottom : r.top) - h.top, below });
   };
   const curAsset = cur ? assets.find((x) => x.n === cur.a) : undefined;
   const curState: CellState | null = curAsset && cur ? catState(curAsset, cur.c, issues, evaluated) : null;
   const curList = cur ? issues.filter((i) => !i.fixed && i.host === cur.a && i.cat === cur.c) : [];
   return (
-    <div className="hm3wrap" ref={host} onMouseLeave={() => setCur(null)}>
+    <div className="hm3wrap" ref={host} onMouseLeave={tip.leave} onKeyDown={(e) => e.key === "Escape" && tip.close()}>
       <div className="tw">
       <table className="hm3">
         <thead>
@@ -181,13 +190,11 @@ function HeatTable({ assets, issues, evaluated }: { assets: AssetView[]; issues:
                   {a.n}
                 </button>
               </th>
-              {CATS.map(([c, short]) => {
+              {CATS.map(([c]) => {
                 const st = catState(a, c, issues, evaluated);
                 const nOpen = issues.filter((i) => !i.fixed && i.host === a.n && i.cat === c).length;
                 const label =
-                  c === "fuites"
-                    ? tr("bientôt", "soon")
-                    : st === "na"
+                  st === "na"
                       ? tr("non concerné", "not applicable")
                       : nOpen
                         ? tr(`${nOpen} problème${nOpen > 1 ? "s" : ""}, niveau ${SEV[st === "ok" ? "ok" : st][0].toLowerCase()}`, `${nOpen} problem${nOpen > 1 ? "s" : ""}, ${SEV[st === "ok" ? "ok" : st][0].toLowerCase()} level`)
@@ -197,15 +204,14 @@ function HeatTable({ assets, issues, evaluated }: { assets: AssetView[]; issues:
                   <td key={c}>
                     <button
                       type="button"
-                      className={"hcell s-" + (c === "fuites" ? "soon" : st) + (isCur ? " cur" : "") + (cur && !isCur ? " dim" : "")}
+                      className={"hcell s-" + st + (isCur ? " cur" : "") + (cur && !isCur ? " dim" : "")}
                       aria-label={`${a.n}, ${CATNAME[c]} : ${label}`}
                       onMouseEnter={(e) => point(a.n, c, e.currentTarget)}
                       onFocus={(e) => point(a.n, c, e.currentTarget)}
-                      onBlur={() => setCur(null)}
+                      onBlur={tip.leave}
                       onClick={() => showSheet(<AssetSheet n={a.n} />)}
-                      title={short}
                     >
-                      {c === "fuites" ? "" : st === "na" ? "" : nOpen ? nOpen : <Tick size={12} width={3.2} />}
+                      {st === "na" ? "" : nOpen ? nOpen : <Tick size={12} width={3.2} />}
                     </button>
                   </td>
                 );
@@ -216,23 +222,37 @@ function HeatTable({ assets, issues, evaluated }: { assets: AssetView[]; issues:
       </table>
       </div>
       {cur && (
-        <div className={"htip" + (cur.below ? " below" : "")} role="tooltip" style={{ left: cur.x, top: cur.y }}>
+        <div className={"htip" + (cur.below ? " below" : "")} role="tooltip" style={{ left: cur.x, top: cur.y }} onMouseEnter={tip.hold} onMouseLeave={tip.leave} onFocus={tip.hold} onBlur={tip.leave}>
           <b className="mono">{cur.a}</b>
           <em>{CATNAME[cur.c]}</em>
-          {cur.c === "fuites" ? (
-            <span>{tr("Bientôt : la surveillance des fuites arrive.", "Soon: leak monitoring is coming.")}</span>
-          ) : curState === "na" ? (
+          {curState === "na" ? (
             <span>{tr("Non concerné : ce contrôle ne s’applique pas à cet actif.", "Not applicable: this check does not apply to this asset.")}</span>
           ) : curList.length ? (
             <>
               {curList.slice(0, 4).map((i) => (
-                <span key={i.targetId + i.id} className="htipline">
+                <button
+                  key={i.targetId + i.id}
+                  type="button"
+                  className="htipline htiplink"
+                  onClick={() => {
+                    tip.close();
+                    showSheet(<FindingSheet id={i.id} targetId={i.targetId} />);
+                  }}
+                >
                   <i className={"sevdot d-" + i.sev} />
                   {i.title}
-                </span>
+                </button>
               ))}
-              {curList.length > 4 && <span>{tr(`et ${curList.length - 4} autre(s)`, `and ${curList.length - 4} more`)}</span>}
-              <small>{tr("Cliquez pour ouvrir l’actif", "Click to open the asset")}</small>
+              <button
+                type="button"
+                className="htipmore"
+                onClick={() => {
+                  tip.close();
+                  showSheet(<AssetSheet n={cur.a} />);
+                }}
+              >
+                {curList.length > 4 ? tr(`et ${curList.length - 4} autre(s) : ouvrir l’actif →`, `and ${curList.length - 4} more: open the asset →`) : tr("Ouvrir l’actif →", "Open the asset →")}
+              </button>
             </>
           ) : (
             <span className="htipline">
@@ -265,15 +285,7 @@ export function RapportsPage() {
   const open = issues.filter((i) => !i.fixed).length;
   const fixed = issues.length - open;
   const evaluated = evaluatedCats(data.checks);
-  const tally = (modules: string[]) => {
-    const cs = data.checks.filter((c) => modules.includes(c.module) && c.status !== "not_applicable");
-    return [cs.filter((c) => c.status === "passed").length, cs.length] as const;
-  };
-  const segs: [string, readonly [number, number]][] = [
-    [tr("Emails", "Email"), tally(["email"])],
-    [tr("Chiffrement", "Encryption"), tally(["tls", "web"])],
-    [tr("Ports et services", "Ports and services"), tally(["ports"])],
-  ];
+  const segs: [string, readonly [number, number]][] = families(data.checks).map(([name, p, t]) => [name, [p, t]] as const);
   const pass = segs.reduce((s, [, [p]]) => s + p, 0);
   const total = segs.reduce((s, [, [, t]]) => s + t, 0);
   const reports = data.subscription.plan.reports;
@@ -364,13 +376,6 @@ export function RapportsPage() {
                     </td>
                   </tr>
                 ))}
-                <tr>
-                  <td style={{ color: "var(--ink3)" }}>{tr("Fuites de données", "Data leaks")}</td>
-                  <td>
-                    <span className="soon">{tr("Bientôt", "Soon")}</span>
-                  </td>
-                  <td />
-                </tr>
               </tbody>
             </table>
           </div>

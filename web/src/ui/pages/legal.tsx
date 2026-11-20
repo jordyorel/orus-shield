@@ -205,6 +205,12 @@ function ConfidentialiteFR() {
             crt.sh, service public des journaux de certificats : pour découvrir vos sous-domaines, le nom de vos domaines y est recherché. Aucune autre donnée
             n’y est envoyée.
           </li>
+          <li>
+            XposedOrNot (xposedornot.com), service de notification des fuites de données : pour savoir si les adresses email de vos domaines vérifiés (celles
+            des membres de votre équipe sur ces domaines et celles que vous déclarez) figurent dans des fuites connues, chaque adresse y est recherchée. Nous
+            n’en conservons que le nom des fuites, leur date et les types de données exposées, jamais de mot de passe. [Accord de licence et clauses de
+            sous-traitance à valider.]
+          </li>
         </ul>
         <p>[Transferts hors du pays ou de l’Union européenne et garanties à préciser.]</p>
       </Article>
@@ -269,7 +275,8 @@ function TraitementFR() {
       </Article>
       <Article title="4. Sous-traitants ultérieurs">
         <p>
-          [Hébergeur] (hébergement), [relais email] (emails du service). Nous vous informons avant d’en ajouter un nouveau ; vous pouvez vous y opposer.
+          [Hébergeur] (hébergement), [relais email] (emails du service), XposedOrNot (recherche des adresses email de vos domaines dans les fuites de
+          données connues). Nous vous informons avant d’en ajouter un nouveau ; vous pouvez vous y opposer.
           [Liste et procédure à préciser.]
         </p>
       </Article>
@@ -418,6 +425,11 @@ function ConfidentialiteEN() {
             crt.sh, the public certificate log service: to discover your subdomains, the names of your domains are searched there. No other data is sent to
             it.
           </li>
+          <li>
+            XposedOrNot (xposedornot.com), a data breach notification service: to know whether the email addresses of your verified domains (your team
+            members’ addresses on those domains and the ones you declare) appear in known breaches, each address is looked up there. We keep only the
+            breaches’ names, dates and the kinds of data exposed, never a password. [Licence agreement and sub-processing terms to be confirmed.]
+          </li>
         </ul>
         <p>[Transfers outside the country or the European Union and safeguards to be specified.]</p>
       </Article>
@@ -479,7 +491,8 @@ function TraitementEN() {
       </Article>
       <Article title="4. Sub-processors">
         <p>
-          [Hosting provider] (hosting), [email relay] (service emails). We inform you before adding a new one; you may object. [List and procedure to be
+          [Hosting provider] (hosting), [email relay] (service emails), XposedOrNot (lookup of your domains’ email addresses in known data breaches). We
+          inform you before adding a new one; you may object. [List and procedure to be
           specified.]
         </p>
       </Article>

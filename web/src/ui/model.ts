@@ -86,7 +86,8 @@ export const CATNAME: Record<Cat, string> = {
  * catOfModule maps an engine module to a column. web (headers, cookies,
  * HTTPS redirect) goes with TLS, "Chiffrement" of the site; vulns and zap
  * (deep web scan) are the known and application flaws of "Menaces"; cdn
- * and discovery have no findings of their own. Fuites has no module yet.
+ * and discovery have no findings of their own; leaks (XposedOrNot) feeds
+ * "Fuites".
  */
 export function catOfModule(moduleId: string): Cat | null {
   switch (moduleId) {
@@ -101,6 +102,8 @@ export function catOfModule(moduleId: string): Cat | null {
     case "zap":
     case "api":
       return "menaces";
+    case "leaks":
+      return "fuites";
   }
   return null;
 }
@@ -159,6 +162,8 @@ export interface Issue {
  * the services' "host" detail.
  */
 export function hostOf(assetValue: string, domain: string, ipHost: Map<string, string>): string {
+  // An email address (leaks module) is about the registered domain.
+  if (assetValue.includes("@") && !assetValue.includes("://")) return domain;
   let a = assetValue.split("#")[0] ?? "";
   if (a.includes("://")) {
     try {
@@ -314,13 +319,12 @@ export type CellState = SevOrOk | "na";
 
 /**
  * catState is the state of one cell of the heat map: "na" when the column
- * does not apply to the asset (emails apply to registered domains, fuites
- * has no module yet, the others to targets where a check of the column
- * was evaluated).
+ * does not apply to the asset (emails and fuites apply to registered
+ * domains, the others to targets where a check of the column was
+ * evaluated).
  */
 export function catState(asset: AssetView, cat: Cat, issues: Issue[], evaluated: Map<string, Set<Cat>>): CellState {
-  if (cat === "fuites") return "na";
-  if (cat === "emails" && asset.n !== asset.domain) return "na";
+  if ((cat === "emails" || cat === "fuites") && asset.n !== asset.domain) return "na";
   const open = issues.filter((i) => !i.fixed && i.host === asset.n && i.cat === cat);
   if (!open.length && !evaluated.get(asset.targetId)?.has(cat)) return "na";
   const w = worst(open);
@@ -754,5 +758,6 @@ export function families(checks: Check[]): [string, number, number][] {
     [tr("Emails", "Email"), ...tally(["email"])],
     [tr("Chiffrement", "Encryption"), ...tally(["tls", "web"])],
     [tr("Ports et services", "Ports and services"), ...tally(["ports"])],
+    [tr("Fuites de données", "Data leaks"), ...tally(["leaks"])],
   ];
 }
