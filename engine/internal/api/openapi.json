@@ -1850,6 +1850,14 @@
             ],
             "format": "date-time"
           },
+          "verify_checked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the ownership record (DNS TXT) was last checked; it is checked again before active scans when older than 24 hours."
+          },
           "rate_per_sec": {
             "type": "number"
           },
