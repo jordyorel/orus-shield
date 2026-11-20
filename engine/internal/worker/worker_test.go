@@ -20,6 +20,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/ownership"
 	"github.com/jordyorel/orus-shield/engine/internal/plan"
+	"github.com/jordyorel/orus-shield/engine/internal/quicktest"
 	"github.com/jordyorel/orus-shield/engine/internal/seal"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
@@ -242,8 +243,53 @@ func setupWithModules(t *testing.T, verified bool, exclusions string, reg *modul
 		queue:   []store.Scan{{ID: "s1", OrgID: "o1", TargetID: "t1", Domain: "example.com", Modules: ids}},
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	w := New(st, reg, trustingRechecker{}, Config{ID: "worker:test", ModuleTimeout: time.Second, Lease: time.Minute}, log)
+	w := New(st, reg, trustingRechecker{}, Config{ID: "worker:test", ModuleTimeout: time.Second, Lease: time.Minute, PublicAddress: publicOrDocumentation}, log)
 	return w, st
+}
+
+// publicOrDocumentation is quicktest.Public that also accepts the
+// documentation ranges the tests use as public servers.
+func publicOrDocumentation(ip netip.Addr) bool {
+	for _, p := range []string{"192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24"} {
+		if netip.MustParsePrefix(p).Contains(ip.Unmap()) {
+			return true
+		}
+	}
+	return quicktest.Public(ip)
+}
+
+// A customer's domain may point at our own network: no module, passive or
+// active, reaches a loopback, private or link-local (cloud metadata)
+// address, and the refusal is audited (server-side request forgery).
+func TestScansNeverReachNonPublicAddresses(t *testing.T) {
+	results := map[string]error{}
+	probe := &fakeModule{info: module.Info{ID: "web", Name: "Web", Kind: module.KindPassive}, run: func(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+		for _, a := range []string{"127.0.0.1", "10.0.0.5", "169.254.169.254", "::1", "::ffff:192.168.1.1", "192.0.2.10"} {
+			results[a] = req.Gate.Allow(ctx, module.Destination{Host: "example.com", IP: netip.MustParseAddr(a), Port: 80})
+		}
+		return nil, nil
+	}}
+	w, st := setup(t, true, "{}", probe)
+	if err := runOnce(t, w); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range []string{"127.0.0.1", "10.0.0.5", "169.254.169.254", "::1", "::ffff:192.168.1.1"} {
+		if !errors.Is(results[a], module.ErrExcluded) {
+			t.Errorf("%s: gate = %v, want refused as excluded", a, results[a])
+		}
+	}
+	if results["192.0.2.10"] != nil {
+		t.Errorf("public address refused: %v", results["192.0.2.10"])
+	}
+	audited := 0
+	for _, e := range st.audit {
+		if d, _ := e.Details.(map[string]any); e.Action == store.ActionIPNotVerified && d["reason"] == "not a public address" {
+			audited++
+		}
+	}
+	if audited != 5 {
+		t.Errorf("audited refusals = %d, want 5", audited)
+	}
 }
 
 func runOnce(t *testing.T, w *Worker) error {

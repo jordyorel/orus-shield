@@ -26,6 +26,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/ownership"
 	"github.com/jordyorel/orus-shield/engine/internal/plan"
+	"github.com/jordyorel/orus-shield/engine/internal/quicktest"
 	"github.com/jordyorel/orus-shield/engine/internal/seal"
 	"github.com/jordyorel/orus-shield/engine/internal/store"
 )
@@ -74,6 +75,13 @@ type Config struct {
 	// Credentials opens the test accounts of authenticated scans
 	// (ORUS_CREDENTIALS_KEY, the API's key); nil: scans run without them.
 	Credentials *seal.Key
+	// PublicAddress decides which addresses a scan may reach; nil:
+	// quicktest.Public (ordinary internet addresses only). A customer's
+	// domain may point at 127.0.0.1, 10.x or 169.254.169.254 (cloud
+	// metadata): the scan must never reach our own network through it
+	// (server-side request forgery). Tests replace it to accept the
+	// documentation ranges.
+	PublicAddress func(netip.Addr) bool
 }
 
 const (
@@ -127,6 +135,9 @@ func New(st Store, modules *module.Registry, owner Ownership, cfg Config, log *s
 	}
 	if cfg.MaxAttempts <= 0 {
 		cfg.MaxAttempts = defaultMaxAttempts
+	}
+	if cfg.PublicAddress == nil {
+		cfg.PublicAddress = quicktest.Public
 	}
 	if cfg.ScheduleInterval <= 0 {
 		cfg.ScheduleInterval = defaultScheduleInterval
@@ -216,10 +227,24 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 		return w.fail(ctx, sc, fmt.Sprintf("load target: %v", err))
 	}
 	// Fail closed: never scan with exclusions or a rate we cannot read.
-	g, err := gate.FromTarget(target.Exclusions, target.RatePerSec)
+	tg, err := gate.FromTarget(target.Exclusions, target.RatePerSec)
 	if err != nil {
 		return w.fail(ctx, sc, fmt.Sprintf("invalid target settings: %v", err))
 	}
+	// Every module, passive or active, reaches public addresses only: a
+	// refused address is skipped like an exclusion, kept unobserved and
+	// audited.
+	refused := &ipSet{}
+	g := publicOnly{inner: tg, public: w.cfg.PublicAddress, refuse: func(ip netip.Addr) {
+		refused.add(ip)
+		log.Warn("non-public address refused", "ip", ip)
+		if err := w.store.AppendAudit(ctx, store.AuditEntry{
+			OrgID: target.OrgID, Actor: w.cfg.ID, Action: store.ActionIPNotVerified, Target: target.Domain,
+			Details: map[string]any{"scan_id": sc.ID, "ip": ip.String(), "reason": "not a public address"},
+		}); err != nil {
+			log.Error("audit non-public refusal", "err", err)
+		}
+	}}
 	// The offer in force now: a subscription may have lapsed since the
 	// scan was requested. Unreadable: fail closed, on the free offer.
 	sub, err := w.store.SubscriptionOf(scanCtx, target.OrgID)
@@ -296,7 +321,6 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 	// Active modules get a stricter gate, built on first use: it only lets
 	// them reach IPs whose ownership is proven (rule 1, per IP).
 	var activeGate module.Gate
-	refused := &ipSet{}
 	unreached := &hostSet{}
 	gateFor := func(id string) module.Gate {
 		m, ok := w.modules.Get(id)
@@ -427,6 +451,33 @@ func (w *Worker) activeGate(ctx context.Context, sc store.Scan, t store.Target, 
 			log.Error("audit IP refusal", "err", err)
 		}
 	})
+}
+
+// publicOnly refuses connections to non-public addresses (loopback,
+// private, link-local such as cloud metadata, reserved ranges), then asks
+// inner (exclusions, rate limit). Name-only destinations (DNS lookups)
+// pass: they reach the resolver, never the address.
+type publicOnly struct {
+	inner  module.Gate
+	public func(netip.Addr) bool
+	refuse func(netip.Addr)
+}
+
+func (p publicOnly) Allow(ctx context.Context, dest module.Destination) error {
+	if dest.IP.IsValid() && !p.public(dest.IP) {
+		p.refuse(dest.IP)
+		return fmt.Errorf("%s is not a public address: %w", dest.IP, module.ErrExcluded)
+	}
+	return p.inner.Allow(ctx, dest)
+}
+
+// Covers lets the result's Unobserved see the target's exclusions through
+// the wrapper.
+func (p publicOnly) Covers(value string) bool {
+	if c, ok := p.inner.(interface{ Covers(string) bool }); ok {
+		return c.Covers(value)
+	}
+	return false
 }
 
 // ipSet collects the IPs refused during a scan. Modules may probe in
