@@ -12,6 +12,8 @@ import { tr, useLang } from "../../i18n";
 import { Link, navigate } from "../../router";
 import { cleanDomain } from "../prefill";
 import { useBodyClass } from "../ui";
+import { G, Glyph } from "../glyphs";
+import { slug, Toc } from "./article";
 import { PubFoot, PubHead } from "./public";
 
 interface GuideText {
@@ -631,9 +633,44 @@ function TestBox() {
   );
 }
 
+/** CATEGORIES group the guides, with their icon. */
+type Category = "email" | "tls" | "web";
+const CATEGORIES: [Category, () => string, string][] = [
+  ["email", () => tr("Emails", "Email"), G.mail],
+  ["tls", () => tr("Certificats", "Certificates"), G.lock],
+  ["web", () => tr("Sites web", "Websites"), G.globe],
+];
+const CATEGORY_OF: Record<string, Category> = { dmarc: "email", spf: "email", "certificat-tls": "tls", "securiser-site": "web" };
+const category = (slug: string) => CATEGORIES.find(([k]) => k === CATEGORY_OF[slug]) ?? CATEGORIES[0]!;
+
+/** GuideCard is a guide in a list: its category, title, summary and length. */
+function GuideCard({ g, compact }: { g: Guide; compact?: boolean }) {
+  const { lang } = useLang();
+  const t = lang === "en" ? g.en : g.fr;
+  const [, cat, icon] = category(g.slug);
+  return (
+    <Link className={"gcard" + (compact ? " compact" : "")} to={`/guides/${g.slug}`}>
+      <span className="gcardtop">
+        <span className="capicon">
+          <Glyph d={icon} />
+        </span>
+        <small>{cat()}</small>
+      </span>
+      <b>{t.title}</b>
+      {!compact && <span className="gdesc">{t.description}</span>}
+      <span className="gfoot">
+        <span>{tr(`${g.minutes} min de lecture`, `${g.minutes} min read`)}</span>
+        <span className="gread">
+          {tr("Lire", "Read")} <Glyph d={G.arrow} size={16} />
+        </span>
+      </span>
+    </Link>
+  );
+}
+
 export function GuidesIndexPage() {
   useBodyClass(["public"]);
-  const { lang } = useLang();
+  const [cat, setCat] = useState<Category | "">("");
   useMeta(
     tr("Guides de sécurité pour les entreprises", "Security guides for businesses"),
     tr(
@@ -641,46 +678,56 @@ export function GuidesIndexPage() {
       "Practical guides to protect your email, your certificate and your website: DMARC, SPF, TLS, HTTPS and security headers.",
     ),
   );
+  const shown = GUIDES.filter((g) => !cat || CATEGORY_OF[g.slug] === cat);
   return (
     <main>
       <div className="view">
         <PubHead cur="guides" />
-        <section className="phead">
+        <section className="lhead center">
+          <p className="kicker">{tr("Ressources", "Resources")}</p>
           <h1>{tr("Guides de sécurité", "Security guides")}</h1>
           <p className="herosub">
             {tr(
-              "Ce qu’il faut vérifier sur vos emails, votre certificat et votre site, et comment le corriger, étape par étape.",
-              "What to check on your email, your certificate and your website, and how to fix it, step by step.",
+              "Ce qu’il faut vérifier sur vos emails, votre certificat et votre site, et comment le corriger, étape par étape. Sans jargon.",
+              "What to check on your email, your certificate and your website, and how to fix it, step by step. Without jargon.",
             )}
           </p>
+          <div className="chips" role="group" aria-label={tr("Catégories", "Categories")}>
+            <button type="button" aria-pressed={cat === ""} onClick={() => setCat("")}>
+              {tr("Tous", "All")} <small>{GUIDES.length}</small>
+            </button>
+            {CATEGORIES.map(([k, name]) => (
+              <button key={k} type="button" aria-pressed={cat === k} onClick={() => setCat(k)}>
+                {name()} <small>{GUIDES.filter((g) => CATEGORY_OF[g.slug] === k).length}</small>
+              </button>
+            ))}
+          </div>
         </section>
-        <ul className="guidegrid">
-          {GUIDES.map((g) => {
-            const t = lang === "en" ? g.en : g.fr;
-            return (
-              <li key={g.slug}>
-                <Link className="rpanel guidecard" to={`/guides/${g.slug}`}>
-                  <b>{t.title}</b>
-                  <span>{t.description}</span>
-                  <small>{tr(`Lecture : ${g.minutes} min`, `${g.minutes} min read`)}</small>
-                </Link>
-              </li>
-            );
-          })}
+        <ul className="ggrid">
+          {shown.map((g) => (
+            <li key={g.slug}>
+              <GuideCard g={g} />
+            </li>
+          ))}
         </ul>
-        <TestBox />
+        <section className="hfinal gfinal">
+          <h2>{tr("Où en est votre domaine ?", "How is your domain doing?")}</h2>
+          <p className="herosub">{tr("Notre test vérifie tout ce que décrivent ces guides, en 20 secondes.", "Our test checks everything these guides describe, in 20 seconds.")}</p>
+          <TestBox />
+        </section>
         <PubFoot />
       </div>
     </main>
   );
 }
 
-export function GuidePage({ slug }: { slug: string }) {
+export function GuidePage({ slug: guideSlug }: { slug: string }) {
   useBodyClass(["public"]);
   const { lang } = useLang();
-  const g = GUIDES.find((x) => x.slug === slug);
+  const g = GUIDES.find((x) => x.slug === guideSlug);
   const t = g ? (lang === "en" ? g.en : g.fr) : null;
   useMeta(t?.title ?? tr("Guide introuvable", "Guide not found"), t?.description ?? "");
+  const [, cat, icon] = category(guideSlug);
   return (
     <main>
       <div className="view">
@@ -693,29 +740,47 @@ export function GuidePage({ slug }: { slug: string }) {
             </p>
           </section>
         ) : (
-          <article className="guide">
-            <p className="plankicker">
-              <Link to="/guides">{tr("Guides", "Guides")}</Link> · {tr(`${g.minutes} min de lecture`, `${g.minutes} min read`)}
-            </p>
-            <h1>{t.title}</h1>
-            <div className="guidetext guideintro">{t.intro}</div>
-            <TestBox />
-            {t.sections.map(([h, body]) => (
-              <section key={h}>
-                <h2>{h}</h2>
-                <div className="guidetext">{body}</div>
-              </section>
-            ))}
-            <h2>{tr("Les autres guides", "The other guides")}</h2>
-            <ul className="guidegrid">
-              {GUIDES.filter((x) => x.slug !== slug).map((x) => (
-                <li key={x.slug}>
-                  <Link className="rpanel guidecard" to={`/guides/${x.slug}`}>
-                    <b>{lang === "en" ? x.en.title : x.fr.title}</b>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+          <article className="guide2">
+            <header className="ghead">
+              <nav className="crumbs" aria-label={tr("Fil d’Ariane", "Breadcrumb")}>
+                <Link to="/guides">{tr("Guides", "Guides")}</Link>
+                <span aria-hidden="true">/</span>
+                <span>{cat()}</span>
+              </nav>
+              <h1>{t.title}</h1>
+              <p className="gmeta">
+                <span className="gcat">
+                  <Glyph d={icon} size={16} />
+                  {cat()}
+                </span>
+                <span>{tr(`${g.minutes} min de lecture`, `${g.minutes} min read`)}</span>
+              </p>
+            </header>
+            <div className="artlayout tocright">
+              <div className="artbody">
+                <div className="guidetext guideintro">{t.intro}</div>
+                <TestBox />
+                {t.sections.map(([h, body]) => (
+                  <section key={h} id={slug(h)} className="gsec">
+                    <h2>{h}</h2>
+                    <div className="guidetext">{body}</div>
+                  </section>
+                ))}
+              </div>
+              <aside>
+                <Toc titles={t.sections.map(([h]) => h)} />
+              </aside>
+            </div>
+            <section className="gmore">
+              <h2>{tr("Les autres guides", "The other guides")}</h2>
+              <ul className="ggrid three">
+                {GUIDES.filter((x) => x.slug !== guideSlug).map((x) => (
+                  <li key={x.slug}>
+                    <GuideCard g={x} compact />
+                  </li>
+                ))}
+              </ul>
+            </section>
           </article>
         )}
         <PubFoot />

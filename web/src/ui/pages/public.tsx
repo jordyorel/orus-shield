@@ -6,7 +6,8 @@ import type { Overview, Plan, Severity } from "../../api/types";
 import { useAuth } from "../../auth";
 import { Link, navigate, useLocation } from "../../router";
 import { api, ApiError } from "../../api/client";
-import { Lock, Logo, Moon, Tick } from "../icons";
+import { Lock, Logo, Moon, Soon, Tick } from "../icons";
+import { G, Glyph } from "../glyphs";
 import { LangSwitch } from "../LangSwitch";
 import { locale, tr } from "../../i18n";
 import { openCheckout } from "../paddle";
@@ -76,12 +77,15 @@ export function PubHead({ cur }: { cur: "accueil" | "tarifs" | "legal" | "test" 
         <span aria-hidden="true">{mobile ? "✕" : "☰"}</span>
       </button>
       <nav id="pubnav" aria-label={tr("Site", "Site")}>
-        <NavMenu label={tr("Produit", "Product")} items={productMenu()} />
-        <NavMenu label={tr("Ressources", "Resources")} items={resources} current={cur === "guides" || cur === "docs" || cur === "test"} />
-        <Link to="/tarifs" aria-current={cur === "tarifs" ? "page" : undefined}>
-          {tr("Tarifs", "Pricing")}
-        </Link>
-        <span className="navsep" aria-hidden="true" />
+        {/* Three zones on a wide screen: the brand, the menus centred, the actions on the right. */}
+        <div className="navmain">
+          <NavMenu label={tr("Produit", "Product")} items={productMenu()} />
+          <NavMenu label={tr("Ressources", "Resources")} items={resources} current={cur === "guides" || cur === "docs" || cur === "test"} />
+          <Link to="/tarifs" aria-current={cur === "tarifs" ? "page" : undefined}>
+            {tr("Tarifs", "Pricing")}
+          </Link>
+        </div>
+        <div className="navside">
         {signedIn ? (
           <Link className="btn sm" to="/app">
             {tr("Mon tableau de bord", "My dashboard")}
@@ -104,6 +108,7 @@ export function PubHead({ cur }: { cur: "accueil" | "tarifs" | "legal" | "test" 
             {initials(state.me.name, state.me.email)}
           </Link>
         )}
+        </div>
       </nav>
     </header>
   );
@@ -288,6 +293,38 @@ export function features(p: Plan | undefined): string[] {
 
 const discount = () => tr("À l’année, jusqu’à 20 % de moins", "Yearly, up to 20% less");
 
+/** compareGroups arranges the plans' limits (limitRows, shared with
+ * Réglages) by theme, as pricing pages do. */
+function compareGroups(plans: Plan[]): [string, [string, ...string[]][]][] {
+  const r = limitRows(plans);
+  const at = (...i: number[]) => i.map((n) => r[n]!).filter(Boolean);
+  return [
+    [tr("Périmètre", "Scope"), at(0, 1, 2, 3)],
+    [tr("Contrôles", "Checks"), at(4, 5, 11, 10)],
+    [tr("Tests avancés", "Advanced testing"), at(6, 8, 14, 9)],
+    [tr("Résultats et intégrations", "Results and integrations"), at(12, 13, 7)],
+  ];
+}
+
+/** Cell draws a comparison value: a tick for yes, a dash for no. */
+function Cell({ v }: { v: string }) {
+  if (v === tr("Oui", "Yes"))
+    return (
+      <span className="cyes" title={v}>
+        <Tick size={13} width={3.2} />
+        <span className="vh">{v}</span>
+      </span>
+    );
+  if (v === tr("Non", "No"))
+    return (
+      <span className="cno" title={v}>
+        —<span className="vh">{v}</span>
+      </span>
+    );
+  if (v === tr("Bientôt", "Soon")) return <Soon />;
+  return <>{v}</>;
+}
+
 export function TarifsPage() {
   useBodyClass(["public"]);
   const plans = usePlans();
@@ -302,7 +339,8 @@ export function TarifsPage() {
     <main>
       <div className="view">
         <PubHead cur="tarifs" />
-        <section className="phead">
+        <section className="lhead center">
+          <p className="kicker">{tr("Tarifs", "Pricing")}</p>
           <h1>{tr("Un prix simple, payable comme vous voulez.", "A simple price, paid the way you like.")}</h1>
           <p className="herosub">{tr("Sans engagement : vous arrêtez quand vous voulez.", "No commitment: stop whenever you want.")}</p>
           <div className="toggles">
@@ -341,46 +379,104 @@ export function TarifsPage() {
             </div>
           ))}
         </div>
-        <p className="sub" style={{ textAlign: "center", marginTop: 16 }}>
-          {tr("Prestataires informatiques et grands comptes : tarif sur devis, par actif.", "IT providers and large accounts: price on quote, per asset.")}
-        </p>
-        <section className="band">
-          <h2>{tr("Tout comparer", "Compare everything")}</h2>
-          <div style={{ overflowX: "auto", marginTop: 8 }}>
-            <table className="limits plan2">
+        <ul className="reassure">
+          {(
+            [
+              [G.clock, tr("14 jours d’essai", "14-day trial"), tr("Rien n’est prélevé avant la fin", "Nothing charged before it ends")],
+              [G.check, tr("Sans engagement", "No commitment"), tr("Arrêtez en un clic", "Stop in one click")],
+              [G.card, tr("Carte ou PayPal", "Card or PayPal"), tr("Au mois ou à l’année", "Monthly or yearly")],
+              [G.shield, tr("Paiement sécurisé", "Secure payment"), tr("Par Paddle : nous ne voyons jamais votre carte", "By Paddle: we never see your card")],
+            ] as const
+          ).map(([d, t, x]) => (
+            <li key={t}>
+              <span className="capicon">
+                <Glyph d={d} />
+              </span>
+              <span>
+                <b>{t}</b>
+                <small>{x}</small>
+              </span>
+            </li>
+          ))}
+        </ul>
+        <section className="quoteband">
+          <div>
+            <p className="kicker">{tr("Sur devis", "Custom plan")}</p>
+            <h2>{tr("Prestataires informatiques et grands comptes", "IT providers and large accounts")}</h2>
+            <p className="md">
+              {tr(
+                "Plus de domaines, vos réseaux internes avec nos agents, des scans approfondis sans limite : un tarif par actif, adapté à votre parc.",
+                "More domains, your internal networks with our agents, unlimited deep scans: a price per asset, fitted to your estate.",
+              )}
+            </p>
+          </div>
+          <Link className="btn ghost" to="/inscription?offre=pro">
+            {tr("Commencer par l’essai Pro", "Start with the Pro trial")}
+          </Link>
+        </section>
+        <section className="hsection">
+          <div className="hsectionhead">
+            <p className="kicker">{tr("Comparaison", "Comparison")}</p>
+            <h2>{tr("Tout comparer", "Compare everything")}</h2>
+          </div>
+          <div className="cmpwrap">
+            <table className="cmp">
               <thead>
                 <tr>
-                  <th scope="col" />
+                  <th scope="col">
+                    <span className="vh">{tr("Fonction", "Feature")}</span>
+                  </th>
                   <th scope="col">{tr("Gratuit", "Free")}</th>
-                  <th scope="col">{tr("Essentiel", "Essential")}</th>
+                  <th scope="col" className="star">
+                    {tr("Essentiel", "Essential")}
+                  </th>
                   <th scope="col">Pro</th>
                 </tr>
               </thead>
-              <tbody>
-                {limitRows(plans).map(([name, ...cells]) => (
-                  <tr key={name}>
-                    <th scope="row">{name}</th>
-                    {cells.map((c, i) => (
-                      <td key={i}>{c}</td>
-                    ))}
+              {compareGroups(plans).map(([group, rows]) => (
+                <tbody key={group}>
+                  <tr className="cmpgroup">
+                    <th scope="colgroup" colSpan={4}>
+                      {group}
+                    </th>
                   </tr>
-                ))}
-              </tbody>
+                  {rows.map(([name, ...cells]) => (
+                    <tr key={name}>
+                      <th scope="row">{name}</th>
+                      {cells.map((c, i) => (
+                        <td key={i} className={i === 1 ? "star" : ""}>
+                          <Cell v={c} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
             </table>
           </div>
         </section>
-        <section className="band">
-          <h2>{tr("Moyens de paiement", "Payment methods")}</h2>
-          <div className="tags" style={{ marginTop: 12 }}>
-            {[tr("Carte bancaire", "Bank card"), "PayPal"].map((x) => (
-              <span key={x}>{x}</span>
-            ))}
+        <section className="hsection pfaq">
+          <div>
+            <p className="kicker">{tr("Questions", "Questions")}</p>
+            <h2>{tr("Questions fréquentes", "Frequently asked questions")}</h2>
+            <p className="md">{tr("Une autre question ? Testez d’abord votre domaine : c’est gratuit et sans compte.", "Another question? Test your domain first: it is free and needs no account.")}</p>
           </div>
-        </section>
-        <section className="band">
-          <h2>{tr("Questions fréquentes", "Frequently asked questions")}</h2>
           <div className="faq">
             {[
+              [
+                tr("Comment se passe l’essai de 14 jours ?", "How does the 14-day trial work?"),
+                tr(
+                  "Vous avez tout ce que comprend l’offre choisie. Une carte ou un compte PayPal est demandé au départ, et rien n’est prélevé avant la fin de l’essai. Annulez avant, et vous ne payez rien.",
+                  "You get everything the chosen plan includes. A card or PayPal account is asked at the start, and nothing is charged before the trial ends. Cancel before, and you pay nothing.",
+                ),
+              ],
+              [
+                tr("Qu’est-ce qu’un actif ?", "What is an asset?"),
+                tr(
+                  "Un nom sous votre domaine que nous surveillons : www, mail, vpn, boutique… Nous les trouvons pour vous à partir des journaux de certificats et du DNS.",
+                  "A name under your domain that we monitor: www, mail, vpn, shop… We find them for you from certificate logs and DNS.",
+                ),
+              ],
               [
                 tr("Puis-je tester un domaine qui n’est pas le mien ?", "Can I test a domain that is not mine?"),
                 tr(
@@ -396,6 +492,13 @@ export function TarifsPage() {
                 ),
               ],
               [
+                tr("Comment obtenir mes factures ?", "How do I get my invoices?"),
+                tr(
+                  "Paddle, notre revendeur, les émet et les envoie par email ; vous les retrouvez aussi dans Réglages, Abonnement, avec la TVA quand elle s’applique.",
+                  "Paddle, our reseller, issues them and emails them; you also find them in Settings, Subscription, with VAT where it applies.",
+                ),
+              ],
+              [
                 tr("Puis-je arrêter quand je veux ?", "Can I stop whenever I want?"),
                 tr("Oui. L’abonnement s’arrête à la fin de la période payée, et vos rapports restent téléchargeables.", "Yes. The subscription ends at the end of the paid period, and your reports stay downloadable."),
               ],
@@ -405,6 +508,18 @@ export function TarifsPage() {
                 <p>{a}</p>
               </details>
             ))}
+          </div>
+        </section>
+        <section className="hfinal">
+          <h2>{tr("Commencez par voir où vous en êtes.", "Start by seeing where you stand.")}</h2>
+          <p className="herosub">{tr("Un audit gratuit de votre domaine, puis 14 jours pour tout essayer.", "A free audit of your domain, then 14 days to try everything.")}</p>
+          <div className="actions" style={{ justifyContent: "center", marginTop: 20 }}>
+            <Link className="btn" to="/inscription?offre=sme">
+              {tr("Essayer 14 jours", "Try it for 14 days")}
+            </Link>
+            <Link className="btn ghost" to="/inscription">
+              {tr("Auditer mon domaine", "Audit my domain")}
+            </Link>
           </div>
         </section>
         <PubFoot />

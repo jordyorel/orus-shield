@@ -194,7 +194,10 @@ function ShareBlock({ i, copy }: { i: Issue; copy: (v: string) => void }) {
   );
 }
 
-export function FindingSheet({ id, targetId }: { id: string; targetId: string }) {
+/** FindingSheet is a problem's sheet: in the side sheet, or inline beside
+ * the problems' table on a wide screen (inline: no close button, its own
+ * title id). */
+export function FindingSheet({ id, targetId, inline = false }: { id: string; targetId: string; inline?: boolean }) {
   const { issues, org, reload, isAdmin } = useOrg();
   const { toast, showSheet, closeAll } = useUI();
   const fix = useFix();
@@ -263,9 +266,9 @@ export function FindingSheet({ id, targetId }: { id: string; targetId: string })
     <>
       <div className="shead">
         <SevTag s={i.fixed ? "ok" : i.sev} label={i.accepted ? tr("Risque accepté", "Risk accepted") : undefined} />
-        <CloseButton />
+        {inline ? <span className="mono shcheck">{i.finding.check_id}</span> : <CloseButton />}
       </div>
-      <h2 id="sheet-title">{i.title}</h2>
+      <h2 id={inline ? "detail-title" : "sheet-title"}>{i.title}</h2>
       <button className="assetlink" type="button" onClick={() => showSheet(<AssetSheet n={i.host} />)}>
         <NavIcon name="actifs" size={16} width={2} />
         {i.host}
@@ -349,7 +352,7 @@ export function FindingSheet({ id, targetId }: { id: string; targetId: string })
           id="fix-btn"
           type="button"
           onClick={() => {
-            closeAll();
+            if (!inline) closeAll();
             void fix(i);
           }}
         >

@@ -480,7 +480,6 @@ describe("dashboard", () => {
     // The score's card says its level; the sheet gives the sentence, with
     // the same count of problems as everywhere else.
     expect(await screen.findByText("Niveau moyen")).toBeTruthy();
-    expect(screen.getByText("Protégé")).toBeTruthy(); // the radar's legend
     fireEvent.click(screen.getByRole("button", { name: "Comprendre mon score" }));
     expect(await screen.findByRole("heading", { name: "Votre score : 74 sur 100" })).toBeTruthy();
     expect(screen.getByText("Niveau moyen, 1 problème à corriger.")).toBeTruthy();
@@ -779,9 +778,9 @@ describe("dashboard", () => {
 
   it("goes back from a problem to its asset in the side sheet", async () => {
     orgRoutes();
-    renderAt(`/orgs/${ORG}/aujourdhui`);
-    // A dot of the radar opens its asset, with its open problems.
-    fireEvent.click(await screen.findByRole("button", { name: /example\.cg : 1 problème/ }));
+    renderAt(`/orgs/${ORG}/actifs`);
+    // An asset of the inventory opens its sheet, with its open problems.
+    fireEvent.click((await screen.findAllByTitle("example.cg")).find((e) => e.classList.contains("arow"))!);
     const sheet = document.getElementById("sheet-title")!.closest("aside")!;
     await waitFor(() => expect(sheet.querySelector("#sheet-title")?.textContent).toBe("example.cg"));
     expect(sheet.querySelector(".back")).toBeNull();
@@ -800,6 +799,41 @@ describe("dashboard", () => {
     fireEvent.click(title!.closest(".rowmain")!);
     expect(await screen.findByText("Publish a DMARC record.")).toBeTruthy();
     expect(screen.getByText("_dmarc.example.cg: no TXT record")).toBeTruthy();
+  });
+
+  it("browses the weekly score chart, empty weeks included", async () => {
+    orgRoutes();
+    renderAt(`/orgs/${ORG}/rapports`);
+    const chart = await screen.findByRole("group", { name: /Score par semaine/ });
+    // At rest: the bars and the latest value, no tooltip.
+    expect(document.querySelector(".wtip")).toBeNull();
+    expect(document.querySelectorAll(".wbar")).toHaveLength(12);
+    fireEvent.keyDown(chart, { key: "ArrowLeft" });
+    expect(document.querySelector(".wtip")?.textContent).toContain("La semaine dernière");
+    // A week before the first scan says so.
+    for (let k = 0; k < 11; k++) fireEvent.keyDown(chart, { key: "ArrowLeft" });
+    expect(document.querySelector(".wtip")?.textContent).toContain("Pas encore de scan cette semaine");
+  });
+
+  it("explains a cell of the heat map on hover and opens its asset", async () => {
+    orgRoutes();
+    renderAt(`/orgs/${ORG}/rapports`);
+    const cell = await screen.findByRole("button", { name: /^example\.cg, Emails : 1 problème/ });
+    fireEvent.mouseEnter(cell);
+    expect(screen.getByRole("tooltip").textContent).toContain("No DMARC record");
+    fireEvent.click(cell);
+    await waitFor(() => expect(document.getElementById("sheet-title")?.textContent).toBe("example.cg"));
+  });
+
+  it("shows the schedule in its lists and saves a new hour", async () => {
+    const calls = orgRoutes({ [`PUT /orgs/${ORG}/settings`]: (b) => ({ status: 200, json: b }), [`GET /orgs/${ORG}/members`]: ok({ items: [] }) });
+    renderAt(`/orgs/${ORG}/reglages`);
+    const hour = (await screen.findByLabelText("Heure de départ")) as HTMLSelectElement;
+    expect((document.getElementById("freq") as HTMLSelectElement).value).toBe("semaine");
+    expect((screen.getByLabelText("Jour") as HTMLSelectElement).selectedOptions[0]?.textContent).toBe("Samedi");
+    expect(hour.value).toBe("2");
+    fireEvent.change(hour, { target: { value: "3" } });
+    await waitFor(() => expect((calls.find((c) => c.key === `PUT /orgs/${ORG}/settings`)?.body as OrgSettings | undefined)?.hour).toBe(3));
   });
 
   it("saves Réglages for the organization", async () => {

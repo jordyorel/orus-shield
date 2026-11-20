@@ -4,31 +4,41 @@
 import { tr } from "../i18n";
 import type { ReactNode } from "react";
 
+// The tabs' icons (redrawn 2026-11-20 in the even-stroke style of modern
+// consoles): a dashboard, a shield with an alert, stacked servers, a column
+// chart on its axes, a cog.
 const paths: Record<string, ReactNode> = {
   aujourdhui: (
     <>
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2" />
+      <rect x="3.5" y="3.5" width="7" height="8" rx="1.6" />
+      <rect x="13.5" y="3.5" width="7" height="5" rx="1.6" />
+      <rect x="13.5" y="11.5" width="7" height="9" rx="1.6" />
+      <rect x="3.5" y="14.5" width="7" height="6" rx="1.6" />
     </>
   ),
-  problemes: <path d="M4 6h16M4 12h16M4 18h10" />,
+  problemes: (
+    <>
+      <path d="M12 3.2 19 6v5.2c0 4.3-2.9 7.8-7 9.6-4.1-1.8-7-5.3-7-9.6V6z" />
+      <path d="M12 8.2v4.6M12 15.8h.01" />
+    </>
+  ),
   actifs: (
     <>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" />
+      <rect x="3.5" y="4" width="17" height="7" rx="2" />
+      <rect x="3.5" y="13" width="17" height="7" rx="2" />
+      <path d="M7.5 7.5h.01M7.5 16.5h.01M11 7.5h5M11 16.5h5" />
     </>
   ),
-  rapports: <path d="M5 20V10M12 20V4M19 20v-7" />,
+  rapports: <path d="M3.5 3.5v17h17M8 16.5v-4M12.5 16.5V8M17 16.5v-6.5" />,
   reglages: (
     <>
-      <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
-      <circle cx="16" cy="7" r="2" />
-      <circle cx="8" cy="17" r="2" />
+      <path d="M10.4 3.6a1.6 1.6 0 0 1 3.2 0l.2 1.1a7 7 0 0 1 1.7 1l1.1-.4a1.6 1.6 0 0 1 1.6 2.8l-.9.7a7 7 0 0 1 0 2l.9.7a1.6 1.6 0 0 1-1.6 2.8l-1.1-.4a7 7 0 0 1-1.7 1l-.2 1.1a1.6 1.6 0 0 1-3.2 0l-.2-1.1a7 7 0 0 1-1.7-1l-1.1.4a1.6 1.6 0 0 1-1.6-2.8l.9-.7a7 7 0 0 1 0-2l-.9-.7a1.6 1.6 0 0 1 1.6-2.8l1.1.4a7 7 0 0 1 1.7-1z" transform="translate(0 2)" />
+      <circle cx="12" cy="12" r="2.6" />
     </>
   ),
 };
 
-export function NavIcon({ name, size = 22, width = 1.9 }: { name: string; size?: number; width?: number }) {
+export function NavIcon({ name, size = 22, width = 1.75 }: { name: string; size?: number; width?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       {paths[name]}

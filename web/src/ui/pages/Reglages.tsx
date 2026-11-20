@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../../api/client";
 import type { DeclaredAPI, Member, OrgSettings, Plan, Role, Target, TestAccount } from "../../api/types";
 import { formatExclusions, parseExclusions } from "../../exclusions";
 import { labeled, tr } from "../../i18n";
 import { Link, useLocation } from "../../router";
 import { settingsPath, type SettingsSection } from "../AppShell";
-import { Lock, MODS, ModIcon, Soon } from "../icons";
+import { Lock, MODS, Soon } from "../icons";
 import { CloseButton, SevTag, UpsellSheet } from "../sheets";
 import { byPriority, dayName, money, sinceText } from "../model";
 import { useOrg } from "../OrgData";
@@ -92,6 +92,15 @@ const SECTIONS = [
   labeled<SettingsSection>("apparence", "Apparence", "Appearance"),
 ];
 
+/** navGroups groups the sections in the menu, as settings pages do (a
+ * function: the labels follow the current language). */
+const navGroups = (): [string, SettingsSection[]][] => [
+  [tr("Surveillance", "Monitoring"), ["scans", "domaines", "alertes"]],
+  [tr("Organisation", "Organization"), ["equipe", "abonnement"]],
+  [tr("Développeurs", "Developers"), ["api"]],
+  [tr("Préférences", "Preferences"), ["apparence"]],
+];
+
 export function ReglagesPage() {
   const { data, org, isAdmin, setSettings, issues } = useOrg();
   const { search } = useLocation();
@@ -142,7 +151,6 @@ export function ReglagesPage() {
 
   const modOn = (m: (typeof MODS)[number]) => m.module !== null && !s.disabled_modules.includes(m.module) && (plan.active_modules || !["ports", "vulns"].includes(m.module));
   const available = MODS.filter((m) => m.module !== null);
-  const coming = MODS.filter((m) => m.module === null);
   const active = available.filter(modOn).length;
   const toggleMod = (module: string) => {
     const off = s.disabled_modules.includes(module);
@@ -258,215 +266,192 @@ export function ReglagesPage() {
 
   return (
     <>
-      <div className="todayhead">
+      <div className="ph">
         <div>
-          <p className="hello">{tr("Réglages", "Settings")}</p>
-          <h1 className="lead lead2">{SECTIONS.find(([k]) => k === sec)?.[1]}</h1>
+          <h1>{tr("Réglages", "Settings")}</h1>
+          <p>{tr("Ce que nous vérifions, quand, qui est prévenu, et votre abonnement.", "What we check, when, who is told, and your subscription.")}</p>
         </div>
       </div>
-      {/* As in most settings pages: the sections in a menu on the left, the
-          settings in a reading column (desktop); pills on a phone. */}
+      {/* As in most settings pages: the sections in a grouped menu on the
+          left, the settings in a reading column (desktop); pills on a phone. */}
       <div className="setlayout">
       <nav className="filters setnav" aria-label={tr("Sections des réglages", "Settings sections")}>
-        {SECTIONS.map(([k, l]) => (
-          <Link key={k} className="pill" to={settingsPath(org.org_id, k)} aria-current={sec === k ? "page" : undefined}>
-            {l}
-          </Link>
+        {navGroups().map(([g, keys]) => (
+          <Fragment key={g}>
+            <p className="setgroup">{g}</p>
+            {SECTIONS.filter(([k]) => keys.includes(k)).map(([k, l]) => (
+              <Link key={k} className="pill" to={settingsPath(org.org_id, k)} aria-current={sec === k ? "page" : undefined}>
+                {l}
+              </Link>
+            ))}
+          </Fragment>
         ))}
       </nav>
       <div className="setmain">
       {sec === "scans" && (
         <>
-      {/* Counted against the checks that exist: one still to come (data
-          leaks, no provider yet) is named, never counted as missing. */}
-      <div className="cover">
-        <div className="covernum">
-          <b id="cov-n">{active}</b>
-          <span>{tr(`vérifications actives sur ${available.length}`, `of ${available.length} checks active`)}</span>
-        </div>
-        <div className="covertrack">
-          {available.map((m) => (
-            <i key={m.key} data-cov={m.key} className={modOn(m) ? "on" : ""} />
-          ))}
-        </div>
-        <p id="next-scan">{schedText(s)}</p>
-        {coming.length > 0 && <p className="covsoon">{tr(`${coming.map((m) => m.title).join(", ")} : bientôt`, `${coming.map((m) => m.title).join(", ")}: coming soon`)}</p>}
-      </div>
-
-      <div className="section">
-        <h2>{tr("Ce qu’on vérifie", "What we check")}</h2>
-        <div className="mods">
-          {MODS.map((m) => {
-            const on = modOn(m);
-            const soon = m.module === null;
-            const locked = !soon && !plan.active_modules && (m.module === "ports" || m.module === "vulns");
-            return (
-              <div key={m.key} className={"mod" + (on ? "" : " off") + (soon ? " is-soon" : "")}>
-                <ModIcon>{m.icon}</ModIcon>
-                <div>
-                  <p className="mt">
-                    {m.title}
-                    {soon && <Soon />}
-                  </p>
-                  <p className="md">{m.desc}</p>
-                  <p className="ms">
-                    <i />
-                    <span>{modStatus(m.module)}</span>
-                  </p>
+          <section className="panel">
+            <header>
+              <h2>{tr("Ce que nous vérifions", "What we check")}</h2>
+              {/* Counted against the checks that exist: one still to come (data
+                  leaks, no provider yet) is named, never counted as missing. */}
+              <span className="panelsub" id="cov-n">
+                {tr(`${active} vérification${active > 1 ? "s" : ""} active${active > 1 ? "s" : ""} sur ${available.length}`, `${active} of ${available.length} checks active`)}
+              </span>
+            </header>
+            {MODS.map((m) => {
+              const on = modOn(m);
+              const soon = m.module === null;
+              const locked = !soon && !plan.active_modules && (m.module === "ports" || m.module === "vulns");
+              const status = modStatus(m.module);
+              return (
+                <div key={m.key} className={"srow" + (soon ? " off" : "")}>
+                  <div>
+                    <b>
+                      {m.title}
+                      {soon && <Soon />}
+                    </b>
+                    <p>
+                      {m.desc}
+                      {status ? " · " + status : ""}
+                    </p>
+                  </div>
+                  <div className="ctl">
+                    <Switch on={on} label={m.title} disabled={soon || locked} onClick={() => m.module && toggleMod(m.module)} />
+                  </div>
                 </div>
-                <Switch on={on} label={m.title} disabled={soon || locked} onClick={() => m.module && toggleMod(m.module)} />
+              );
+            })}
+          </section>
+
+          <section className="panel" style={{ marginTop: 18 }}>
+            <header>
+              <h2>{tr("Planification", "Schedule")}</h2>
+              <span className="panelsub" id="next-scan">
+                {schedText(s)}
+              </span>
+            </header>
+            <div className="srow">
+              <div>
+                <b>{tr("Profondeur", "Depth")}</b>
+                <p>{(() => {
+                  const cur = prof.find(([k]) => k === s.profile) ?? prof[1]!;
+                  return tr(`${cur[1]} : ${cur[4].toLowerCase()}, environ ${cur[3]}.`, `${cur[1]}: ${cur[4].toLowerCase()}, about ${cur[3]}.`);
+                })()}</p>
               </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="section">
-        <h2>{tr("Profondeur du scan", "Scan depth")}</h2>
-        <div className="profs" role="group" aria-label={tr("Profil de scan", "Scan profile")}>
-          {prof.map(([k, l, lvl, dur, d]) => (
-            <button
-              key={k}
-              type="button"
-              className="prof"
-              aria-pressed={s.profile === k}
-              aria-disabled={(k === "deep" && !plan.deep_scans) || undefined}
-              onClick={() => {
-                if (k !== "deep") save({ ...s, profile: k });
-                else if (!isAdmin) toast(tr("Réservé aux administrateurs", "Administrators only"));
-                else if (!plan.deep_scans) toast(tr("Le profil approfondi est inclus dans l’offre Pro. Changez d’offre plus bas.", "The deep profile is included in the Pro plan. Change plans below."));
-                else if (s.profile !== "deep")
-                  showSheet(
-                    <ConsentSheet
-                      onConfirm={async () => {
-                        const next: OrgSettings = { ...s, profile: "deep", deep_consent: true };
-                        const saved = await api.saveSettings(org.org_id, next);
-                        setDraft(saved);
-                        setSettings(saved);
-                        closeAll();
-                        toast(tr("Profil approfondi activé", "Deep profile turned on"));
+              <div className="ctl">
+                <div className="cseg" role="group" aria-label={tr("Profil de scan", "Scan profile")}>
+                  {prof.map(([k, l]) => (
+                    <button
+                      key={k}
+                      type="button"
+                      aria-pressed={s.profile === k}
+                      aria-disabled={(k === "deep" && !plan.deep_scans) || undefined}
+                      onClick={() => {
+                        if (k !== "deep") save({ ...s, profile: k });
+                        else if (!isAdmin) toast(tr("Réservé aux administrateurs", "Administrators only"));
+                        else if (!plan.deep_scans) toast(tr("Le profil approfondi est inclus dans l’offre Pro. Changez d’offre dans Abonnement.", "The deep profile is included in the Pro plan. Change plans in Subscription."));
+                        else if (s.profile !== "deep")
+                          showSheet(
+                            <ConsentSheet
+                              onConfirm={async () => {
+                                const next: OrgSettings = { ...s, profile: "deep", deep_consent: true };
+                                const saved = await api.saveSettings(org.org_id, next);
+                                setDraft(saved);
+                                setSettings(saved);
+                                closeAll();
+                                toast(tr("Profil approfondi activé", "Deep profile turned on"));
+                              }}
+                            />,
+                          );
                       }}
-                    />,
-                  );
-              }}
-            >
-              <span className="bars" aria-hidden="true">
-                {[1, 2, 3].map((x) => (
-                  <i key={x} className={x <= lvl ? "on" : ""} style={{ height: 6 + x * 6 + "px" }} />
-                ))}
-              </span>
-              <span className="pt2">{l}</span>
-              <span className="pd">{d}</span>
-              <span className="pdur">{dur}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="section">
-        <h2>{tr("Quand scanner", "When to scan")}</h2>
-        <div className="rpanel setpanel" style={{ marginTop: 12 }}>
-          <div className="setrow">
-            <div>
-              <p className="mt">{tr("Fréquence", "Frequency")}</p>
-              <p className="md">{tr("Un scan complet de vos domaines, selon votre offre.", "A full scan of your domains, as your plan allows.")}</p>
+                    >
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="seg2" role="group" aria-label={tr("Fréquence", "Frequency")}>
-            {(
-              [
-                ["jour", tr("Chaque jour", "Every day")],
-                ["semaine", tr("Chaque semaine", "Every week")],
-                ["mois", tr("Chaque mois", "Every month")],
-              ] as const
-            ).map(([k, l]) => (
-              <button key={k} type="button" aria-pressed={freqKey === k} onClick={() => save({ ...s, frequency: FREQ[k] as OrgSettings["frequency"] })}>
-                {l}
-              </button>
-            ))}
-          </div>
-          </div>
-          <div className="setrow">
-            <div>
-              <p className="mt">{tr("Jour", "Day")}</p>
-              <p className="md">{tr("Pour un scan chaque semaine.", "For a weekly scan.")}</p>
+            <div className="srow">
+              <div>
+                <label htmlFor="freq">
+                  <b>{tr("Fréquence", "Frequency")}</b>
+                </label>
+                <p>{tr("Le scan complet de chaque domaine vérifié, selon votre offre.", "The full scan of each verified domain, as your plan allows.")}</p>
+              </div>
+              <div className="ctl">
+                <select
+                  id="freq"
+                  className="cselect"
+                  value={freqKey}
+                  onChange={(e) => save({ ...s, frequency: FREQ[e.target.value as keyof typeof FREQ] as OrgSettings["frequency"] })}
+                >
+                  {freqKey === "" && (
+                    <option value="" disabled>
+                      {tr("Aucun scan programmé", "No scheduled scan")}
+                    </option>
+                  )}
+                  <option value="jour">{tr("Chaque jour", "Every day")}</option>
+                  <option value="semaine">{tr("Chaque semaine", "Every week")}</option>
+                  <option value="mois">{tr("Chaque mois", "Every month")}</option>
+                </select>
+              </div>
             </div>
-            <div className={"days" + (s.frequency === "daily" ? " mute" : "")} role="group" aria-label={tr("Jour", "Day")}>
-            {(tr("L M M J V S D", "M T W T F S S").split(" ")).map((d, i) => (
-              <button key={i} type="button" aria-pressed={day === i} aria-label={dayName(i)} onClick={() => save({ ...s, weekday: toApiDay(i), frequency: s.frequency || "weekly" })}>
-                {d}
-              </button>
-            ))}
-          </div>
-          </div>
-          <div className="setrow">
-            <div>
-              <label className="mt" htmlFor="hour">
-                {tr("Heure de départ", "Start time")}
-              </label>
-              <p className="md">
-              {s.hour < 6 || s.hour >= 20
-                ? tr("De nuit : c’est là que le scan gêne le moins.", "At night: that is when the scan disturbs least.")
-                : tr("En journée : la partie foncée de la barre est la nuit, où le scan gêne le moins.", "In the daytime: the dark part of the bar is night, when the scan disturbs least.")}
-            </p>
+            <div className="srow">
+              <div>
+                <label htmlFor="sday">
+                  <b>{tr("Jour et heure", "Day and time")}</b>
+                </label>
+                <p>
+                  {tr(`Fuseau ${Intl.DateTimeFormat().resolvedOptions().timeZone}. `, `Time zone ${Intl.DateTimeFormat().resolvedOptions().timeZone}. `)}
+                  {s.hour < 6 || s.hour >= 20 ? tr("De nuit : c’est là que le scan gêne le moins.", "At night: that is when the scan disturbs least.") : tr("La nuit gêne moins vos visiteurs.", "Night disturbs your visitors less.")}
+                </p>
+              </div>
+              <div className="ctl">
+                <select
+                  id="sday"
+                  className="cselect"
+                  aria-label={tr("Jour", "Day")}
+                  value={day}
+                  disabled={s.frequency === "daily"}
+                  onChange={(e) => save({ ...s, weekday: toApiDay(Number(e.target.value)), frequency: s.frequency || "weekly" })}
+                >
+                  {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                    <option key={i} value={i}>
+                      {dayName(i).charAt(0).toUpperCase() + dayName(i).slice(1)}
+                    </option>
+                  ))}
+                </select>
+                <select id="hour" className="cselect short" aria-label={tr("Heure de départ", "Start time")} value={s.hour} onChange={(e) => save({ ...s, hour: Number(e.target.value), frequency: s.frequency || "weekly" })}>
+                  {Array.from({ length: 24 }, (_, h) => (
+                    <option key={h} value={h}>
+                      {String(h).padStart(2, "0")}:00
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div className="slide">
-              <output id="hour-out" htmlFor="hour">
-              {String(s.hour).padStart(2, "0")}:00
-            </output>
-              <input
-              id="hour"
-              className="hourrange"
-              type="range"
-              min="0"
-              max="23"
-              step="1"
-              value={s.hour}
-              onChange={(e) => save({ ...s, hour: Number(e.target.value), frequency: s.frequency || "weekly" }, 600)}
-            />
-              <div className="ticks" aria-hidden="true">
-              {[0, 6, 12, 18, 23].map((h) => (
-                <span key={h} style={{ "--at": h / 23 } as CSSProperties}>
-                  {h} h
-                </span>
-              ))}
+            <div className="srow">
+              <div>
+                <label htmlFor="rate">
+                  <b>{tr("Vitesse", "Speed")}</b>
+                </label>
+                <p id="rate-hint">{rateHint(rate)}</p>
+              </div>
+              <div className="ctl">
+                <select id="rate" className="cselect short" value={rate} onChange={(e) => save({ ...s, rate_per_sec: Number(e.target.value) })}>
+                  {[...new Set([5, 10, 20, 50, 100, 200, rate])]
+                    .sort((x, y) => x - y)
+                    .map((r) => (
+                      <option key={r} value={r}>
+                        {tr(`${r} req/s`, `${r} req/s`)}
+                      </option>
+                    ))}
+                </select>
+              </div>
             </div>
-            </div>
-          </div>
-          <div className="setrow">
-            <div>
-              <label className="mt" htmlFor="rate">
-                {tr("Vitesse du scan", "Scan speed")}
-              </label>
-              <p className="md" id="rate-hint">{rateHint(rate)}</p>
-            </div>
-            <div className="slide">
-              <output id="rate-out" htmlFor="rate">
-              <span className="pulse" id="pulse" aria-hidden="true" style={{ "--spd": (3.2 - rate / 80).toFixed(2) + "s" } as CSSProperties}>
-                {Array.from({ length: 5 }, (_, i) => (
-                  <i key={i} />
-                ))}
-              </span>
-              {tr(`${rate} requêtes par seconde`, `${rate} requests per second`)}
-            </output>
-              <input
-              id="rate"
-              type="range"
-              min="5"
-              max="200"
-              step="5"
-              value={rate}
-              style={{ "--fill": (rate - 5) / 195 } as CSSProperties}
-              onChange={(e) => save({ ...s, rate_per_sec: Number(e.target.value) }, 600)}
-            />
-              <div className="ticks ends" aria-hidden="true">
-              <span>{tr("Doux", "Gentle")}</span>
-              <span>{tr("Rapide", "Fast")}</span>
-            </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
+            <p className="savenote">{tr("Chaque changement est enregistré aussitôt et s’applique au prochain scan.", "Every change is saved at once and applies to the next scan.")}</p>
+          </section>
         </>
       )}
 

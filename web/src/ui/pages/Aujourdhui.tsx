@@ -1,216 +1,21 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Activity } from "../../api/types";
 import { Link, navigate } from "../../router";
 import { appPath, settingsPath } from "../AppShell";
-import { Tick } from "../icons";
-import { COLOR, DIST, PROGRESS_DAYS, SEV, byPriority, feedDay, groupIssues, groupVerdict, hostsText, progressOf, scoreLevel, verdictText, worst, type AssetView, type Issue, type IssueGroup } from "../model";
-import { locale, tr } from "../../i18n";
+import { Soon, Tick } from "../icons";
+import { G, Ico } from "../glyphs";
+import { PROGRESS_DAYS, SEV, byPriority, families, feedDay, groupIssues, groupVerdict, hostsText, progressOf, scoreLevel, verdictText, type IssueGroup } from "../model";
+import { getLang, locale, tr } from "../../i18n";
 import { localTitle } from "../lang";
 import { useOrg } from "../OrgData";
-import { AssetSheet, FindingSheet, ScoreSheet, useFix } from "../sheets";
+import { FindingSheet, ScoreSheet, useFix } from "../sheets";
 import { scanTimes, useScanNow, when } from "../ScanLine";
 import { useUI } from "../ui";
 import { AddPanel } from "./Actifs";
 
-/** countTo animates a number from one value to another (the mockup's countTo). */
-function useCount(to: number): number {
-  const [v, setV] = useState(to);
-  const from = useRef(to);
-  useEffect(() => {
-    const start = from.current;
-    if (start === to) return;
-    const t0 = performance.now();
-    let raf = 0;
-    const step = (t: number) => {
-      const k = Math.min(1, (t - t0) / 700);
-      setV(Math.round(start + (to - start) * (1 - Math.pow(1 - k, 3))));
-      if (k < 1) raf = requestAnimationFrame(step);
-      else from.current = to;
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [to]);
-  return v;
-}
-
-export function Radar({ assets, issues, score }: { assets: AssetView[]; issues: Issue[]; score: number | null }) {
-  const { showSheet } = useUI();
-  const [hot, setHot] = useState<string | null>(null);
-  const [tip, setTip] = useState<{ left: number; top: number; below: boolean } | null>(null);
-  const host = useRef<HTMLDivElement>(null);
-  const tipRef = useRef<HTMLDivElement>(null);
-  const shown = useCount(score ?? 0);
-  const openOf = (n: string) => issues.filter((i) => !i.fixed && i.host === n);
-  const pos = (a: AssetView) => {
-    const r = DIST[worst(openOf(a.n))];
-    const rad = (a.a * Math.PI) / 180;
-    return [150 + r * Math.cos(rad), 150 + r * Math.sin(rad)] as const;
-  };
-
-  const anchor = useRef<SVGGElement | null>(null);
-  const over = (a: AssetView, el: SVGGElement) => {
-    anchor.current = el;
-    setHot(a.n);
-  };
-  const out = () => {
-    anchor.current = null;
-    setHot(null);
-    setTip(null);
-  };
-  // Placed once the tooltip holds the hovered asset's content, before the
-  // browser paints (the mockup fills it, then measures): above the dot,
-  // or below it when the top would hide under the header.
-  useLayoutEffect(() => {
-    const h = host.current?.getBoundingClientRect();
-    const dot = anchor.current?.querySelectorAll("circle")[1]?.getBoundingClientRect();
-    const t = tipRef.current;
-    if (!hot || !h || !dot || !t) return;
-    const below = dot.top - t.offsetHeight - 14 < 84;
-    setTip({
-      left: Math.max(126, Math.min(h.width - 126, dot.left - h.left + dot.width / 2)),
-      top: (below ? dot.bottom : dot.top) - h.top,
-      below,
-    });
-  }, [hot]);
-  const open = (n: string) => {
-    out();
-    showSheet(<AssetSheet n={n} />);
-  };
-  const ringLabel = (r: number, txt: string) => (
-    <text className="rlabel" x="150" y={150 - r + 3.5} textAnchor="middle">
-      {txt}
-    </text>
-  );
-  const cur = hot ? assets.find((a) => a.n === hot) : undefined;
-  const curPos = cur ? pos(cur) : null;
-  const curOpen = cur ? openOf(cur.n) : [];
-
-  return (
-    <div className="radar" ref={host}>
-      <svg id="radar" className={hot ? "hot" : ""} viewBox="0 0 300 300" role="group" aria-label={tr("Carte de votre périmètre : plus un point est loin du centre, plus l'actif est exposé", "Map of your perimeter: the further a dot is from the centre, the more exposed the asset")}>
-        <circle cx="150" cy="150" r="128" fill="none" stroke="var(--ring)" strokeWidth="1.8" strokeDasharray="3 6" strokeLinecap="round" />
-        <circle cx="150" cy="150" r="100" fill="none" stroke="var(--ring)" strokeWidth="1.8" />
-        <circle cx="150" cy="150" r="74" fill="none" stroke="var(--ring)" strokeWidth="1.8" />
-        <line x1="22" x2="278" y1="150" y2="150" stroke="var(--ring)" strokeWidth="1" strokeDasharray="1 5" />
-        <line x1="150" x2="150" y1="22" y2="278" stroke="var(--ring)" strokeWidth="1" strokeDasharray="1 5" />
-        {ringLabel(128, tr("En danger", "At risk"))}
-        {ringLabel(100, tr("Exposé", "Exposed"))}
-        {ringLabel(74, tr("À surveiller", "To watch"))}
-        <line
-          id="rd-line"
-          x1="150"
-          y1="150"
-          x2={curPos ? curPos[0].toFixed(1) : 150}
-          y2={curPos ? curPos[1].toFixed(1) : 150}
-          stroke="var(--ink)"
-          strokeWidth="1.4"
-          strokeDasharray="3 4"
-          opacity={curPos ? 1 : 0}
-        />
-        <circle cx="150" cy="150" r="44" fill="var(--surface)" stroke="var(--ring)" strokeWidth="1.8" />
-        <text className="core" x="150" y="156" textAnchor="middle" fontSize="30" id="score-num">
-          {score === null ? "–" : shown}
-        </text>
-        <text x="150" y="172" textAnchor="middle" fontSize="10" fill="var(--ink2)">
-          {tr("sur 100", "out of 100")}
-        </text>
-        {assets.map((a) => {
-          const o = openOf(a.n);
-          const w = worst(o);
-          const [x, y] = pos(a);
-          return (
-            <g
-              key={a.n}
-              className={"dot" + (w === "crit" ? " hot" : "") + (hot === a.n ? " cur" : "")}
-              data-asset={a.n}
-              style={{ transform: `translate(${x.toFixed(1)}px,${y.toFixed(1)}px)` }}
-              tabIndex={0}
-              role="button"
-              aria-label={tr(`${a.n} : ${o.length} problème(s) ouvert(s)`, `${a.n}: ${o.length} open problem(s)`)}
-              onMouseEnter={(e) => over(a, e.currentTarget)}
-              onMouseLeave={out}
-              onFocus={(e) => over(a, e.currentTarget)}
-              onBlur={out}
-              onClick={() => open(a.n)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  open(a.n);
-                }
-              }}
-            >
-              <circle className="halo" r="7" fill={COLOR[w]} opacity="0" />
-              <circle r={w === "ok" ? 6 : 8} fill={COLOR[w]} stroke="var(--bg)" strokeWidth="3" />
-              <circle r="22" fill="transparent" />
-            </g>
-          );
-        })}
-      </svg>
-      <div
-        ref={tipRef}
-        className={"hmtip" + (tip ? " on" : "") + (tip?.below ? " below" : "")}
-        id="rdtip"
-        role="tooltip"
-        style={tip ? { left: tip.left + "px", top: tip.top + "px" } : undefined}
-      >
-        {cur && (
-          <>
-            <b>{cur.n}</b>
-            <em>{cur.k}</em>
-            {curOpen.length ? (
-              curOpen.map((i) => (
-                <span key={i.targetId + i.id}>
-                  <i style={{ background: COLOR[i.sev] }} />
-                  {i.title}
-                </span>
-              ))
-            ) : (
-              <span>
-                <i style={{ background: "var(--lagon)" }} />
-                {tr("Protégé, aucun problème ouvert.", "Protected, no open problem.")}
-              </span>
-            )}
-            <em>{tr("Cliquez pour ouvrir l’actif", "Click to open the asset")}</em>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/** shortDay words a scan date briefly: "sam. 21 nov., 05:00". */
 function shortDay(iso: string): string {
   const d = new Date(iso);
   return `${d.toLocaleDateString(locale(), { weekday: "short", day: "numeric", month: "short" })}, ${d.toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" })}`;
-}
-
-/** RadarLegend says what the radar's dots mean: their colour is the worst
- * open problem of the asset, their distance from the centre its exposure. */
-function RadarLegend() {
-  const items: [string, string][] = [
-    [COLOR.crit, tr("Critique", "Critical")],
-    [COLOR.high, tr("Élevé", "High")],
-    [COLOR.med, tr("Moyen ou faible", "Medium or low")],
-    [COLOR.ok, tr("Protégé", "Protected")],
-  ];
-  return (
-    <>
-      <ul className="rlegend" aria-label={tr("Légende du radar", "Radar legend")}>
-        {items.map(([c, l]) => (
-          <li key={l}>
-            <i style={{ background: c }} aria-hidden="true" />
-            {l}
-          </li>
-        ))}
-      </ul>
-      <p className="md">
-        {tr(
-          "Chaque point est un de vos actifs, de la couleur de son problème le plus grave. Plus il est loin du centre, plus il est exposé.",
-          "Each dot is one of your assets, in the colour of its most serious problem. The further from the centre, the more exposed it is.",
-        )}
-      </p>
-    </>
-  );
 }
 
 function FeedLine({ a, now }: { a: Activity; now: Date }) {
@@ -446,7 +251,7 @@ function FreeBand() {
 }
 
 export function AujourdhuiPage() {
-  const { me, org, data, issues, assets, verdicts } = useOrg();
+  const { me, org, data, issues, verdicts } = useOrg();
   const { showSheet } = useUI();
   const fix = useFix();
   const scanNow = useScanNow();
@@ -533,138 +338,362 @@ export function AujourdhuiPage() {
   const openGroups = groups.filter((g) => !g.fixed);
   const bySev = (["crit", "high", "med", "low"] as const).map((k) => [k, openGroups.filter((g) => g.lead.sev === k).length] as const);
   const times = scanTimes(data.scans, domains);
+  const fams = families(data.checks);
+  const delta = progress && progress.from !== null && score !== null ? score - progress.from : 0;
   return (
     <>
       {!data.subscription.plan.monitoring && <FreeBand />}
-      <div className="todayhead">
+      <div className="ph">
         <div>
-          <p className="hello">{first ? tr(`Bonjour ${first}`, `Hello ${first}`) : tr("Bonjour", "Hello")}</p>
-          <h1 className="lead lead2">{head}</h1>
+          <h1>{first ? tr(`Bonjour ${first}`, `Hello ${first}`) : tr("Bonjour", "Hello")}</h1>
+          <p>{head}</p>
         </div>
-      </div>
-
-      {/* The four answers to "where do I stand?", each with its action. */}
-      <div className="kpis">
-        <div className="rpanel kpi">
-          <small>{tr("Score de sécurité", "Security score")}</small>
-          <p className="kpinum">
-            <b>{score ?? "–"}</b>
-            {score !== null && <span>/100</span>}
-          </p>
-          <p className="kpisub">{scoreLevel(score)}</p>
-          <button className="link" type="button" onClick={() => showSheet(<ScoreSheet />)}>
-            {tr("Comprendre mon score", "Understand my score")}
-          </button>
-        </div>
-        <div className="rpanel kpi">
-          <small>{tr("Problèmes ouverts", "Open problems")}</small>
-          <p className="kpinum">
-            <b>{openGroups.length}</b>
-          </p>
-          <div className="sevmini" role="img" aria-label={bySev.map(([k, n]) => `${SEV[k][0]} : ${n}`).join(", ")}>
-            {bySev.map(([k, n]) => (n ? <i key={k} style={{ flex: n, background: COLOR[k] }} /> : null))}
-            {!openGroups.length && <i style={{ flex: 1, background: COLOR.ok }} />}
-          </div>
-          <Link className="link" to={appPath(org.org_id, "problemes")}>
-            {tr("Tout voir", "See all")}
+        <div className="phacts">
+          <Link className="btn ghost sm" to={appPath(org.org_id, "rapports")}>
+            {tr("Rapports PDF", "PDF reports")}
           </Link>
-        </div>
-        <div className="rpanel kpi">
-          <small>{tr(`Corrigés en ${PROGRESS_DAYS} jours`, `Fixed in ${PROGRESS_DAYS} days`)}</small>
-          <p className="kpinum">
-            <b>{progress?.fixed ?? 0}</b>
-          </p>
-          <p className="kpisub">
-            {progress && progress.from !== null && progress.from !== progress.to
-              ? tr(`Score ${progress.from} → ${progress.to}`, `Score ${progress.from} → ${progress.to}`)
-              : tr("Score stable", "Steady score")}
-          </p>
-          <Link className="link" to={appPath(org.org_id, "rapports")}>
-            {tr("Voir l’évolution", "See the trend")}
-          </Link>
-        </div>
-        <div className="rpanel kpi">
-          <small>{tr("Prochain scan", "Next scan")}</small>
-          <p className="kpinum kpidate">
-            <b>{times.running ? tr("En cours", "Running") : times.next ? shortDay(times.next) : "–"}</b>
-          </p>
-          <p className="kpisub">
-            {times.running
-              ? tr("Les résultats arrivent ici.", "Results will appear here.")
-              : times.last
-                ? tr(`Dernier : ${when(times.last)}`, `Last: ${when(times.last)}`)
-                : tr("Pas encore scanné", "Not scanned yet")}
-          </p>
-          <button className="link" type="button" disabled={times.running} onClick={() => void scanNow(domains)}>
+          <button className="btn sm" type="button" disabled={times.running} onClick={() => void scanNow(domains)}>
             {times.running ? tr("Scan en cours", "Scan running") : tr("Scanner maintenant", "Scan now")}
           </button>
         </div>
       </div>
 
-      <div className="today2">
-        <div className="todaycol">
-        <section className="rpanel">
-          <div className="rhead">
-            <h2>{tr("À faire aujourd’hui", "To do today")}</h2>
+      {/* The four answers to "where do I stand?", in one strip. */}
+      <div className="statstrip">
+        <div className="stat">
+          <small><Ico d={G.shield} />{tr("Score de sécurité", "Security score")}</small>
+          <p className="statv">
+            <b>{score ?? "–"}</b>
+            {score !== null && <span>/100</span>}
+            {delta !== 0 && <em className={"delta " + (delta > 0 ? "up" : "dn")}>{(delta > 0 ? "+" : "") + delta}</em>}
+            <Spark points={data.overview.trend} />
+          </p>
+          <p className="statfoot">
+            <span>{scoreLevel(score)}</span>
+            <button className="link" type="button" onClick={() => showSheet(<ScoreSheet />)}>
+              {tr("Comprendre mon score", "Understand my score")}
+            </button>
+          </p>
+        </div>
+        <div className="stat">
+          <small><Ico d={G.bug} tone="red" />{tr("Problèmes ouverts", "Open problems")}</small>
+          <p className="statv">
+            <b>{openGroups.length}</b>
+            <span>
+              {bySev
+                .filter(([, n]) => n)
+                .map(([k, n]) => `${n} ${SEV[k][0].toLowerCase()}${n > 1 && getLang() === "fr" ? "s" : ""}`)
+                .join(" · ") || tr("rien à corriger", "nothing to fix")}
+            </span>
+          </p>
+          <div className="sevbar" role="img" aria-label={bySev.map(([k, n]) => `${SEV[k][0]} : ${n}`).join(", ")}>
+            {bySev.map(([k, n]) => (n ? <i key={k} style={{ flex: n, background: SEVVAR[k] }} /> : null))}
+            {!openGroups.length && <i style={{ flex: 1, background: "var(--ok)" }} />}
+          </div>
+        </div>
+        <div className="stat">
+          <small><Ico d={G.check} tone="green" />{tr(`Corrigés sur ${PROGRESS_DAYS} jours`, `Fixed in ${PROGRESS_DAYS} days`)}</small>
+          <p className="statv">
+            <b>{progress?.fixed ?? 0}</b>
+          </p>
+          <p className="statfoot">
+            <span>
+              {progress && progress.from !== null && progress.from !== progress.to
+                ? tr(`Score ${progress.from} → ${progress.to}`, `Score ${progress.from} → ${progress.to}`)
+                : tr("Score stable", "Steady score")}
+            </span>
+          </p>
+        </div>
+        <div className="stat">
+          <small><Ico d={G.clock} tone="violet" />{tr("Prochain scan", "Next scan")}</small>
+          <p className="statv">
+            <b className="statdate">{times.running ? tr("En cours", "Running") : times.next ? shortDay(times.next) : "–"}</b>
+          </p>
+          <p className="statfoot">
+            <span>
+              {times.running
+                ? tr("Les résultats arrivent ici.", "Results will appear here.")
+                : times.last
+                  ? tr(`Dernier : ${when(times.last)}`, `Last: ${when(times.last)}`)
+                  : tr("Pas encore scanné", "Not scanned yet")}
+            </span>
+          </p>
+        </div>
+      </div>
+
+      <div className="grid2">
+        <section className="panel">
+          <header>
+            <h2><Ico d={G.list} />{tr("À faire aujourd’hui", "To do today")}</h2>
             <span className="countchip" id="todo-prog">
               {tr(`${top.length - left} sur ${top.length}`, `${top.length - left} of ${top.length}`)}
             </span>
-          </div>
-          <p className="hint">
+            <Link className="phlink" to={appPath(org.org_id, "problemes")}>
+              {tr("Tous les problèmes →", "All problems →")}
+            </Link>
+          </header>
+          <p className="panelnote">
             {tr(
               "Classé par ce qui vous protège le plus, le plus vite. Cochez quand c’est corrigé : nous vérifions aussitôt.",
               "Ranked by what protects you most, fastest. Tick when it is fixed: we check at once.",
             )}
           </p>
           {top.length ? (
-            <ul className="todo">
+            <ul className="todo prio">
               {top.map((g) => {
                 const i = g.lead;
                 const v = groupVerdict(g.members, verdicts);
                 return (
                   <li key={g.key} className={g.fixed ? "done" : ""}>
                     <button className="check" type="button" aria-pressed={g.fixed} aria-label={tr(`Marquer « ${i.title} » comme fait`, `Mark “${i.title}” as done`)} onClick={() => void fix(g.members)}>
-                      <Tick size={20} width={3} />
+                      <Tick size={14} width={3} />
                     </button>
-                    <div>
+                    <div className="prioMain">
                       <p className="t">{i.title}</p>
                       <p className="m">
-                        {hostsText(g.hosts)}
-                        {tr(`, environ ${i.mins} min · `, `, about ${i.mins} min · `)}
-                        <button className="link" type="button" style={{ minHeight: 0 }} onClick={() => showSheet(<FindingSheet id={i.id} targetId={i.targetId} />)}>
+                        <span className="mono">{hostsText(g.hosts)}</span>
+                        {" · "}
+                        <button className="link" type="button" onClick={() => showSheet(<FindingSheet id={i.id} targetId={i.targetId} />)}>
                           {tr("Comment faire", "How to")}
                         </button>
                       </p>
                       {v && <p className={"verdict v-" + v.state}>{verdictText(v)}</p>}
                     </div>
+                    <span className={"sevpill p-" + i.sev}>{SEV[i.sev][0]}</span>
+                    <span className="priomins">{tr(`${i.mins} min`, `${i.mins} min`)}</span>
                     <span className="gain">+{g.gain} pts</span>
                   </li>
                 );
               })}
             </ul>
           ) : (
-            <p className="why">{tr("Rien à corriger : nous continuons de surveiller.", "Nothing to fix: we keep watching.")}</p>
+            <p className="panelnote">{tr("Rien à corriger : nous continuons de surveiller.", "Nothing to fix: we keep watching.")}</p>
           )}
+          <p className="panelfoot">
+            {openGroups.length
+              ? tr(
+                  `${openGroups.length} problème${openGroups.length > 1 ? "s" : ""} ouvert${openGroups.length > 1 ? "s" : ""} en tout, environ ${openGroups.reduce((m, g) => m + g.lead.mins, 0)} minutes pour tout corriger.`,
+                  `${openGroups.length} open problem${openGroups.length > 1 ? "s" : ""} in all, about ${openGroups.reduce((m, g) => m + g.lead.mins, 0)} minutes to fix everything.`,
+                )
+              : tr("Aucun problème ouvert.", "No open problem.")}
+          </p>
         </section>
-        <section className="rpanel">
-        <h2>{tr("Depuis votre dernière visite", "Since your last visit")}</h2>
-        {data.activity.length ? (
-          <ul className="feed">
-            {data.activity.slice(0, 5).map((a, k) => (
-              <FeedLine key={k} a={a} now={now} />
-            ))}
-          </ul>
-        ) : (
-          <p className="hint">{tr("Rien de nouveau ces sept derniers jours.", "Nothing new in the last seven days.")}</p>
-        )}
+
+        <section className="panel">
+          <header>
+            <h2><Ico d={G.target} tone="green" />{tr("Posture par famille de contrôles", "Posture by family of checks")}</h2>
+            <Link className="phlink" to={appPath(org.org_id, "rapports")}>
+              {tr("Détail →", "Detail →")}
+            </Link>
+          </header>
+          <div className="panelbody">
+            <div className="gauge">
+              <svg width="64" height="64" viewBox="0 0 64 64" role="img" aria-label={tr(`Score ${score ?? "inconnu"} sur 100`, `Score ${score ?? "unknown"} out of 100`)}>
+                <circle cx="32" cy="32" r="27" fill="none" stroke="var(--line2)" strokeWidth="7" />
+                {score !== null && (
+                  <circle cx="32" cy="32" r="27" fill="none" stroke="var(--azur)" strokeWidth="7" strokeLinecap="round" strokeDasharray={`${(score / 100) * 169.6} 170`} transform="rotate(-90 32 32)" />
+                )}
+                <text id="score-num" x="32" y="37.5" textAnchor="middle" className="gaugenum">
+                  {score ?? "–"}
+                </text>
+              </svg>
+              <div>
+                <b>{tr("Sur 100", "Out of 100")}</b>
+                <p>
+                  {(() => {
+                    const weak = fams.filter(([, p, t]) => t > 0 && p < t).map(([name]) => name);
+                    return weak.length
+                      ? tr(`À renforcer : ${weak.join(", ")}.`, `To strengthen: ${weak.join(", ")}.`)
+                      : tr("Toutes les familles évaluées sont au vert.", "Every evaluated family is green.");
+                  })()}
+                </p>
+              </div>
+            </div>
+            {fams.map(([name, pass, total]) => {
+              const pct = total ? pass / total : 0;
+              return (
+                <div className="famrow" key={name}>
+                  <b>{name}</b>
+                  <span className="track" role="img" aria-label={tr(`${name} : ${pass} réussis sur ${total}`, `${name}: ${pass} of ${total} passed`)}>
+                    {total > 0 && <i style={{ width: `${Math.max(pct * 100, 4)}%`, background: pct === 1 ? "var(--ok)" : pct >= 0.5 ? "var(--high)" : "var(--crit)" }} />}
+                  </span>
+                  <span className="num">{total ? `${pass}/${total}` : "–"}</span>
+                </div>
+              );
+            })}
+            <div className="famrow off">
+              <b>{tr("Fuites de données", "Data leaks")}</b>
+              <span className="track" />
+              <span>
+                <Soon />
+              </span>
+            </div>
+          </div>
         </section>
-        </div>
-        <section className="rpanel perim">
-          <h2>{tr("Votre périmètre", "Your perimeter")}</h2>
-          <Radar assets={assets} issues={issues} score={score} />
-          <RadarLegend />
+      </div>
+
+      <div className="grid2">
+        <section className="panel">
+          <header>
+            <h2><Ico d={G.chart} />{tr("Évolution du score", "Score trend")}</h2>
+            <Link className="phlink" to={appPath(org.org_id, "rapports")}>
+              {tr("Rapports →", "Reports →")}
+            </Link>
+          </header>
+          <div className="panelbody">
+            <TrendChart points={data.overview.trend} />
+          </div>
+        </section>
+        <section className="panel">
+          <header>
+            <h2><Ico d={G.pulse} tone="slate" />{tr("Depuis votre dernière visite", "Since your last visit")}</h2>
+            <span className="panelsub">{tr("7 jours", "7 days")}</span>
+          </header>
+          {data.activity.length ? (
+            <ul className="feed feed2">
+              {data.activity.slice(0, 6).map((a, k) => (
+                <FeedLine key={k} a={a} now={now} />
+              ))}
+            </ul>
+          ) : (
+            <p className="panelnote">{tr("Rien de nouveau ces sept derniers jours.", "Nothing new in the last seven days.")}</p>
+          )}
+          <p className="panelfoot">
+            {tr("Un problème grave vous est aussi envoyé par email. ", "A serious problem is also sent to you by email. ")}
+            <Link to={settingsPath(org.org_id, "alertes")}>{tr("Régler les alertes", "Set the alerts")}</Link>
+          </p>
         </section>
       </div>
     </>
+  );
+}
+
+/** SEVVAR are the console's severity colours. */
+const SEVVAR: Record<"crit" | "high" | "med" | "low", string> = { crit: "var(--crit)", high: "var(--high)", med: "var(--med)", low: "var(--low)" };
+
+/** TrendChart draws the daily score: an area under a line, one scale for
+ * the line and its labels. The pointer (or the arrow keys) picks a day: a
+ * guide line, its point and a tooltip with its score and change. */
+function TrendChart({ points }: { points: { at: string; score: number | null }[] }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const pts = points.filter((p): p is { at: string; score: number } => p.score !== null);
+  if (pts.length < 2) return <p className="panelnote">{tr("La courbe apparaît après deux scans.", "The curve appears after two scans.")}</p>;
+  const W = 640;
+  const H = 180;
+  const L = 34;
+  const top = 14;
+  const bottom = 150;
+  const n = pts.length;
+  const lo = Math.max(0, Math.floor((Math.min(...pts.map((p) => p.score)) - 10) / 20) * 20);
+  const y = (v: number) => bottom - ((v - lo) / (100 - lo)) * (bottom - top);
+  const x = (k: number) => L + (k / (n - 1)) * (W - L - 6);
+  const line = pts.map((p, k) => `${x(k).toFixed(1)},${y(p.score).toFixed(1)}`).join(" ");
+  const ticks = [lo, lo + (100 - lo) / 2, 100].map((v) => Math.round(v));
+  const day = (iso: string) => new Date(iso).toLocaleDateString(locale(), { day: "numeric", month: "short" });
+  const last = pts[n - 1]!;
+  const pick = (e: { clientX: number; currentTarget: Element }) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const px = ((e.clientX - r.left) / r.width) * W;
+    setHover(Math.max(0, Math.min(n - 1, Math.round(((px - L) / (W - L - 6)) * (n - 1)))));
+  };
+  const h = hover !== null ? pts[hover]! : null;
+  const prev = hover !== null && hover > 0 ? pts[hover - 1]!.score : null;
+  const hx = hover !== null ? x(hover) : 0;
+  return (
+    <div
+      className="tchart"
+      tabIndex={0}
+      role="group"
+      aria-label={tr("Score par jour : flèches gauche et droite pour parcourir", "Score by day: left and right arrows to browse")}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowLeft") setHover(Math.max(0, (hover ?? n - 1) - 1));
+        if (e.key === "ArrowRight") setHover(Math.min(n - 1, (hover ?? n - 2) + 1));
+      }}
+      onBlur={() => setHover(null)}
+    >
+      <svg
+        className="trend"
+        viewBox={`0 0 ${W} ${H}`}
+        role="img"
+        aria-label={tr(`Score de ${pts[0]!.score} à ${last.score}`, `Score from ${pts[0]!.score} to ${last.score}`)}
+        onPointerMove={pick}
+        onPointerDown={pick}
+        onPointerLeave={() => setHover(null)}
+      >
+        <defs>
+          <linearGradient id="trendfill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor="var(--azur)" stopOpacity=".22" />
+            <stop offset="1" stopColor="var(--azur)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {ticks.map((v) => (
+          <g key={v}>
+            <line x1={L} x2={W - 6} y1={y(v)} y2={y(v)} stroke="var(--line2)" />
+            <text x="0" y={y(v) + 4}>
+              {v}
+            </text>
+          </g>
+        ))}
+        <path d={`M${x(0)},${bottom} L${line.replaceAll(" ", " L")} L${x(n - 1)},${bottom}Z`} fill="url(#trendfill)" />
+        <polyline fill="none" stroke="var(--azur)" strokeWidth="2.2" strokeLinejoin="round" points={line} />
+        {h ? (
+          <>
+            <line className="guide" x1={hx} x2={hx} y1={top} y2={bottom} stroke="var(--ink3)" />
+            <circle cx={hx} cy={y(h.score)} r="5" fill="var(--azur)" stroke="var(--surface)" strokeWidth="2.5" />
+          </>
+        ) : (
+          <circle cx={x(n - 1)} cy={y(last.score)} r="4" fill="var(--azur)" stroke="var(--surface)" strokeWidth="2" />
+        )}
+        <rect x={L} y={top} width={W - L - 6} height={bottom - top} fill="transparent" />
+        <text x={L} y={H - 6}>
+          {day(pts[0]!.at)}
+        </text>
+        <text x={W - 6} y={H - 6} textAnchor="end">
+          {tr("aujourd’hui", "today")}
+        </text>
+      </svg>
+      {h && (
+        <div
+          className="wtip"
+          role="status"
+          style={
+            {
+              left: `${(hx / W) * 100}%`,
+              top: `${(y(h.score) / H) * 100}%`,
+              "--shift": hx / W > 0.75 ? "-88%" : hx / W < 0.2 ? "-12%" : "-50%",
+              "--arrow": hx / W > 0.75 ? "88%" : hx / W < 0.2 ? "12%" : "50%",
+            } as CSSProperties
+          }
+        >
+          <b>
+            {h.score} <small>/100</small>
+          </b>
+          <span>{hover === n - 1 ? tr("Aujourd’hui", "Today") : day(h.at)}</span>
+          {prev !== null && h.score !== prev && (
+            <em className={h.score > prev ? "up" : "dn"}>
+              {h.score > prev ? "+" : "−"}
+              {Math.abs(h.score - prev)} {tr("depuis la veille", "since the day before")}
+            </em>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Spark is the score's small curve in the strip, the last point marked. */
+function Spark({ points }: { points: { score: number | null }[] }) {
+  const v = points.map((p) => p.score).filter((x): x is number => x !== null);
+  if (v.length < 2) return null;
+  const lo = Math.min(...v) - 2;
+  const hi = Math.max(...v) + 2;
+  const xy = v.map((n, i) => [(i / (v.length - 1)) * 84 + 2, 22 - ((n - lo) / (hi - lo || 1)) * 18] as const);
+  const line = xy.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const last = xy[xy.length - 1]!;
+  return (
+    <svg className="spark2" width="88" height="26" viewBox="0 0 88 26" aria-hidden="true">
+      <polyline points={line} fill="none" stroke="var(--azur)" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={last[0]} cy={last[1]} r="2.6" fill="var(--azur)" />
+    </svg>
   );
 }

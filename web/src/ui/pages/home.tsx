@@ -13,35 +13,15 @@ import { Link, navigate } from "../../router";
 import { MODS, ModIcon, Soon, Tick } from "../icons";
 import { money } from "../model";
 import { cleanDomain } from "../prefill";
-import { useBodyClass } from "../ui";
+import { useBodyClass, useUI } from "../ui";
+import { G, Glyph } from "../glyphs";
 import { MyPerimeter, price, PubFoot, PubHead, usePlans } from "./public";
-
-/** Glyph draws the small line icons of the capability grid. */
-function Glyph({ d }: { d: string }) {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d={d} />
-    </svg>
-  );
-}
-
-const G = {
-  mail: "M3 6h18v12H3zM3 7l9 6 9-6",
-  lock: "M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3",
-  globe: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18",
-  server: "M4 5h16v6H4zM4 13h16v6H4zM8 8h.01M8 16h.01",
-  bug: "M12 3 2 20h20zM12 10v4M12 17h.01",
-  bolt: "M13 2 4 14h7l-1 8 9-12h-7z",
-  code: "M8 8l-4 4 4 4M16 8l4 4-4 4M14 5l-4 14",
-  key: "M7 14a3 3 0 1 0 0 .01M9.5 12.5 19 3M15 7l2 2",
-  user: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0",
-  net: "M12 3v6M5 21v-4h14v4M12 9a2 2 0 1 0 0 .01M12 11v6",
-  file: "M6 3h9l4 4v14H6zM14 3v5h5M9 13h6M9 17h6",
-  bell: "M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4",
-};
 
 /** Shot is a product screenshot in a window frame. */
 function Shot({ src, alt, eager = false }: { src: string; alt: string; eager?: boolean }) {
+  // The dashboard in the page's theme: "x.jpg" in light, "x-dark.jpg" in dark.
+  const { theme } = useUI();
+  if (theme === "dark") src = src.replace(/\.jpg$/, "-dark.jpg");
   return (
     <figure className="shot">
       <span className="shotbar" aria-hidden="true">

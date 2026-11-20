@@ -7,10 +7,11 @@
 // side rather than sentence by sentence: legal wording reads as a whole.
 // The French text prevails; the English one says so.
 
-import type { ReactNode } from "react";
+import { Children, isValidElement, type ReactNode } from "react";
 import { tr, useLang } from "../../i18n";
-import { Link } from "../../router";
+import { Link, useLocation } from "../../router";
 import { useBodyClass } from "../ui";
+import { slug, Toc } from "./article";
 import { PubFoot, PubHead } from "./public";
 
 const version = () =>
@@ -19,21 +20,43 @@ const version = () =>
     "Working draft of 12 November 2026, to be reviewed by a lawyer before the service opens. This English version is a translation: in case of difference, the French text prevails.",
   );
 
+/** LEGAL lists the three texts, for the tabs at the top of each. */
+const LEGAL: [string, () => string][] = [
+  ["/conditions", () => tr("Conditions d’utilisation", "Terms of use")],
+  ["/confidentialite", () => tr("Confidentialité", "Privacy")],
+  ["/traitement-des-donnees", () => tr("Traitement des données", "Data processing")],
+];
+
 function LegalPage({ title, intro, children }: { title: string; intro: string; children: ReactNode }) {
   useBodyClass(["public"]);
+  const { path } = useLocation();
+  // The table of contents is the articles' titles, in order.
+  const titles = Children.toArray(children).flatMap((c) => (isValidElement<{ title?: string }>(c) && c.props.title ? [c.props.title] : []));
   return (
     <main>
       <div className="view">
         <PubHead cur="legal" />
-        <section className="phead">
+        <section className="lhead">
+          <p className="kicker">{tr("Légal", "Legal")}</p>
           <h1>{title}</h1>
           <p className="herosub">{intro}</p>
-          <p className="sub" style={{ marginTop: 12 }}>
+          <p className="draftnote">
+            <span aria-hidden="true">!</span>
             {version()}
           </p>
         </section>
-        <div className="faq" style={{ maxWidth: 760 }}>
-          {children}
+        <nav className="legaltabs" aria-label={tr("Textes légaux", "Legal texts")}>
+          {LEGAL.map(([to, name]) => (
+            <Link key={to} to={to} aria-current={path === to ? "page" : undefined}>
+              {name()}
+            </Link>
+          ))}
+        </nav>
+        <div className="artlayout">
+          <aside>
+            <Toc titles={titles} />
+          </aside>
+          <div className="artbody">{children}</div>
         </div>
         <PubFoot />
       </div>
@@ -43,8 +66,8 @@ function LegalPage({ title, intro, children }: { title: string; intro: string; c
 
 function Article({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="band" style={{ marginTop: 36 }}>
-      <h2 style={{ fontSize: 22 }}>{title}</h2>
+    <section className="lart" id={slug(title)}>
+      <h2>{title}</h2>
       <div className="legaltext">{children}</div>
     </section>
   );

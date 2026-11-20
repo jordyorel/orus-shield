@@ -1,360 +1,254 @@
-import { useLayoutEffect, useRef, useState, type PointerEvent as RPointerEvent } from "react";
-import { reportURL } from "../../api/client";
-import { getLang, tr } from "../../i18n";
+import { useRef, useState, type CSSProperties } from "react";
 import { Tick } from "../icons";
-import { CATNAME, CATS, COLOR, SEV, catState, evaluatedCats, weekly, type AssetView, type Cat, type CellState, type Issue } from "../model";
+import { G, Ico } from "../glyphs";
+import { reportURL } from "../../api/client";
+import { Link } from "../../router";
+import { settingsPath } from "../AppShell";
+import { getLang, tr } from "../../i18n";
+import { CATNAME, CATS, SEV, catState, evaluatedCats, weeklySlots, type AssetView, type Cat, type CellState, type Issue } from "../model";
 import { useOrg } from "../OrgData";
 import { AssetSheet } from "../sheets";
 import { useUI } from "../ui";
 
-function ScoreCard({ hist, score, fixed, open }: { hist: number[]; score: number | null; fixed: number; open: number }) {
-  const n = hist.length;
+/** isoWeek is the ISO 8601 week number of d. */
+function isoWeek(d: Date): number {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return Math.ceil(((t.getTime() - y0.getTime()) / 86_400_000 + 1) / 7);
+}
+
+/** WeekBars draws the score of each week of the period as a bar, the
+ * latest one solid with its value above; a week before any scan is an empty
+ * dashed slot. The pointer (or the arrow keys) picks a week: its bar lights
+ * up and a tooltip gives its score and the change from the week before. */
+function WeekBars({ slots, now }: { slots: (number | null)[]; now: Date }) {
+  const n = slots.length;
   const [hover, setHover] = useState<number | null>(null);
-  const [tipPos, setTipPos] = useState<{ left: number; top: number; below: boolean } | null>(null);
-  const svg = useRef<SVGSVGElement>(null);
-  const tipRef = useRef<HTMLDivElement>(null);
-  const SX = (i: number) => 34 + i * (276 / Math.max(1, n - 1));
-  const SY = (v: number) => 102 - ((v - 40) / 60) * 92;
-  const pts = hist.map((v, i) => [SX(i), SY(Math.max(40, v))] as const);
-  // Smooth curve through the points (Catmull-Rom converted to cubic Béziers).
-  const spark = pts
-    .map((q, i) => {
-      if (!i) return "M" + q[0].toFixed(1) + " " + q[1].toFixed(1);
-      const p0 = pts[Math.max(0, i - 2)] ?? q;
-      const p1 = pts[i - 1] ?? q;
-      const p3 = pts[Math.min(n - 1, i + 1)] ?? q;
-      const k = 0.18;
-      return (
-        "C" +
-        (p1[0] + (q[0] - p0[0]) * k).toFixed(1) +
-        " " +
-        (p1[1] + (q[1] - p0[1]) * k).toFixed(1) +
-        " " +
-        (q[0] - (p3[0] - p1[0]) * k).toFixed(1) +
-        " " +
-        (q[1] - (p3[1] - p1[1]) * k).toFixed(1) +
-        " " +
-        q[0].toFixed(1) +
-        " " +
-        q[1].toFixed(1)
-      );
-    })
-    .join(" ");
-  const cur = score ?? hist[n - 1] ?? null;
-  const delta = cur !== null && n ? cur - (hist[0] ?? cur) : 0;
-
-  const move = (e: RPointerEvent<SVGSVGElement>) => {
-    const r = svg.current?.getBoundingClientRect();
-    if (!r || n < 2) return;
-    const x = ((e.clientX - r.left) / r.width) * 320;
-    setHover(Math.max(0, Math.min(n - 1, Math.round((x - 34) / (276 / (n - 1))))));
+  const known = slots.filter((v): v is number => v !== null);
+  if (!known.length) return <p className="panelnote">{tr("Le graphique apparaît après le premier scan.", "The chart appears after the first scan.")}</p>;
+  const W = 640;
+  const H = 200;
+  const L = 34;
+  const top = 22;
+  const bottom = 170;
+  const lo = Math.max(0, Math.floor((Math.min(...known) - 10) / 20) * 20);
+  const y = (v: number) => bottom - ((v - lo) / (100 - lo)) * (bottom - top);
+  const ticks = [lo, Math.round((lo + 100) / 2), 100];
+  const slot = (W - L - 6) / n;
+  const bw = Math.min(44, slot * 0.6);
+  const weekOf = (i: number) => isoWeek(new Date(now.getTime() - (n - 1 - i) * 7 * 86_400_000));
+  const lastIdx = slots.reduce<number>((m, v, i) => (v !== null ? i : m), -1);
+  const pick = (e: { clientX: number; currentTarget: Element }) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - r.left) / r.width) * W;
+    setHover(Math.max(0, Math.min(n - 1, Math.floor((x - L) / slot))));
   };
-  // Placed once the tooltip holds the hovered week, before paint.
-  useLayoutEffect(() => {
-    const r = svg.current?.getBoundingClientRect();
-    const t = tipRef.current;
-    const host = t?.parentElement?.getBoundingClientRect();
-    if (hover === null || !r || !t || !host) return;
-    const cx = SX(hover);
-    const cy = SY(Math.max(40, hist[hover] ?? 40));
-    const px = r.left - host.left + (cx / 320) * r.width;
-    const py = r.top + (cy / 124) * r.height;
-    const below = py - t.offsetHeight - 18 < 84;
-    setTipPos({ left: Math.max(92, Math.min(host.width - 92, px)), top: py - host.top + (below ? 8 : 0), below });
-    // SX, SY and hist follow n and the period: hover is what changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hover]);
-  const leave = () => {
-    setHover(null);
-    setTipPos(null);
-  };
-  const hv = hover !== null ? (hist[hover] ?? 0) : 0;
-  const prev = hover ? (hist[hover - 1] ?? hv) : hv;
+  const v = hover !== null ? slots[hover]! : null;
+  const prevKnown = hover !== null ? slots.slice(0, hover).filter((x): x is number => x !== null).pop() ?? null : null;
   const back = hover !== null ? n - 1 - hover : 0;
-
+  const cx = hover !== null ? L + hover * slot + slot / 2 : 0;
+  const tipY = v !== null ? y(v) : bottom - 10;
   return (
-    <section className="card2 scorecard" aria-label="Score">
-      <div className="scorehead">
-        <p className="big" aria-label={tr(`Score : ${cur ?? "aucun"} sur 100`, `Score: ${cur ?? "none"} out of 100`)}>
-          {cur ?? "–"}
-        </p>
-        <div className="scoremeta">
-          <p className="up">
-            {delta >= 0 ? "+" : ""}
-            {delta} points
-          </p>
-          <p>{tr(`en ${n} semaine${n > 1 ? "s" : ""}`, `in ${n} week${n > 1 ? "s" : ""}`)}</p>
-        </div>
-      </div>
-      <div className="plot">
-        {n >= 2 ? (
-          <svg ref={svg} className="chart spark" id="spark" viewBox="0 0 320 124" role="img" aria-label={tr(`Le score passe de ${hist[0]} à ${cur} en ${n} semaines`, `The score goes from ${hist[0]} to ${cur} in ${n} weeks`)} onPointerMove={move} onPointerDown={move} onPointerLeave={leave}>
-            {[40, 60, 80, 100].map((v) => (
-              <g key={v}>
-                <line x1="34" x2="312" y1={SY(v)} y2={SY(v)} stroke="var(--ring)" strokeWidth="1.2" />
-                <text x="28" y={SY(v) + 4} textAnchor="end" fontSize="11" fill="var(--ink2)">
-                  {v}
-                </text>
-              </g>
-            ))}
-            {hist.map((_, i) =>
-              n <= 6 || i % 3 === 2 || i === 0 ? <line key={i} x1={SX(i).toFixed(1)} x2={SX(i).toFixed(1)} y1="102" y2="106" stroke="var(--ring)" strokeWidth="1.2" /> : null,
-            )}
-            <text x="34" y="120" fontSize="11" fill="var(--ink2)">
-              {tr(`Il y a ${n} sem.`, `${n} wk ago`)}
+    <div
+      className="wbars"
+      tabIndex={0}
+      role="group"
+      aria-label={tr("Score par semaine : flèches gauche et droite pour parcourir", "Score by week: left and right arrows to browse")}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowLeft") setHover(Math.max(0, (hover ?? n - 1) - 1));
+        if (e.key === "ArrowRight") setHover(Math.min(n - 1, (hover ?? n - 2) + 1));
+      }}
+      onBlur={() => setHover(null)}
+    >
+      <svg
+        className="trend"
+        viewBox={`0 0 ${W} ${H}`}
+        role="img"
+        aria-label={tr(`Score par semaine, ${known.length} semaine${known.length > 1 ? "s" : ""} de scans`, `Score by week, ${known.length} week${known.length > 1 ? "s" : ""} of scans`)}
+        onPointerMove={pick}
+        onPointerDown={pick}
+        onPointerLeave={() => setHover(null)}
+      >
+        {ticks.map((t) => (
+          <g key={t}>
+            <line x1={L} x2={W - 6} y1={y(t)} y2={y(t)} stroke="var(--line2)" />
+            <text x="0" y={y(t) + 4}>
+              {t}
             </text>
-            <text x="310" y="120" fontSize="11" fill="var(--ink2)" textAnchor="end">
-              {tr("Aujourd’hui", "Today")}
-            </text>
-            <path className="area" d={`${spark} L310 102 L34 102 Z`} fill="var(--azur)" />
-            <path className="draw" pathLength={1} d={spark} fill="none" stroke="var(--azur)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
-            {pts.map(([x, y], i) => (
-              <circle
-                key={i}
-                className="pt"
-                style={{ animationDelay: (0.3 + (i * 0.8) / n).toFixed(2) + "s" }}
-                cx={x.toFixed(1)}
-                cy={y.toFixed(1)}
-                r={i === n - 1 ? 5.5 : 3}
-                fill={i === n - 1 ? "var(--azur)" : "var(--surface)"}
-                stroke="var(--azur)"
-                strokeWidth="2"
-              />
-            ))}
-            <line id="ch-line" x1={hover !== null ? SX(hover) : 0} x2={hover !== null ? SX(hover) : 0} y1="6" y2="102" stroke="var(--ink)" strokeWidth="1.2" strokeDasharray="3 4" opacity={hover !== null ? 1 : 0} />
-            <circle id="ch-dot" r="6.5" cx={hover !== null ? SX(hover) : 0} cy={hover !== null ? SY(Math.max(40, hv)) : 0} fill="var(--azur)" stroke="var(--surface)" strokeWidth="3" opacity={hover !== null ? 1 : 0} />
-            <rect x="20" y="0" width="300" height="110" fill="transparent" />
-          </svg>
-        ) : (
-          <p className="sub">{tr("La courbe apparaît après deux semaines de scans.", "The curve appears after two weeks of scans.")}</p>
-        )}
-        <div ref={tipRef} className={"hmtip" + (tipPos ? " on" : "") + (tipPos?.below ? " below" : "")} id="chtip" role="tooltip" style={tipPos ? { left: tipPos.left + "px", top: tipPos.top + "px" } : undefined}>
-          {hover !== null && (
-            <>
-              <b>{hv} points</b>
-              <em>{back === 0 ? tr("Aujourd’hui", "Today") : back === 1 ? tr("La semaine dernière", "Last week") : tr(`Il y a ${back} semaines`, `${back} weeks ago`)}</em>
-              {hover > 0 && (
-                <span>
-                  <i style={{ background: hv - prev >= 0 ? "var(--lagon)" : "var(--corail)" }} />
-                  {hv - prev >= 0 ? "+" : "−"}
-                  {tr(`${Math.abs(hv - prev)} par rapport à la semaine d’avant`, `${Math.abs(hv - prev)} compared with the week before`)}
-                </span>
+          </g>
+        ))}
+        {slots.map((val, i) => {
+          const x = L + i * slot + (slot - bw) / 2;
+          const on = i === hover || (hover === null && i === lastIdx);
+          return (
+            <g key={i} className={"wbar" + (on ? " on" : "") + (hover !== null && i !== hover ? " dim" : "")}>
+              {val === null ? (
+                <rect className="wempty" x={x} y={bottom - 26} width={bw} height={26} rx="4" />
+              ) : (
+                <rect className="wbarfill" x={x} y={y(val)} width={bw} height={bottom - y(val)} rx="4" />
               )}
+              {(n <= 8 || i % 2 === (n - 1) % 2) && (
+                <text x={x + bw / 2} y={H - 8} textAnchor="middle" className={on ? "wlab on" : "wlab"}>
+                  {tr(`S${weekOf(i)}`, `W${weekOf(i)}`)}
+                </text>
+              )}
+              {hover === null && i === lastIdx && val !== null && (
+                <text x={x + bw / 2} y={y(val) - 8} textAnchor="middle" className="barval">
+                  {val}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+      {hover !== null && (
+        <div
+          className="wtip"
+          role="status"
+          style={
+            {
+              left: `${(cx / W) * 100}%`,
+              top: `${(tipY / H) * 100}%`,
+              "--shift": cx / W > 0.75 ? "-88%" : cx / W < 0.2 ? "-12%" : "-50%",
+              "--arrow": cx / W > 0.75 ? "88%" : cx / W < 0.2 ? "12%" : "50%",
+            } as CSSProperties
+          }
+        >
+          {v !== null ? (
+            <>
+              <b>
+                {v} <small>/100</small>
+              </b>
+              <span>{back === 0 ? tr("Cette semaine", "This week") : back === 1 ? tr("La semaine dernière", "Last week") : tr(`Semaine ${weekOf(hover)}`, `Week ${weekOf(hover)}`)}</span>
+              {prevKnown !== null && (
+                <em className={v - prevKnown > 0 ? "up" : v - prevKnown < 0 ? "dn" : ""}>
+                  {v - prevKnown > 0 ? "+" : v - prevKnown < 0 ? "−" : "±"}
+                  {Math.abs(v - prevKnown)} {tr("par rapport à la semaine d’avant", "from the week before")}
+                </em>
+              )}
+            </>
+          ) : (
+            <>
+              <b>{tr(`Semaine ${weekOf(hover)}`, `Week ${weekOf(hover)}`)}</b>
+              <span>{tr("Pas encore de scan cette semaine", "No scan yet that week")}</span>
             </>
           )}
         </div>
-      </div>
-      <p className="scorefoot">
-        {n ? tr(`Parti de ${hist[0]}. `, `Started at ${hist[0]}. `) : ""}
-        {tr(`${fixed} corrigé${fixed > 1 ? "s" : ""}, ${open} ouvert${open > 1 ? "s" : ""}.`, `${fixed} fixed, ${open} open.`)}
-      </p>
-    </section>
-  );
-}
-
-function Heat({ assets, issues, evaluated }: { assets: AssetView[]; issues: Issue[]; evaluated: Map<string, Set<Cat>> }) {
-  const { showSheet } = useUI();
-  const [cur, setCur] = useState<{ asset: string; cat: Cat } | null>(null);
-  const [tip, setTip] = useState<{ left: number; top: number; below: boolean } | null>(null);
-  const tipRef = useRef<HTMLDivElement>(null);
-
-  const anchor = useRef<HTMLElement | null>(null);
-  const over = (asset: string, cat: Cat, el: HTMLElement) => {
-    anchor.current = el;
-    setCur({ asset, cat });
-  };
-  const out = () => {
-    anchor.current = null;
-    setCur(null);
-    setTip(null);
-  };
-  // Placed once the tooltip holds the cell's content, before paint.
-  const curKey = cur ? cur.asset + "/" + cur.cat : "";
-  useLayoutEffect(() => {
-    const t = tipRef.current;
-    const host = t?.parentElement?.getBoundingClientRect();
-    const r = anchor.current?.getBoundingClientRect();
-    if (!curKey || !t || !host || !r) return;
-    const half = Math.min(120, host.width / 2 - 8);
-    const below = r.top - t.offsetHeight - 14 < 84;
-    setTip({ left: Math.max(half + 8, Math.min(host.width - half - 8, r.left - host.left + r.width / 2)), top: (below ? r.bottom : r.top) - host.top, below });
-  }, [curKey]);
-
-  const curAsset = cur ? assets.find((a) => a.n === cur.asset) : undefined;
-  const curState: CellState | null = curAsset && cur ? catState(curAsset, cur.cat, issues, evaluated) : null;
-  const curList = cur ? issues.filter((i) => !i.fixed && i.host === cur.asset && i.cat === cur.cat) : [];
-
-  return (
-    <section className="card2 heat" aria-label={tr("Carte de chaleur des risques", "Risk heat map")} onMouseLeave={out}>
-      <div ref={tipRef} className={"hmtip" + (tip ? " on" : "") + (tip?.below ? " below" : "")} id="hmtip" role="tooltip" style={tip ? { left: tip.left + "px", top: tip.top + "px" } : undefined}>
-        {cur && (
-          <>
-            <b>{cur.asset}</b>
-            <em>{CATNAME[cur.cat]}</em>
-            {curState === "na" ? (
-              <em>
-                {cur.cat === "fuites"
-                  ? tr("Bientôt : la surveillance des fuites arrive.", "Soon: leak monitoring is coming.")
-                  : tr("Non concerné : ce contrôle ne s’applique pas à cet actif.", "Not applicable: this check does not apply to this asset.")}
-              </em>
-            ) : !curList.length ? (
-              <span>
-                <i style={{ background: "var(--lagon)" }} />
-                {tr("Vérifié, rien à signaler.", "Checked, all clear.")}
-              </span>
-            ) : (
-              <>
-                {curList.map((i) => (
-                  <span key={i.targetId + i.id}>
-                    <i style={{ background: COLOR[i.sev] }} />
-                    {i.title}
-                  </span>
-                ))}
-                <em>{tr("Cliquez pour ouvrir l’actif", "Click to open the asset")}</em>
-              </>
-            )}
-          </>
-        )}
-      </div>
-      <div className={"hmgrid" + (cur ? " hot" : "")} style={{ gridTemplateColumns: `minmax(84px,1.3fr) repeat(${CATS.length},minmax(38px,1fr))` }}>
-        <span className="hmcol" style={{ textAlign: "left", fontWeight: 600, color: "var(--ink)" }}>
-          {tr("Où est le risque", "Where the risk is")}
-        </span>
-        {CATS.map(([c, l]) => (
-          <span key={c} className={"hmcol" + (cur?.cat === c ? " on" : "")} data-col={c}>
-            {l}
-          </span>
-        ))}
-        {assets.map((a, r) => (
-          <HeatRow key={a.n} a={a} r={r} issues={issues} evaluated={evaluated} cur={cur} over={over} open={(n) => showSheet(<AssetSheet n={n} />)} />
-        ))}
-      </div>
-      <div className="key" style={{ justifyContent: "flex-start", marginTop: 10, gap: "6px 12px", fontSize: 12 }}>
-        <span>
-          <i style={{ background: "var(--lagon)" }} />
-          {tr("Rien", "None")}
-        </span>
-        <span>
-          <i style={{ background: "var(--ciel)" }} />
-          {tr("Moyen", "Medium")}
-        </span>
-        <span>
-          <i style={{ background: "var(--ambre)" }} />
-          {tr("Élevé", "High")}
-        </span>
-        <span>
-          <i style={{ background: "var(--corail)" }} />
-          {tr("Critique", "Critical")}
-        </span>
-        <span>
-          <i style={{ background: "var(--ring)" }} />
-          {tr("Non concerné", "Not applicable")}
-        </span>
-      </div>
-    </section>
-  );
-}
-
-function HeatRow({
-  a,
-  r,
-  issues,
-  evaluated,
-  cur,
-  over,
-  open,
-}: {
-  a: AssetView;
-  r: number;
-  issues: Issue[];
-  evaluated: Map<string, Set<Cat>>;
-  cur: { asset: string; cat: Cat } | null;
-  over: (asset: string, cat: Cat, el: HTMLElement) => void;
-  open: (n: string) => void;
-}) {
-  return (
-    <>
-      <span className={"hmrow" + (cur?.asset === a.n ? " on" : "")} data-row={a.n}>
-        {a.n}
-      </span>
-      {CATS.map(([c], k) => {
-        const s = catState(a, c, issues, evaluated);
-        const isCur = cur?.asset === a.n && cur.cat === c;
-        const delay = { animationDelay: ((r + k) * 0.03).toFixed(2) + "s" };
-        if (s === "na") {
-          return (
-            <span
-              key={c}
-              style={delay}
-              className={"hm na" + (isCur ? " cur" : "")}
-              aria-label={tr(`${a.n}, ${c} : non concerné`, `${a.n}, ${c}: not applicable`)}
-              onMouseEnter={(e) => over(a.n, c, e.currentTarget)}
-            >
-              <i />
-            </span>
-          );
-        }
-        const n = issues.filter((i) => !i.fixed && i.host === a.n && i.cat === c).length;
-        const level = SEV[s === "ok" ? "ok" : s][0].toLowerCase();
-        const label = n
-          ? tr(`${n} problème${n > 1 ? "s" : ""}, niveau ${level}`, `${n} problem${n > 1 ? "s" : ""}, ${level} level`)
-          : tr("aucun problème", "no problem");
-        return (
-          <button
-            key={c}
-            type="button"
-            style={delay}
-            className={"hm " + s + (isCur ? " cur" : "")}
-            aria-label={tr(`${a.n}, ${c} : ${label}`, `${a.n}, ${c}: ${label}`)}
-            onMouseEnter={(e) => over(a.n, c, e.currentTarget)}
-            onFocus={(e) => over(a.n, c, e.currentTarget)}
-            onClick={() => open(a.n)}
-          >
-            {n ? n : <Tick size={14} width={3} />}
-          </button>
-        );
-      })}
-    </>
-  );
-}
-
-/** Seg is one family of automated checks: how many passed, as a share. */
-function Seg({ name, pass, total }: { name: string; pass: number; total: number }) {
-  const pct = total ? Math.round((pass / total) * 100) : 0;
-  return (
-    <div className="rpanel kpi segcard">
-      <small>{name}</small>
-      <p className="kpinum">
-        <b>{total ? `${pct} %` : "–"}</b>
-      </p>
-      <div className="usebar" role="img" aria-label={tr(`${name} : ${pass} contrôles réussis sur ${total}`, `${name}: ${pass} of ${total} checks passed`)}>
-        <b style={{ width: (total ? pct : 0) + "%" }} className={pct === 100 ? "done" : pct < 50 ? "full" : ""} />
-      </div>
-      <p className="kpisub">{total ? tr(`${pass} réussis sur ${total}`, `${pass} of ${total} passed`) : tr("Pas encore évalué", "Not evaluated yet")}</p>
+      )}
     </div>
   );
 }
 
-function Paper({ kind }: { kind: "dir" | "tech" }) {
+/** HeatTable: each asset, each family of checks, its open problems. A cell
+ * is a button: hovering shows its problems in a tooltip and lights up its
+ * row and column; a click opens the asset. */
+function HeatTable({ assets, issues, evaluated }: { assets: AssetView[]; issues: Issue[]; evaluated: Map<string, Set<Cat>> }) {
+  const { showSheet } = useUI();
+  const [cur, setCur] = useState<{ a: string; c: Cat; x: number; y: number; below: boolean } | null>(null);
+  const host = useRef<HTMLDivElement>(null);
+  const point = (a: string, c: Cat, el: HTMLElement) => {
+    const h = host.current?.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    // Below the cell when the space above is short: the sticky top bar
+    // (52 px) would hide the tooltip.
+    const below = r.top < 52 + 170;
+    if (h) setCur({ a, c, x: r.left - h.left + r.width / 2, y: (below ? r.bottom : r.top) - h.top, below });
+  };
+  const curAsset = cur ? assets.find((x) => x.n === cur.a) : undefined;
+  const curState: CellState | null = curAsset && cur ? catState(curAsset, cur.c, issues, evaluated) : null;
+  const curList = cur ? issues.filter((i) => !i.fixed && i.host === cur.a && i.cat === cur.c) : [];
   return (
-    <div className="paper" aria-hidden="true">
-      <b />
-      <i style={{ width: "70%" }} />
-      <i style={{ width: "46%" }} />
-      {kind === "dir" ? (
-        <svg viewBox="0 0 80 34">
-          <path d="M2 30 L20 24 L38 26 L56 14 L78 6" fill="none" stroke="var(--azur)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      ) : (
-        <>
-          <u />
-          <u />
-          <u />
-          <u />
-        </>
+    <div className="hm3wrap" ref={host} onMouseLeave={() => setCur(null)}>
+      <div className="tw">
+      <table className="hm3">
+        <thead>
+          <tr>
+            <th scope="col">{tr("Actif", "Asset")}</th>
+            {CATS.map(([c, short]) => (
+              <th key={c} scope="col" title={CATNAME[c]} className={cur?.c === c ? "on" : ""}>
+                {short}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {assets.map((a) => (
+            <tr key={a.n} className={cur?.a === a.n ? "on" : ""}>
+              <th scope="row">
+                <button type="button" className="hmhost" onClick={() => showSheet(<AssetSheet n={a.n} />)}>
+                  {a.n}
+                </button>
+              </th>
+              {CATS.map(([c, short]) => {
+                const st = catState(a, c, issues, evaluated);
+                const nOpen = issues.filter((i) => !i.fixed && i.host === a.n && i.cat === c).length;
+                const label =
+                  c === "fuites"
+                    ? tr("bientôt", "soon")
+                    : st === "na"
+                      ? tr("non concerné", "not applicable")
+                      : nOpen
+                        ? tr(`${nOpen} problème${nOpen > 1 ? "s" : ""}, niveau ${SEV[st === "ok" ? "ok" : st][0].toLowerCase()}`, `${nOpen} problem${nOpen > 1 ? "s" : ""}, ${SEV[st === "ok" ? "ok" : st][0].toLowerCase()} level`)
+                        : tr("aucun problème", "no problem");
+                const isCur = cur?.a === a.n && cur?.c === c;
+                return (
+                  <td key={c}>
+                    <button
+                      type="button"
+                      className={"hcell s-" + (c === "fuites" ? "soon" : st) + (isCur ? " cur" : "") + (cur && !isCur ? " dim" : "")}
+                      aria-label={`${a.n}, ${CATNAME[c]} : ${label}`}
+                      onMouseEnter={(e) => point(a.n, c, e.currentTarget)}
+                      onFocus={(e) => point(a.n, c, e.currentTarget)}
+                      onBlur={() => setCur(null)}
+                      onClick={() => showSheet(<AssetSheet n={a.n} />)}
+                      title={short}
+                    >
+                      {c === "fuites" ? "" : st === "na" ? "" : nOpen ? nOpen : <Tick size={12} width={3.2} />}
+                    </button>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      </div>
+      {cur && (
+        <div className={"htip" + (cur.below ? " below" : "")} role="tooltip" style={{ left: cur.x, top: cur.y }}>
+          <b className="mono">{cur.a}</b>
+          <em>{CATNAME[cur.c]}</em>
+          {cur.c === "fuites" ? (
+            <span>{tr("Bientôt : la surveillance des fuites arrive.", "Soon: leak monitoring is coming.")}</span>
+          ) : curState === "na" ? (
+            <span>{tr("Non concerné : ce contrôle ne s’applique pas à cet actif.", "Not applicable: this check does not apply to this asset.")}</span>
+          ) : curList.length ? (
+            <>
+              {curList.slice(0, 4).map((i) => (
+                <span key={i.targetId + i.id} className="htipline">
+                  <i className={"sevdot d-" + i.sev} />
+                  {i.title}
+                </span>
+              ))}
+              {curList.length > 4 && <span>{tr(`et ${curList.length - 4} autre(s)`, `and ${curList.length - 4} more`)}</span>}
+              <small>{tr("Cliquez pour ouvrir l’actif", "Click to open the asset")}</small>
+            </>
+          ) : (
+            <span className="htipline">
+              <i className="sevdot d-ok" />
+              {tr("Vérifié, rien à signaler", "Checked, all clear")}
+            </span>
+          )}
+        </div>
       )}
-      <i style={{ width: "82%" }} />
-      <i style={{ width: "58%" }} />
+      <ul className="hlegend" aria-label={tr("Légende", "Legend")}>
+        <li><i className="hcell s-ok" /> {tr("Rien à signaler", "All clear")}</li>
+        <li><i className="hcell s-med" /> {tr("Moyen", "Medium")}</li>
+        <li><i className="hcell s-high" /> {tr("Élevé", "High")}</li>
+        <li><i className="hcell s-crit" /> {tr("Critique", "Critical")}</li>
+        <li><i className="hcell s-na" /> {tr("Non concerné", "Not applicable")}</li>
+      </ul>
     </div>
   );
 }
@@ -363,9 +257,11 @@ export function RapportsPage() {
   const { data, issues, assets, org } = useOrg();
   const { toast } = useUI();
   const [period, setPeriod] = useState<4 | 12>(12);
+  const [langs, setLangs] = useState<Record<"executive" | "technical", "fr" | "en">>(() => ({ executive: getLang(), technical: getLang() }));
   if (!data) return null;
   const now = new Date();
-  const hist = weekly(data.overview.trend, period, now);
+  const slots = weeklySlots(data.overview.trend, period, now);
+  const hist = slots.filter((x): x is number => x !== null);
   const open = issues.filter((i) => !i.fixed).length;
   const fixed = issues.length - open;
   const evaluated = evaluatedCats(data.checks);
@@ -381,73 +277,152 @@ export function RapportsPage() {
   const pass = segs.reduce((s, [, [p]]) => s + p, 0);
   const total = segs.reduce((s, [, [, t]]) => s + t, 0);
   const reports = data.subscription.plan.reports;
-  const pdf = (kind: "executive" | "technical", label: string, ghost: boolean) =>
+  const pdf = (kind: "executive" | "technical", label: string, ghost: boolean, lang: "fr" | "en") =>
     reports ? (
-      <a className={"btn" + (ghost ? " ghost" : "")} href={reportURL(org.org_id, kind, getLang())} download>
+      <a className={"btn sm" + (ghost ? " ghost" : "")} href={reportURL(org.org_id, kind, lang)} download>
         {tr("Générer le PDF", "Generate the PDF")}
       </a>
     ) : (
-      <button className={"btn" + (ghost ? " ghost" : "")} type="button" aria-disabled="true" onClick={() => toast(tr(`${label} : inclus à partir de l’offre Essentiel`, `${label}: included from the Essential plan`))}>
+      <button className={"btn sm" + (ghost ? " ghost" : "")} type="button" aria-disabled="true" onClick={() => toast(tr(`${label} : inclus à partir de l’offre Essentiel`, `${label}: included from the Essential plan`))}>
         {tr("Générer le PDF", "Generate the PDF")}
       </button>
     );
 
   return (
     <>
-      <div className="todayhead">
+      <div className="ph">
         <div>
-          <p className="hello">{tr("Rapports", "Reports")}</p>
-          <h1 className="lead lead2">{tr("L’évolution de votre sécurité.", "How your security is evolving.")}</h1>
+          <h1>{tr("Rapports", "Reports")}</h1>
+          <p>{tr("L’évolution de votre sécurité, et les rapports à partager.", "How your security is evolving, and the reports to share.")}</p>
         </div>
-        <div className="seg2" role="group" aria-label={tr("Période", "Period")}>
+        <div className="phacts">
+          <div className="cseg" role="group" aria-label={tr("Période", "Period")}>
+            {(
+              [
+                [4, tr("4 sem.", "4 wk")],
+                [12, tr("12 sem.", "12 wk")],
+              ] as const
+            ).map(([k, l]) => (
+              <button key={k} type="button" aria-pressed={period === k} onClick={() => setPeriod(k)}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid2">
+        <section className="panel">
+          <header>
+            <h2><Ico d={G.chart} />{tr("Score de sécurité", "Security score")}</h2>
+            <span className="panelsub">
+              <b className="scorenow">{data.overview.score ?? "–"}</b> / 100
+              {hist.length > 1 && (
+                <>
+                  {" · "}
+                  <em className={"delta " + (hist[hist.length - 1]! - hist[0]! >= 0 ? "up" : "dn")}>
+                    {(hist[hist.length - 1]! - hist[0]! >= 0 ? "+" : "") + (hist[hist.length - 1]! - hist[0]!)}
+                  </em>{" "}
+                  {tr(`en ${hist.length} semaines`, `in ${hist.length} weeks`)}
+                </>
+              )}
+            </span>
+          </header>
+          <div className="panelbody">
+            <WeekBars slots={slots} now={now} />
+          </div>
+          <p className="panelfoot">{tr(`${fixed} corrigé${fixed > 1 ? "s" : ""}, ${open} ouvert${open > 1 ? "s" : ""}.`, `${fixed} fixed, ${open} open.`)}</p>
+        </section>
+        <section className="panel">
+          <header>
+            <h2><Ico d={G.shield} tone="green" />{tr("Contrôles automatisés", "Automated checks")}</h2>
+            <span className="panelsub">{tr(`${pass} réussis sur ${total}`, `${pass} of ${total} passed`)}</span>
+          </header>
+          <div className="tw">
+            <table className="ctable ctnarrow">
+              <thead>
+                <tr>
+                  <th>{tr("Famille", "Family")}</th>
+                  <th>{tr("Réussis", "Passed")}</th>
+                  <th style={{ width: "42%" }}>
+                    <span className="vh">{tr("Part réussie", "Share passed")}</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {segs.map(([name, [p, t]]) => (
+                  <tr key={name}>
+                    <td>{name}</td>
+                    <td className="num">{t ? `${p} / ${t}` : "–"}</td>
+                    <td>
+                      {t > 0 && (
+                        <div className="sevbar" role="img" aria-label={tr(`${name} : ${p} contrôles réussis sur ${t}`, `${name}: ${p} of ${t} checks passed`)}>
+                          {p > 0 && <i style={{ flex: p, background: "var(--ok)" }} />}
+                          {t - p > 0 && <i style={{ flex: t - p, background: p / t >= 0.5 ? "var(--high)" : "var(--crit)" }} />}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                <tr>
+                  <td style={{ color: "var(--ink3)" }}>{tr("Fuites de données", "Data leaks")}</td>
+                  <td>
+                    <span className="soon">{tr("Bientôt", "Soon")}</span>
+                  </td>
+                  <td />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="panelfoot">
+            {tr("Chaque scan réévalue ces contrôles. ", "Every scan evaluates these checks again. ")}
+            <Link to={settingsPath(org.org_id, "scans")}>{tr("Ce que nous vérifions", "What we check")}</Link>
+          </p>
+        </section>
+      </div>
+
+      <div className="grid2">
+        <section className="panel">
+          <header>
+            <h2><Ico d={G.grid} tone="amber" />{tr("Où est le risque", "Where the risk is")}</h2>
+            <span className="panelsub">{tr("problèmes ouverts par actif", "open problems by asset")}</span>
+          </header>
+          <div className="panelbody">
+            <HeatTable assets={assets} issues={issues} evaluated={evaluated} />
+          </div>
+        </section>
+        <div className="repcol">
           {(
             [
-              [4, tr("4 sem.", "4 wk")],
-              [12, tr("12 sem.", "12 wk")],
+              ["executive", tr("Rapport Direction", "Executive report"), tr("Dirigeants, clients, assureur", "Executives, customers, insurer"), tr("Deux pages sans jargon : le score, ce qui a été corrigé, ce qui reste à décider.", "Two pages, no jargon: the score, what was fixed, what remains to decide."), false],
+              ["technical", tr("Rapport Technique", "Technical report"), tr("Informaticien, prestataire", "IT person, provider"), tr("Chaque problème, sa preuve, sa CVE et les étapes de correction.", "Every problem, its evidence, its CVE and the steps to fix it."), true],
             ] as const
-          ).map(([k, l]) => (
-            <button key={k} type="button" aria-pressed={period === k} onClick={() => setPeriod(k)}>
-              {l}
-            </button>
+          ).map(([kind, name, who, what, ghost]) => (
+            <section key={kind} className="panel repcard">
+              <div className="repbody">
+                <span className="repicon" aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 3h9l4 4v14H6zM14 3v5h5M9 13h6M9 17h6" />
+                  </svg>
+                </span>
+                <div>
+                  <h2>{name}</h2>
+                  <p className="repwho">{tr(`Pour : ${who}`, `For: ${who}`)}</p>
+                  <p className="repwhat">{what}</p>
+                </div>
+              </div>
+              <footer>
+                <div className="cseg" role="group" aria-label={tr(`Langue du ${name}`, `${name} language`)}>
+                  {(["fr", "en"] as const).map((l) => (
+                    <button key={l} type="button" aria-pressed={langs[kind] === l} onClick={() => setLangs({ ...langs, [kind]: l })}>
+                      {l.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+                {pdf(kind, name, ghost, langs[kind])}
+              </footer>
+            </section>
           ))}
-        </div>
-      </div>
-      <div className="duo">
-        <ScoreCard key={period} hist={hist} score={data.overview.score} fixed={fixed} open={open} />
-        <Heat assets={assets} issues={issues} evaluated={evaluated} />
-      </div>
-
-      <div className="section">
-        <div className="rhead">
-          <h2>{tr("Contrôles automatisés", "Automated checks")}</h2>
-          <span className="countchip">{tr(`${pass} réussis sur ${total}`, `${pass} of ${total} passed`)}</span>
-        </div>
-        <div className="kpis kpis3">
-          {segs.map(([name, [p, t]]) => (
-            <Seg key={name} name={name} pass={p} total={t} />
-          ))}
-        </div>
-      </div>
-
-      <div className="section">
-        <h2>{tr("À partager", "To share")}</h2>
-        <div className="docs">
-          <div className="doc">
-            <Paper kind="dir" />
-            <div>
-              <h3>{tr("Rapport Direction", "Executive report")}</h3>
-              <p>{tr("Deux pages, sans jargon : le score, ce qui a été corrigé, ce qui reste à décider.", "Two pages, no jargon: the score, what was fixed, what remains to decide.")}</p>
-              {pdf("executive", tr("Rapport Direction", "Executive report"), false)}
-            </div>
-          </div>
-          <div className="doc">
-            <Paper kind="tech" />
-            <div>
-              <h3>{tr("Rapport Technique", "Technical report")}</h3>
-              <p>{tr("Pour votre informaticien : chaque problème, sa preuve, sa CVE et les étapes de correction.", "For your IT person: every problem, its evidence, its CVE and the steps to fix it.")}</p>
-              {pdf("technical", tr("Rapport Technique", "Technical report"), true)}
-            </div>
-          </div>
         </div>
       </div>
     </>

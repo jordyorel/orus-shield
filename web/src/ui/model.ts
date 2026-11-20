@@ -248,7 +248,22 @@ export interface AssetView {
   a: number;
   tech: string[];
   svc: [string, string, string][];
+  /** ips: the addresses its services were found on. */
+  ips: string[];
+  /** cert: the certificate covering the name, when one was seen. */
+  cert?: { notAfter: string; issuer: string };
 }
+
+/** certFor finds the certificate whose names cover host (exact or a
+ * one-label wildcard), the latest to expire first. */
+function certFor(host: string, certs: OrgAsset[]): { notAfter: string; issuer: string } | undefined {
+  const covers = (name: string) => name === host || (name.startsWith("*.") && host.endsWith(name.slice(1)) && !host.slice(0, host.length - name.length + 1).includes("."));
+  const c = certs
+    .filter((x) => (x.details.names ?? "").split(" ").some(covers) || x.details.subject === host)
+    .sort((a, b) => (b.details.not_after ?? "").localeCompare(a.details.not_after ?? ""))[0];
+  return c?.details.not_after ? { notAfter: c.details.not_after, issuer: c.details.issuer ?? "" } : undefined;
+}
+
 
 const MAIL_PORTS = new Set(["25", "465", "587", "110", "143", "993", "995"]);
 const WEB_PORTS = new Set(["80", "443", "8080", "8443"]);
@@ -257,6 +272,7 @@ const WEB_PORTS = new Set(["80", "443", "8080", "8443"]);
 export function toAssets(assets: OrgAsset[]): AssetView[] {
   const current = assets.filter((a) => !a.gone_at);
   const services = current.filter((a) => a.kind === "service");
+  const certs = current.filter((a) => a.kind === "certificate");
   const hosts = current
     .filter((a) => a.kind === "hostname")
     .sort((x, y) => (x.value === x.domain ? -1 : y.value === y.domain ? 1 : x.value.localeCompare(y.value)));
@@ -281,7 +297,9 @@ export function toAssets(assets: OrgAsset[]): AssetView[] {
     else if ([...ports].some((p) => MAIL_PORTS.has(p))) k = tr("Messagerie", "Mail");
     else if ([...ports].some((p) => WEB_PORTS.has(p)) || (!ports.size && h.details.technologies)) k = tr("Site", "Website");
     else if (ports.size) k = tr("Serveur", "Server");
-    return { n: h.value, targetId: h.target_id, domain: h.domain, k, a: n ? (20 + (i * 360) / n) % 360 : 0, tech, svc };
+    const ips = [...new Set(services.filter((s) => s.details.host === h.value).map((s) => serviceIP(s.value)))];
+    const cert = certFor(h.value, certs);
+    return { n: h.value, targetId: h.target_id, domain: h.domain, k, a: n ? (20 + (i * 360) / n) % 360 : 0, tech, svc, ips, ...(cert ? { cert } : {}) };
   });
 }
 
@@ -439,6 +457,21 @@ export function sinceText(iso: string, now: Date): string {
 }
 
 /** weekly keeps one score per week, the last of each, oldest first. */
+/** weeklySlots is the score at the end of each of the last weeks, oldest
+ * first, null for a week before any scan: the chart keeps its whole period. */
+export function weeklySlots(points: { at: string; score: number | null }[], weeks: number, now: Date): (number | null)[] {
+  const out: (number | null)[] = [];
+  for (let w = weeks - 1; w >= 0; w--) {
+    const end = now.getTime() - w * 7 * DAY_MS;
+    let v: number | null = null;
+    for (const p of points) {
+      if (p.score !== null && new Date(p.at).getTime() <= end) v = p.score;
+    }
+    out.push(v);
+  }
+  return out;
+}
+
 export function weekly(points: { at: string; score: number | null }[], weeks: number, now: Date): number[] {
   const out: number[] = [];
   for (let w = weeks - 1; w >= 0; w--) {
@@ -708,4 +741,18 @@ export function progressText(p: Progress): string {
           : tr(` Votre score reste à ${p.to}.`, ` Your score stays at ${p.to}.`);
   }
   return `${when}, ${fixed}.${score}`;
+}
+
+/** families are the three families of automated checks, with how many
+ * passed out of those evaluated (Aujourd'hui and Rapports). */
+export function families(checks: Check[]): [string, number, number][] {
+  const tally = (modules: string[]): [number, number] => {
+    const cs = checks.filter((c) => modules.includes(c.module) && c.status !== "not_applicable");
+    return [cs.filter((c) => c.status === "passed").length, cs.length];
+  };
+  return [
+    [tr("Emails", "Email"), ...tally(["email"])],
+    [tr("Chiffrement", "Encryption"), ...tally(["tls", "web"])],
+    [tr("Ports et services", "Ports and services"), ...tally(["ports"])],
+  ];
 }

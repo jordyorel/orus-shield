@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../../api/client";
 import type { Agent, Instructions, Target } from "../../api/types";
-import { Tick } from "../icons";
-import { CATS, DOMAIN_RE, RANK, catState, evaluatedCats, worst } from "../model";
+import { Search, Tick } from "../icons";
+import { G, Ico } from "../glyphs";
+import { CATS, DOMAIN_RE, RANK, SEV, catState, evaluatedCats, serviceIP, servicePort, worst } from "../model";
 import { useOrg } from "../OrgData";
-import { AssetSheet, SevTag } from "../sheets";
-import { tr } from "../../i18n";
+import { AssetSheet } from "../sheets";
+import { locale, tr } from "../../i18n";
 import { ScanLine } from "../ScanLine";
 import { takeDomain } from "../prefill";
 import { useUI } from "../ui";
@@ -263,117 +264,341 @@ export function AddDomainRow() {
   );
 }
 
+/** daysTo counts whole days from now to iso (negative once past). */
+function daysTo(iso: string, now: Date): number {
+  return Math.floor((new Date(iso).getTime() - now.getTime()) / 86_400_000);
+}
+
+/** CertCell words a certificate's expiry: expired, soon, or valid. */
+function CertCell({ notAfter, now }: { notAfter: string; now: Date }) {
+  const d = daysTo(notAfter, now);
+  if (d < 0) return <span className="sevpill p-crit">{tr(`Expiré il y a ${-d} j`, `Expired ${-d} d ago`)}</span>;
+  if (d <= 14) return <span className="sevpill p-high">{tr(`Expire dans ${d} j`, `Expires in ${d} d`)}</span>;
+  return <span className="num">{tr(`Valide · ${d} j`, `Valid · ${d} d`)}</span>;
+}
+
+type ATab = "hosts" | "services" | "certs" | "domains";
+
 export function ActifsPage() {
-  const { data, assets, issues } = useOrg();
+  const { data, assets, issues, isAdmin } = useOrg();
   const { showSheet } = useUI();
   const [af, setAf] = useState<"all" | "pb" | "ok">("all");
+  const [tab, setTab] = useState<ATab>("hosts");
+  const [q, setQ] = useState("");
+  const pending = !!data?.targets.some((t) => !t.verified && !t.internal);
+  const [adding, setAdding] = useState(pending);
   if (!data) return null;
+  const now = new Date();
   const evaluated = evaluatedCats(data.checks);
   const openOf = (n: string) => issues.filter((i) => !i.fixed && i.host === n);
+  const needle = q.trim().toLowerCase();
   const sorted = assets.slice().sort((a, b) => RANK[worst(openOf(a.n))] - RANK[worst(openOf(b.n))]);
-  const list = sorted.filter((a) => (af === "all" ? true : af === "pb" ? openOf(a.n).length > 0 : openOf(a.n).length === 0));
+  const list = sorted.filter(
+    (a) =>
+      (af === "all" ? true : af === "pb" ? openOf(a.n).length > 0 : openOf(a.n).length === 0) &&
+      (!needle || [a.n, ...a.ips, ...a.tech].some((x) => x.toLowerCase().includes(needle))),
+  );
   const nPb = assets.filter((a) => openOf(a.n).length).length;
   // The offer covers hosts_per_scan names per domain.
   const p = data.subscription.plan;
   const cap = p.hosts_per_scan ? p.hosts_per_scan * Math.max(1, data.targets.length) : Math.max(1, assets.length);
-
   const nOk = assets.length - nPb;
   const domains = data.targets.filter((t) => !t.internal);
   const count = { all: assets.length, pb: nPb, ok: nOk };
-  const shown = (a: (typeof assets)[number]) => (af === "all" ? true : af === "pb" ? openOf(a.n).length > 0 : openOf(a.n).length === 0);
+  const current = data.assets.filter((x) => !x.gone_at);
+  const services = current.filter((x) => x.kind === "service").sort((x, y) => Number(servicePort(x.value)) - Number(servicePort(y.value)));
+  const certs = current.filter((x) => x.kind === "certificate").sort((x, y) => (x.details.not_after ?? "").localeCompare(y.details.not_after ?? ""));
+  const expired = certs.filter((c) => c.details.not_after && daysTo(c.details.not_after, now) < 0).length;
+  const nextCert = certs.find((c) => c.details.not_after && daysTo(c.details.not_after, now) >= 0);
+  const ports = new Map<string, number>();
+  for (const sv of services) ports.set(servicePort(sv.value), (ports.get(servicePort(sv.value)) ?? 0) + 1);
+  const topPorts = [...ports.entries()].sort((x, y) => y[1] - x[1]).slice(0, 3);
+  const sevs = (["crit", "high", "med", "low"] as const).map((k) => [k, assets.filter((x) => worst(openOf(x.n)) === k).length] as const);
+  const tabs: [ATab, string, number][] = [
+    ["hosts", tr("Noms d’hôte", "Hostnames"), assets.length],
+    ["services", tr("Services", "Services"), services.length],
+    ["certs", tr("Certificats", "Certificates"), certs.length],
+    ["domains", tr("Domaines", "Domains"), domains.length],
+  ];
 
   return (
     <>
-      <div className="todayhead">
+      <div className="ph">
         <div>
-          <p className="hello">{tr("Actifs", "Assets")}</p>
-          <h1 className="lead lead2">
-            {tr(`${assets.length} actif${assets.length > 1 ? "s" : ""} surveillé${assets.length > 1 ? "s" : ""}`, `${assets.length} monitored asset${assets.length > 1 ? "s" : ""}`)}
-          </h1>
+          <h1>{tr("Actifs", "Assets")}</h1>
+          <p>{tr("Tout ce que vous exposez sur internet, découvert par les journaux de certificats et le DNS.", "Everything you expose on the internet, discovered through certificate logs and DNS.")}</p>
         </div>
-        <div className="filters" role="group" aria-label={tr("Filtrer les actifs", "Filter the assets")} style={{ padding: 0 }}>
-          {(
-            [
-              ["all", tr("Tous", "All")],
-              ["pb", tr("Avec un problème", "With a problem")],
-              ["ok", tr("Protégés", "Protected")],
-            ] as const
-          ).map(([k, l]) => (
-            <button key={k} className="pill" type="button" aria-pressed={af === k} onClick={() => setAf(k)}>
-              {l}
-              <span className="pillnum">{count[k]}</span>
+        {isAdmin && !adding && (
+          <div className="phacts">
+            <button className="btn sm" type="button" onClick={() => setAdding(true)}>
+              <span aria-hidden="true">+ </span>
+              {tr("Ajouter un domaine", "Add a domain")}
             </button>
-          ))}
-        </div>
-      </div>
-      <div className="assetsum" role="img" aria-label={tr(`${assets.length} actifs sur ${cap} inclus dans l'offre ${p.name}`, `${assets.length} of ${cap} assets included in the ${p.name} plan`)}>
-        <div className="usebar">
-          <b style={{ width: Math.min(100, (assets.length / cap) * 100) + "%" }} className={assets.length / cap >= 0.9 ? "full" : ""} />
-        </div>
-        <span>
-          {tr(`${assets.length} sur ${cap} inclus dans l’offre ${p.name}`, `${assets.length} of ${cap} included in the ${p.name} plan`)}
-          {" · "}
-          {tr(`${nPb} avec un problème`, `${nPb} with a problem`)}
-          {" · "}
-          {tr(`${nOk} protégé${nOk > 1 ? "s" : ""}`, `${nOk} protected`)}
-        </span>
+          </div>
+        )}
       </div>
 
-      {domains.map((t) => {
-        const mine = list.filter((a) => a.targetId === t.id && shown(a));
-        return (
-          <section key={t.id} className="rpanel domblock">
-            <div className="domhead">
-              <div className="domtop">
-                <h2>{t.domain}</h2>
-                <span className={"stchip " + (t.verified ? "st-ok" : "st-warn")}>{t.verified ? tr("Vérifié", "Verified") : tr("À vérifier", "To verify")}</span>
-              </div>
-              {t.verified ? <ScanLine targets={[t]} /> : <span className="hint">{tr("Publiez son enregistrement TXT, juste en dessous, pour le scanner.", "Publish its TXT record, just below, to scan it.")}</span>}
+      {adding && (
+        <div className="rpanel addpanel addopen">
+          {!pending && (
+            <button className="link addclose" type="button" onClick={() => setAdding(false)}>
+              {tr("Fermer", "Close")}
+            </button>
+          )}
+          <AddPanel resume={pending} />
+        </div>
+      )}
+
+      <div className="statstrip">
+        <div className="stat">
+          <small><Ico d={G.globe} />{tr("Actifs surveillés", "Monitored assets")}</small>
+          <p className="statv">
+            <b>{assets.length}</b>
+            <span>{tr(`sur ${cap} inclus dans l’offre ${p.name}`, `of ${cap} included in the ${p.name} plan`)}</span>
+          </p>
+          <div className="sevbar" role="img" aria-label={tr(`${assets.length} actifs sur ${cap}`, `${assets.length} of ${cap} assets`)}>
+            <i style={{ width: Math.min(100, (assets.length / cap) * 100) + "%", background: "var(--azur)" }} />
+          </div>
+        </div>
+        <div className="stat">
+          <small><Ico d={G.bug} tone="red" />{tr("Avec un problème", "With a problem")}</small>
+          <p className="statv">
+            <b>{nPb}</b>
+            <span>{tr(`${nOk} protégé${nOk > 1 ? "s" : ""}`, `${nOk} protected`)}</span>
+          </p>
+          <div className="sevbar" aria-hidden="true">
+            {sevs.map(([k, n]) => (n ? <i key={k} style={{ flex: n, background: `var(--${k})` }} /> : null))}
+            {nOk > 0 && <i style={{ flex: nOk, background: "var(--ok)" }} />}
+          </div>
+        </div>
+        <div className="stat">
+          <small><Ico d={G.server} tone="violet" />{tr("Services exposés", "Exposed services")}</small>
+          <p className="statv">
+            <b>{services.length}</b>
+            <span>{tr("ports ouverts", "open ports")}</span>
+          </p>
+          <p className="statfoot">
+            <span className="mono">{topPorts.map(([pt, n]) => `${pt} ×${n}`).join(" · ") || "–"}</span>
+          </p>
+        </div>
+        <div className="stat">
+          <small><Ico d={G.lock} tone="green" />{tr("Certificats", "Certificates")}</small>
+          <p className="statv">
+            <b>{certs.length - expired}</b>
+            <span>{tr("valides", "valid")}</span>
+            {expired > 0 && <em className="delta dn">{tr(`${expired} expiré${expired > 1 ? "s" : ""}`, `${expired} expired`)}</em>}
+          </p>
+          <p className="statfoot">
+            <span>{nextCert?.details.not_after ? tr(`prochain à expirer : ${daysTo(nextCert.details.not_after, now)} j`, `next to expire: ${daysTo(nextCert.details.not_after, now)} d`) : "–"}</span>
+          </p>
+        </div>
+      </div>
+
+      <nav className="ctabs" aria-label={tr("Inventaire", "Inventory")}>
+        {tabs.map(([k, l, n]) => (
+          <button key={k} type="button" aria-pressed={tab === k} onClick={() => setTab(k)}>
+            {l}
+            <span className="ctabn">{n}</span>
+          </button>
+        ))}
+      </nav>
+
+      {tab === "hosts" && (
+        <section className="panel">
+          <div className="fbar">
+            <label className="fin">
+              <Search />
+              <span className="vh">{tr("Filtrer les actifs", "Filter the assets")}</span>
+              <input type="search" placeholder={tr("Filtrer par nom, IP, technologie…", "Filter by name, IP, technology…")} value={q} onChange={(e) => setQ(e.target.value)} />
+            </label>
+            <div className="cseg" role="group" aria-label={tr("Filtrer les actifs", "Filter the assets")}>
+              {(
+                [
+                  ["all", tr("Tous", "All")],
+                  ["pb", tr("Avec un problème", "With a problem")],
+                  ["ok", tr("Protégés", "Protected")],
+                ] as const
+              ).map(([k, l]) => (
+                <button key={k} type="button" aria-pressed={af === k} onClick={() => setAf(k)}>
+                  {l} <b>{count[k]}</b>
+                </button>
+              ))}
             </div>
-            {mine.length ? (
-              <ul className="arows">
-                {mine.map((a) => {
-                  const o = openOf(a.n);
-                  const w = worst(o);
-                  return (
-                    <li key={a.n}>
-                      <button className={"arow sev-" + w} type="button" title={a.n} onClick={() => showSheet(<AssetSheet n={a.n} />)}>
-                        <span className="awho">
-                          <b>{a.n}</b>
-                          <small>
-                            {a.k}
-                            {o.length ? tr(` · ${o.length} problème${o.length > 1 ? "s" : ""}`, ` · ${o.length} problem${o.length > 1 ? "s" : ""}`) : ""}
-                          </small>
-                        </span>
-                        <span className="acats" aria-hidden="true">
-                          {CATS.map(([c, l]) => (
-                            <span key={c}>
-                              <i className={"hm " + catState(a, c, issues, evaluated)} />
-                              {l}
-                            </span>
-                          ))}
-                        </span>
-                        <span className="atech">
-                          {a.tech.slice(0, 2).map((x) => (
-                            <span key={x}>{x}</span>
-                          ))}
-                        </span>
-                        <SevTag s={w} label={w === "ok" ? tr("Protégé", "Protected") : undefined} />
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="hint" style={{ marginTop: 12 }}>
-                {af === "all" ? tr("Aucun actif trouvé pour l’instant : il apparaîtra après le premier scan.", "No asset found yet: they appear after the first scan.") : tr("Aucun actif dans ce filtre.", "No asset in this filter.")}
-              </p>
-            )}
-          </section>
-        );
-      })}
+          </div>
+          <div className="tw">
+            <table className="ctable">
+              <thead>
+                <tr>
+                  <th>{tr("Nom d’hôte", "Hostname")}</th>
+                  <th>{tr("Adresse IP", "IP address")}</th>
+                  <th>{tr("Ports", "Ports")}</th>
+                  <th>{tr("Technologies", "Technologies")}</th>
+                  <th>{tr("Certificat", "Certificate")}</th>
+                  <th>{tr("Contrôles", "Checks")}</th>
+                  <th>{tr("Risque", "Risk")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.length ? (
+                  list.map((a) => {
+                    const o = openOf(a.n);
+                    const w = worst(o);
+                    return (
+                      <tr key={a.n}>
+                        <td>
+                          <button className={"arow sev-" + w} type="button" title={a.n} onClick={() => showSheet(<AssetSheet n={a.n} />)}>
+                            <b className="mono">{a.n}</b>
+                            <small>
+                              {a.k}
+                              {o.length ? tr(` · ${o.length} problème${o.length > 1 ? "s" : ""}`, ` · ${o.length} problem${o.length > 1 ? "s" : ""}`) : ""}
+                            </small>
+                          </button>
+                        </td>
+                        <td className="mono">{a.ips.join(", ") || "–"}</td>
+                        <td>
+                          <span className="chips">
+                            {a.svc.length
+                              ? a.svc.slice(0, 4).map(([pt]) => (
+                                  <span key={pt} className="chip mono">
+                                    {pt}
+                                  </span>
+                                ))
+                              : "–"}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="chips">
+                            {a.tech.length
+                              ? a.tech.slice(0, 3).map((x) => (
+                                  <span key={x} className="tag">
+                                    {x}
+                                  </span>
+                                ))
+                              : "–"}
+                          </span>
+                        </td>
+                        <td>{a.cert ? <CertCell notAfter={a.cert.notAfter} now={now} /> : "–"}</td>
+                        <td>
+                          <span className="acats" aria-hidden="true">
+                            {CATS.map(([c, l]) => (
+                              <span key={c} title={l}>
+                                <i className={"hm " + catState(a, c, issues, evaluated)} />
+                              </span>
+                            ))}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={"sevpill p-" + w}>{w === "ok" ? tr("Protégé", "Protected") : SEV[w][0]}</span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="ctempty">
+                      {assets.length
+                        ? tr("Aucun actif ne correspond à ces filtres.", "No asset matches these filters.")
+                        : tr("Aucun actif trouvé pour l’instant : il apparaîtra après le premier scan.", "No asset found yet: they appear after the first scan.")}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
-      <AddDomainRow />
+      {tab === "services" && (
+        <section className="panel">
+          <div className="tw">
+            <table className="ctable">
+              <thead>
+                <tr>
+                  <th>{tr("Adresse", "Address")}</th>
+                  <th>{tr("Port", "Port")}</th>
+                  <th>{tr("Nom d’hôte", "Hostname")}</th>
+                  <th>{tr("Service", "Service")}</th>
+                  <th>{tr("Produit et version", "Product and version")}</th>
+                  <th>{tr("Vu depuis", "Seen since")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {services.length ? (
+                  services.map((sv) => (
+                    <tr key={sv.id}>
+                      <td className="mono">{serviceIP(sv.value)}</td>
+                      <td>
+                        <span className="chip mono">{servicePort(sv.value)}</span>
+                      </td>
+                      <td className="mono">{sv.details.host ?? "–"}</td>
+                      <td>{sv.details.service ?? sv.details.expected ?? "–"}</td>
+                      <td>{[sv.details.product, sv.details.version].filter(Boolean).join(" ") || "–"}</td>
+                      <td className="num">{new Date(sv.first_seen).toLocaleDateString(locale(), { day: "numeric", month: "short", year: "numeric" })}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="ctempty">
+                      {tr("Aucun service exposé trouvé pour l’instant.", "No exposed service found yet.")}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {tab === "certs" && (
+        <section className="panel">
+          <div className="tw">
+            <table className="ctable">
+              <thead>
+                <tr>
+                  <th>{tr("Sujet", "Subject")}</th>
+                  <th>{tr("Noms couverts", "Names covered")}</th>
+                  <th>{tr("Émetteur", "Issuer")}</th>
+                  <th>{tr("Expiration", "Expiry")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {certs.length ? (
+                  certs.map((c) => (
+                    <tr key={c.id}>
+                      <td className="mono">{c.details.subject || "–"}</td>
+                      <td className="mono ctnames">{(c.details.names ?? "").split(" ").filter(Boolean).slice(0, 4).join(", ") || "–"}</td>
+                      <td>{c.details.issuer || "–"}</td>
+                      <td>{c.details.not_after ? <CertCell notAfter={c.details.not_after} now={now} /> : "–"}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="ctempty">
+                      {tr("Aucun certificat vu pour l’instant.", "No certificate seen yet.")}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {tab === "domains" && (
+        <section className="panel">
+          {domains.map((t) => (
+            <div key={t.id} className="domrow">
+              <div className="domtop">
+                <b className="mono">{t.domain}</b>
+                <span className={"stchip " + (t.verified ? "st-ok" : "st-warn")}>{t.verified ? tr("Vérifié", "Verified") : tr("À vérifier", "To verify")}</span>
+                <span className="domn">{tr(`${assets.filter((x) => x.targetId === t.id).length} actifs`, `${assets.filter((x) => x.targetId === t.id).length} assets`)}</span>
+              </div>
+              {t.verified ? <ScanLine targets={[t]} /> : <span className="hint">{tr("Publiez son enregistrement TXT pour le scanner.", "Publish its TXT record to scan it.")}</span>}
+            </div>
+          ))}
+          {!domains.length && <p className="ctempty">{tr("Aucun domaine pour l’instant.", "No domain yet.")}</p>}
+        </section>
+      )}
 
       <div className="section">
         <InternalNetworks />

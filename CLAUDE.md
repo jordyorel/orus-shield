@@ -55,8 +55,34 @@ short head (Actifs: "N actifs surveillés", filters with counts, a one-line summ
 gauge; then one block per domain, its scan line on top and its assets as rows edged in their
 severity's colour, with the five categories as labelled coloured dots and the technologies; it stays
 neat with two assets as with fifty; adding a domain beside internal networks.
-Rapports: score trend and heat map, the automated checks as three cards with a share and a bar). The dashboard and the public site use the width
-of the screen (main up to 1440 px and 1360 px).
+Rapports: score trend and heat map, the automated checks as three cards with a share and a bar). Widths are capped and centred (2026-11-19, `--w-app` 1240 px for the console and its top bar, folded menu
+or not; `--w-site` 1200 px for the public site, the docs and the legal pages).
+Console redesign (2026-11-19, Jordy's request, from an approved clickable mockup inspired by professional
+platforms; it supersedes the mockup's look where they differ): a sidebar that folds to its icons (76 px folded, 240 px open; the
+organization and its plan, counters on Problèmes and Actifs, an "Organisation" group, the trial at its foot
+with its days left, the profile, the fold toggle), a thin top bar (breadcrumb, search, running scan, theme),
+and dense pages: a page head with its actions, a strip of four figures, panels with 14 px titles, tables
+with aligned columns. Aujourd'hui: the strip (score and its change, open problems by severity, fixed in 30
+days, next scan), "À faire aujourd'hui" as table-like rows, posture by family of checks (`families` in
+model.ts) with a gauge, the daily score curve, the activity; the radar is gone. Problèmes: status tabs
+(Ouverts, Corrigés, Risque accepté), a filter bar (text, severity, type) and a table (problem with its check
+ID, severity, asset, category, seen since, gain); on a wide screen (1200 px) the chosen problem shows beside
+the table (`FindingSheet inline`, the first one by default), on a narrower one in the side sheet; a line
+ticked stays in Ouverts while its verification is followed. Actifs: the strip (assets against the plan, at risk, exposed
+services, certificates) and tabs Noms d'hôte, Services, Certificats, Domaines as tables (an asset view now
+carries its IPs and its certificate, `toAssets`); "+ Ajouter un domaine" in the page head. Rapports (interactive: hovering, tapping or the arrow keys pick a week, whose tooltip gives its score and its
+change; a heat map cell shows its problems in a tooltip, lights up its row and column, and opens its asset): the
+score as one bar per ISO week (S41…) over the whole period (`weeklySlots`: a week before any scan is an
+empty dashed slot; the tooltip shows on hover only, the latest value sits above its bar), the checks by family as a table (passed out of
+evaluated, a bar of passed and failed), the heat map as a compact table (open problems per asset and family,
+"n/a" where a family does not apply, a host opens its asset), beside it the two PDFs as stacked cards (who it is for, what it holds, its language, the button). Réglages: the same sections in a grouped menu (Surveillance, Organisation, Développeurs, Préférences);
+Scans is two panels of rows, "Ce que nous vérifions" (a switch per family) and "Planification" (depth as a
+segmented control, frequency, day, hour and speed as lists; the sliders are gone), each change saved at once. Shared tokens in
+styles.css: `--r-sm` 6, `--r` 8, `--r-lg` 12, the severity scale (`--crit`, `--high`, `--med`, `--low`,
+`--ok` and their `-bg`), the sidebar colours, `--mono` (IBM Plex Mono, for host names, addresses and check
+IDs); the public site uses the same radii and buttons. The dark theme is a neutral graphite in the manner of Supabase's (2026-11-20:
+greys #171717 to #2e2e2e without a blue cast, borders instead of shadows, the sidebar the page’s near-black, light in the light theme;
+our blue stays the accent), for the whole site; the home page's screenshots follow the theme (`x-dark.jpg`).
 UX additions agreed on 2026-11-18 (beyond the mockup): the same check failing on several names is
 one problem line (`groupIssues`), fixed in one gesture; ticking says it starts a verification and the
 line then shows its verdict ("Vérification en cours…", "Confirmé", "Toujours présent au contrôle de
@@ -332,7 +358,7 @@ trust band, a pricing teaser, an FAQ and a closing test. Nothing invented: no cu
 or reviews until real ones exist. The screenshots (`web/public/screens/*.jpg`, 1600 px) are the real
 dashboard rendered on an example domain. The public header has menus (Produit, Ressources, each link
 with a line of explanation; a Menu button on phones) and the footer columns (Produit, Ressources,
-Légal); the profile avatar ends the header when signed in. Guides (`/guides`,
+Légal); the profile avatar ends the header when signed in. Guides (index with category chips and cards, articles with a breadcrumb and an "On this page" table of contents, `ui/pages/article.tsx`), the legal texts (tabs between the three, the same table of contents, the draft notice as a callout) and Tarifs (comparison grouped by themes with ticks, reassurance strip, custom-plan band, FAQ, closing call) were redesigned on 2026-11-19; line icons are in `ui/glyphs.tsx`. Guides (`/guides`,
 `ui/pages/guides.tsx`, content for search engines leading to the test): DMARC, SPF, TLS certificate,
 HTTPS and security headers, each a whole text in French and in English, with its own title and meta
 description (`useMeta`); they state only standard facts (records, dig, openssl, nginx, Apache). The
@@ -437,7 +463,8 @@ manage them through `orus_app` with row-level security. Browsers' CSRF protectio
 these requests (no Sec-Fetch-Site), and a page cannot use a key it does not know. The public API is
 documented in OpenAPI 3.1 (`engine/internal/api/openapi.json`, embedded, served at
 `GET /api/v1/openapi.json`; French texts in `x-*-fr` extensions); `TestOpenAPIMatchesTheServer` calls
-every documented operation with a key, so the document cannot drift from the routes. The dashboard
+every documented operation with a key, so the document cannot drift from the routes. `TestOpenAPIResponsesMatchTheirSchemas` checks every
+read answer against its documented schema (required fields, types, no undocumented field). The dashboard
 renders it at `/docs/api` with Scalar (`ui/pages/docs.tsx`, `ui/pages/scalar.tsx`, loaded on that page only), linked
 from Réglages > API and the public footer. The document's description holds the guides (authentication, errors, limits,
 webhooks with signature checks in Node and Python, changelog) and its OpenAPI 3.1 `webhooks` section every event's payload;
@@ -577,7 +604,7 @@ tools below before the roadmap step listed for it.
 | PostgreSQL | Main database: customers, assets, scans, findings (`JSONB`) | Adopted: PostgreSQL 18 (uuidv7), driver pgx v5 (MIT) | Step 4 |
 | Docker / Compose | Local dev environment; isolation of heavy scanners | Adopted for local dev (`docker-compose.yml`) | Step 4 |
 | Queue | Scan jobs for workers | Adopted: PostgreSQL (`SELECT ... FOR UPDATE SKIP LOCKED`), leases + fencing; no extra service | Step 4 |
-| Fonts | Figtree and Bricolage Grotesque (the 2026-11-12 mockup's; Inter and Space Grotesk before) from `@fontsource-variable/*` (OFL-1.1, no dependencies, no install scripts), bundled and served from our origin: never Google Fonts, which would send visitors' addresses to a third party | Adopted 2026-11-10 | Step 7 |
+| Fonts | IBM Plex Sans everywhere (chosen by Jordy 2026-11-19 from a comparison; before: Figtree and Bricolage Grotesque, the 2026-11-12 mockup's) from `@fontsource-variable/ibm-plex-sans`; styles use the tokens `--font` and `--font-display` only, so a change is one line. Packages from `@fontsource-variable/*` (OFL-1.1, no dependencies, no install scripts), bundled and served from our origin: never Google Fonts, which would send visitors' addresses to a third party | Adopted 2026-11-10 | Step 7 |
 | React + TypeScript (Vite) | Dashboard in `web/`. Exact versions, each at least two weeks old when added; `.npmrc` sets `save-exact` and `ignore-scripts`; CI runs `npm ci` and `npm audit`. Deps: react, react-dom (MIT); dev: typescript (Apache-2.0), vite, @vitejs/plugin-react, vitest, jsdom, @testing-library/react and /dom, @types/react(-dom) (MIT). No UI kit (styles come from the mockups), no router library | Adopted 2026-11-10 | Step 7 |
 | golang.org/x/crypto | argon2id password hashing (stdlib only has PBKDF2, which is not memory-hard) | Adopted (BSD-3-Clause, maintained by the Go team) | Step 7.6 |
 | Redis or Valkey | Shared rate limiting and cache across workers | Defer until several workers run; check Redis's current license first, prefer Valkey (BSD) if in doubt | After step 4 |
