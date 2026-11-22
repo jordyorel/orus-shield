@@ -148,10 +148,16 @@ the domain is verified; at most 20 addresses a run, paced for XON's limits, a 42
 (their findings keep their state). Checks: `leak-password-exposed` (high when the breach stored passwords in
 clear or easy to crack, else medium) and `leak-email-exposed` (low: other data only). Only breach metadata is
 kept (name, year, kinds of data), never a password; a leak finding is tied to the registered domain (Fuites
-column). XON's terms require attribution (finding evidence, the sheet's source line, Réglages) and a
-licensing agreement for commercial use: to obtain before selling the feature (free tier for development;
-`ORUS_XON_BASE_URL`, `ORUS_XON_API_KEY` for a paid key, worker only). Step 2, whole-domain monitoring, needs
-XON's MSSP offer (xonThreatIntel+). The privacy texts name XON as a sub-processor (lawyer to confirm).
+column). Commercial use (XON's answer, 2026-11-22): the xonThreatIntel+ Basic plan ($99/month) covers it, with no
+separate xonAPI+ subscription or licensing agreement: per-address lookups at 50 requests per minute with no cap
+on the number of addresses, domain-level breach intelligence for up to 10 domains (incremental updates, webhooks;
+larger packages negotiated later), documentation in the xonPlus console. Our DNS TXT verification is enough: our
+customers do not verify their domains with XON. Attribution ("Breach data provided by XposedOrNot" with a link) is
+optional; we keep it (finding evidence, the sheet's source line, Réglages). XON provides a DPA for paid
+integrations: to sign before launch. Free tier for development; `ORUS_XON_BASE_URL`, `ORUS_XON_API_KEY` for the
+paid key, worker only. We stay on the free tier for now (2026-11-22): the feature is not sold until the plan is
+taken. Step 2, whole-domain monitoring, is in that same plan (10 domains). The privacy texts name
+XON as a sub-processor (lawyer to confirm, with the DPA).
 
 ## How to work on this repo
 
