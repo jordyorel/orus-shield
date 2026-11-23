@@ -5,7 +5,7 @@ This is the list of every feature the product will have once the work chosen on
 prepare the graphical interface: each entry says what the user sees and does, where the
 data comes from, and its status.
 
-Status: **done** (works today), **A** to **J** (the step that builds it, see the end),
+Status: **done** (works today), **A** to **L** (the step that builds it, see the end),
 **later** (planned, no date). Plan: the cheapest offer that includes it (Découverte,
 PME, Pro, Entreprise; prices not validated yet). UI wording stays French; finding texts
 stay in the modules' English (decided 2026-11-10).
@@ -184,6 +184,83 @@ silent failure. Numbers are a proposal (not validated):
 | Internal checks: ports and services, TLS, known vulnerabilities (the same modules, run by the agent) | results in the standard schema, tagged "interne" | J |
 | Agent health: last contact, version, updates signed by us | | J |
 
+## 17. Identities: Microsoft 365 and Google Workspace (Identités) — proposed 2026-11-23
+
+Why first: most of our customers' risk is in their office suite, not in a cloud account
+(accounts without MFA, too many admins, mail forwarded outside). The 2026-11-10 mockups
+already showed it (`docs/design/Surface.dc.html`, "Identités"). Offers are named as in
+package `plan`: Gratuit, Essentiel, Pro, Sur devis.
+
+| Feature | What the user sees / does | Status |
+|---|---|---|
+| Connect Microsoft 365: "Connecter" opens Microsoft's admin consent page for our multi-tenant Entra app; the customer's admin accepts read-only permissions; we get the tenant ID | Actifs > Identités, admins only; the permissions listed in French before the click | K |
+| Connect Google Workspace: OAuth with a super admin's consent, read-only Admin SDK scopes | same place | K |
+| Binding rule: a tenant is accepted only if one of its verified domains is a verified domain of the organization (the tenant lists its domains; ours are verified by TXT) | refusal explained: "ce compte Microsoft ne gère aucun de vos domaines vérifiés" | K |
+| Read-only, checked: at connection and before each scan we read the permissions actually granted; any write permission refuses the connection | | K |
+| Disconnect: deletes the stored token and tells the customer how to remove the app on their side | | K |
+| Checks (first set, native Go): MFA not registered per account; admins without MFA; number of global / super admins (more than 4, or only 1); legacy authentication allowed; security defaults off with no conditional access policy; accounts inactive for 90 days still enabled; external auto-forwarding of mail allowed; inbox rules forwarding outside; guest users' access; password never expiring for admins without MFA | findings in the standard schema, family "Identités", FR and EN texts written by us | K |
+| Asset kinds: the tenant and its accounts (identity) | Actifs > Identités: accounts, admins, MFA state | K |
+| Score: the family "Identités" joins the posture score and the radar / families table | | K |
+| Plan: Essentiel and above (Gratuit: connect and see the first audit, like a domain) | | K |
+
+Design points to settle before code:
+- **Permissions, least first.** Microsoft Graph application permissions, read only, to be
+  confirmed against Microsoft's documentation: `Directory.Read.All`, `Policy.Read.All`,
+  `AuditLog.Read.All` (MFA registration report, sign-in activity), `MailboxSettings.Read`
+  (inbox rules). Never `Mail.Read`, `Files.Read.All` or any `*.ReadWrite.*`: we read
+  settings, never content. Google: `admin.directory.user.readonly`,
+  `admin.directory.domain.readonly`, `admin.reports.audit.readonly`.
+- **Files shared publicly** (OneDrive, SharePoint, Drive) need access to file metadata
+  (`Files.Read.All` reads content too; Google's `drive.metadata.readonly` is a restricted
+  scope). Left out of the first set: decide later, with what it costs us (below).
+- **App reviews.** Microsoft: our app needs publisher verification (a Microsoft partner
+  account). Google: sensitive or restricted scopes need Google's verification, and
+  restricted ones a paid security assessment. To check before building the Google side.
+- **Secrets.** Microsoft: we hold one app secret or certificate (environment, worker only)
+  and only store the customer's tenant ID: nothing customer-specific to leak. Google: the
+  refresh token, sealed under `ORUS_CREDENTIALS_KEY` like test accounts (API writes, never
+  reads back).
+- **Rules.** Calls go to Microsoft's and Google's APIs, not to the customer's systems: no
+  gate, but the shared limiter (rule 3), an allowlist of the provider's API hosts, and the
+  audit log (rule 4). Rule 1 is met by the admin consent plus the binding rule.
+- **Personal data.** Findings name staff accounts (address, last sign-in). Keep only what a
+  check needs, nothing from mailboxes or files; Microsoft and Google are not new
+  sub-processors (the customer's own providers), but the privacy texts must say what we read.
+- **Code.** Native Go (Graph and the Admin SDK are JSON over HTTPS, OAuth client
+  credentials): no dependency, our own French texts. One module per provider (`m365`,
+  `gworkspace`), `module.Info.UsesConnection` passing the connection as
+  `module.RunConfig`, like `UsesCredentials`.
+
+## 18. Cloud accounts: AWS, Azure, Google Cloud (Cloud) — proposed 2026-11-23
+
+| Feature | What the user sees / does | Status |
+|---|---|---|
+| Connect AWS: a one-click CloudFormation stack creates a cross-account IAM role trusting our account, with the managed `SecurityAudit` policy and an `ExternalId` unique to the organization; the customer pastes the role ARN | Actifs > Cloud, admins only; template shown before launch | L |
+| Connect Azure: admin consent to our multi-tenant app, then the customer gives it `Reader` and `Security Reader` on the subscriptions to audit | same place | L |
+| Connect Google Cloud: the customer grants our service account `roles/iam.securityReviewer` and `roles/viewer` on a project or folder (an IAM binding, no key exchanged) | same place | L |
+| No long-lived customer key: AWS through STS AssumeRole, Azure and GCP through our own identity; the customer revokes access on their side at any time | | L |
+| Read-only, checked: the granted policies are read at connection and before each scan; write rights refuse the scan | | L |
+| Checks: Prowler (CIS benchmarks and best practices): public buckets, root / owner without MFA, old access keys, security groups open to the internet, logging off, unencrypted storage, public snapshots, exposed databases | findings in the standard schema, family "Cloud"; French text names the kind of problem and quotes Prowler's English, like Nuclei | L |
+| Asset kind: cloud resource (ARN or resource ID, region, service); public IPs and names it finds are offered to Actifs as new assets to verify | | L |
+| Grouping: the same check on many resources is one problem line (`groupIssues` already does it) | | L |
+| Plan: Pro and Sur devis; number of cloud accounts per offer to decide | | L |
+
+Design points to settle before code:
+- **Prowler** (Apache-2.0, to verify and record in CLAUDE.md before it ships) as a pinned
+  Docker image, like ZAP: `deploy/prowler/install.sh`, digest pinned, no capabilities,
+  bounded memory, throwaway HOME, credentials from an `--env-file` (mode 0600), OCSF JSON
+  output converted to our schema. Native Go would mean hundreds of checks and the AWS,
+  Azure and Google SDKs (large dependencies): not worth it.
+- **Network.** Prowler's traffic goes through `gateproxy` as its HTTPS proxy with an
+  allowlist of the provider's API hosts (and our CA in the container), so it counts against
+  the limiter and cannot reach anything else. Production denies the container any other
+  route, like Nuclei and ZAP.
+- **Our side.** We need our own AWS account (an IAM user or role allowed only
+  `sts:AssumeRole`), an Entra app (shared with section 17) and a GCP service account. All
+  free; their secrets live in the worker's environment.
+- **Volume.** Hundreds of results per account: keep failed checks only (passed ones feed
+  `Result.Evaluated`), muted checks per organization later.
+
 ## Steps
 
 | Step | Builds | Needs from Jordy |
@@ -198,3 +275,5 @@ silent failure. Numbers are a proposal (not validated):
 | H | API security: declared APIs (OpenAPI, GraphQL), discovery, active API scan with ZAP | done 2026-11-12 (module api; Pro and Sur devis); discovery of undeclared API docs later |
 | I | Authenticated web and API scans with a customer's test account | done 2026-11-12 (header or login form, sealed with ORUS_CREDENTIALS_KEY; Pro and Sur devis) |
 | J | Internal scanning with agents | done 2026-11-12 for Linux and Windows (ports module; TLS and vulns on agents later); unsigned binaries with SHA-256 until a code signing certificate; automatic updates later |
+| K | Identities: Microsoft 365 and Google Workspace, read-only, native Go modules | approve the permission list; a Microsoft partner account (publisher verification); check Google's app verification cost |
+| L | Cloud accounts: AWS, Azure, Google Cloud through Prowler behind gateproxy | approve Prowler after its licence check; our own AWS account; offers and account counts |

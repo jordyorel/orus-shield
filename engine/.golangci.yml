@@ -20,16 +20,22 @@ linters:
         - administrer
         - administrez
         - certificats
+        - clientes
         - commandes
         - conteneurs
+        - demandes
         - distribuent
         - exemple
         - interm      # "intermédiaires", cut at the accent
         - lecteurs
         - manipulant
         - principales
+        - protocoles
         - recommandation
+        - recommande
         - relient
+        - responsable
+        - strat       # "stratégie", cut at the accent
         - surveill
         - trafic
     errcheck:

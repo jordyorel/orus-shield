@@ -57,6 +57,11 @@ type Info struct {
 	// (RunConfig.Emails): the worker loads them only for such modules, and
 	// only for a verified domain.
 	UsesEmails bool
+	// UsesIdentity marks a module that audits a connected identity
+	// provider (RunConfig.Identity: Microsoft 365, Google Workspace). The
+	// worker passes the connection only to such modules, and only for a
+	// verified domain the connection is bound to.
+	UsesIdentity bool
 	// DeepOnly marks a module of the deep profile only (the deep web
 	// scan). A scan runs deep only when it includes such a module: the
 	// full scans the deep profile schedules, or a full manual scan; a
@@ -256,6 +261,17 @@ type RunConfig struct {
 	// of the organization on the domain, addresses its admins declared),
 	// for modules with Info.UsesEmails, on a verified domain only.
 	Emails []string `json:"emails,omitempty"`
+	// Identity is the identity provider connected to this domain, for
+	// modules with Info.UsesIdentity, on a verified domain only.
+	Identity *ScanIdentity `json:"identity,omitempty"`
+}
+
+// ScanIdentity is a connected identity provider (step K). It holds no
+// secret: Microsoft 365 is reached with our own app's credentials, in the
+// tenant whose admin consented.
+type ScanIdentity struct {
+	Provider string `json:"provider"`  // m365
+	TenantID string `json:"tenant_id"` // the Microsoft Entra tenant (a GUID)
 }
 
 // ScanAuth is a test account: a header, or a login form.
