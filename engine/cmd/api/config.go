@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/jordyorel/orus-shield/engine/internal/mailer"
+	"github.com/jordyorel/orus-shield/engine/internal/modules/m365"
 	"github.com/jordyorel/orus-shield/engine/internal/paddle"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 	"github.com/jordyorel/orus-shield/engine/internal/seal"
@@ -27,6 +28,7 @@ type config struct {
 	smtp           *mailer.SMTP // nil: mail not configured
 	signupClosed   bool
 	dns            *resolver.System
+	m365           m365.Config
 }
 
 // loadConfig reads:
@@ -66,6 +68,10 @@ type config struct {
 //	                          unset: the system's (see resolver.NewWithServer)
 //	ORUS_SIGNUP               "open" (default) or "closed": self-service signup;
 //	                          closed means accounts by invitation only
+//	ORUS_M365_CLIENT_ID, ORUS_M365_CLIENT_SECRET
+//	                          our multi-tenant Microsoft app (step K): both or
+//	                          neither; the worker needs the same. Unset:
+//	                          Microsoft 365 cannot be connected
 func loadConfig(getenv func(string) string) (config, error) {
 	cfg := config{
 		databaseURL: getenv("ORUS_DATABASE_URL"),
@@ -85,6 +91,9 @@ func loadConfig(getenv func(string) string) (config, error) {
 		return config{}, fmt.Errorf("ORUS_MFA_KEY must be %d random bytes in base64 (openssl rand -base64 32)", seal.KeyLen)
 	}
 	cfg.mfaKey = key
+	if cfg.m365, err = m365.ConfigFromEnv(getenv); err != nil {
+		return config{}, err
+	}
 	if cfg.paddle, err = paddleFromEnv(getenv); err != nil {
 		return config{}, err
 	}

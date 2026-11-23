@@ -819,6 +819,10 @@ body.pay main{max-width:1120px;padding:0 18px 48px}
 .keysecret>div{flex:1;min-width:0}
 .keysecret .mt{margin:0;font-weight:700}
 .keysecret .md{margin:2px 0 10px}
+/* Actifs > Identités: the answer to Microsoft’s return, and what we read. */
+.idnote{margin:14px 0 0;padding:12px 16px;border-radius:var(--r);font-size:14px}
+.idnote.c-ok{color:var(--ok);background:var(--ok-bg)}.idnote.c-warn{color:var(--high);background:var(--high-bg)}
+.permlist{margin:10px 0 0;padding-left:18px;color:var(--ink2);font-size:13.5px;line-height:1.6}
 .codebox{position:relative;border-radius:var(--r);background:#14213D;color:#E8EDF7}
 .codebox pre{margin:0;padding:16px 18px;padding-right:92px;font:13px/1.6 ui-monospace,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
 .codebox .btn{position:absolute;top:10px;right:10px}

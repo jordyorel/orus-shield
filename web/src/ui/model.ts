@@ -126,6 +126,8 @@ export function moduleName(f: Finding): string {
       return tr("Application web", "Web application");
     case "api":
       return "API";
+    case "m365":
+      return "Microsoft 365";
   }
   return f.module_id;
 }
@@ -747,17 +749,22 @@ export function progressText(p: Progress): string {
   return `${when}, ${fixed}.${score}`;
 }
 
-/** families are the three families of automated checks, with how many
- * passed out of those evaluated (Aujourd'hui and Rapports). */
+/** families are the families of automated checks, with how many passed
+ * out of those evaluated (Aujourd'hui and Rapports). Identities appear
+ * once a Microsoft 365 tenant has been audited: without a connection there
+ * is nothing to show. */
 export function families(checks: Check[]): [string, number, number][] {
   const tally = (modules: string[]): [number, number] => {
     const cs = checks.filter((c) => modules.includes(c.module) && c.status !== "not_applicable");
     return [cs.filter((c) => c.status === "passed").length, cs.length];
   };
-  return [
+  const out: [string, number, number][] = [
     [tr("Emails", "Email"), ...tally(["email"])],
     [tr("Chiffrement", "Encryption"), ...tally(["tls", "web"])],
     [tr("Ports et services", "Ports and services"), ...tally(["ports"])],
     [tr("Fuites de données", "Data leaks"), ...tally(["leaks"])],
   ];
+  const identities = tally(["m365"]);
+  if (identities[1] > 0) out.push([tr("Identités", "Identities"), ...identities]);
+  return out;
 }

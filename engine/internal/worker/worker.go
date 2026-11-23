@@ -48,6 +48,7 @@ type Store interface {
 	MarkScanDeep(ctx context.Context, scanID string, attempt int) error
 	TargetAPIs(ctx context.Context, targetID string) ([]store.API, error)
 	LeakEmails(ctx context.Context, targetID string) ([]string, error)
+	TargetIdentity(ctx context.Context, targetID, provider string) (*store.IdentityConnection, error)
 	TargetCredential(ctx context.Context, targetID string) (*store.Credential, []byte, error)
 	ClaimAgentResult(ctx context.Context) (store.AgentResult, bool, error)
 }
@@ -284,9 +285,12 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 	// The domain's addresses (leaks module), loaded below once the domain
 	// is known to be verified: no address is checked before.
 	var emails []string
-	configs := map[[3]bool]json.RawMessage{}
+	// The identity provider connected to the domain (step K), loaded below
+	// too, for a verified domain only.
+	var identity *module.ScanIdentity
+	configs := map[[4]bool]json.RawMessage{}
 	configFor := func(i module.Info) (json.RawMessage, error) {
-		k := [3]bool{i.UsesAPIs, i.UsesCredentials, i.UsesEmails}
+		k := [4]bool{i.UsesAPIs, i.UsesCredentials, i.UsesEmails, i.UsesIdentity}
 		if c, ok := configs[k]; ok {
 			return c, nil
 		}
@@ -299,6 +303,9 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 		}
 		if i.UsesEmails {
 			c.Emails = emails
+		}
+		if i.UsesIdentity {
+			c.Identity = identity
 		}
 		b, err := json.Marshal(c)
 		configs[k] = b
@@ -315,6 +322,15 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 	if mt.Verified && w.includesModuleWith(sc.Modules, func(i module.Info) bool { return i.UsesEmails }) {
 		if emails, err = w.store.LeakEmails(scanCtx, target.ID); err != nil {
 			return w.fail(ctx, sc, fmt.Sprintf("load leak addresses: %v", err))
+		}
+	}
+	if mt.Verified && w.includesModuleWith(sc.Modules, func(i module.Info) bool { return i.UsesIdentity }) {
+		c, err := w.store.TargetIdentity(scanCtx, target.ID, store.ProviderM365)
+		if err != nil {
+			return w.fail(ctx, sc, fmt.Sprintf("load identity connection: %v", err))
+		}
+		if c != nil {
+			identity = &module.ScanIdentity{Provider: c.Provider, TenantID: c.TenantID}
 		}
 	}
 
@@ -356,8 +372,17 @@ func (w *Worker) process(ctx context.Context, sc store.Scan, log *slog.Logger) e
 		start := time.Now()
 		var res module.Result
 		var checks []module.CheckOutcome
-		if m, ok := w.modules.Get(id); ok && m.Info().Kind == module.KindActive && !offer.ActiveModules {
+		m, known := w.modules.Get(id)
+		if known && m.Info().UsesIdentity && identity == nil {
+			// Nothing connected (or the domain is no longer verified): the
+			// module is not run at all, so its findings keep their state
+			// instead of being marked fixed by an empty run.
+			continue
+		}
+		if known && m.Info().Kind == module.KindActive && !offer.ActiveModules {
 			err = &refusedError{fmt.Errorf("module %q: the %s offer runs passive checks only", id, offer.Name)}
+		} else if known && m.Info().UsesIdentity && !offer.Identities {
+			err = &refusedError{fmt.Errorf("module %q: the %s offer does not include identity audits", id, offer.Name)}
 		} else {
 			var cfg json.RawMessage
 			if m, ok := w.modules.Get(id); ok {

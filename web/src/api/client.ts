@@ -1,4 +1,4 @@
-import type { Activity, Agent, APIKey, AuthActivity, Check, DeclaredAPI, DeviceSession, Finding, FindingStatus, Instructions, Invitation, LeakAddress, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OpenAPIDoc, OrgAsset, OrgSettings, Overview, Plan, QuickProblem, QuickResult, RecoveryCodes, Role, Scan, ScheduleInput, Subscription, Target, TestAccount, Webhook } from "./types";
+import type { Activity, Agent, APIKey, AuthActivity, Check, DeclaredAPI, DeviceSession, Finding, FindingStatus, IdentityList, Instructions, Invitation, LeakAddress, List, Me, Member, MfaChallenge, MfaSetup, ModuleInfo, Month, OpenAPIDoc, OrgAsset, OrgSettings, Overview, Plan, QuickProblem, QuickResult, RecoveryCodes, Role, Scan, ScheduleInput, Subscription, Target, TestAccount, Webhook } from "./types";
 import type { Exclusions } from "../exclusions";
 import { getLang } from "../i18n";
 
@@ -130,6 +130,12 @@ export const api = {
   /** billingSync records the subscription of a finished checkout at once, without waiting for Paddle's webhook. */
   billingSync: (orgId: string, transactionId: string) =>
     request<{ state: "active" | "pending" }>("POST", `${org(orgId)}/billing/sync`, { transaction_id: transactionId }),
+  identities: (orgId: string, signal?: AbortSignal) => request<IdentityList>("GET", `${org(orgId)}/identities`, undefined, signal),
+  /** connectM365 returns Microsoft's admin consent page, to open in this tab. */
+  connectM365: (orgId: string, targetId: string) =>
+    request<{ url: string }>("POST", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/identities/m365`),
+  disconnectM365: (orgId: string, targetId: string) =>
+    request<void>("DELETE", `${org(orgId)}/targets/${encodeURIComponent(targetId)}/identities/m365`),
   agents: (orgId: string, signal?: AbortSignal) => request<List<Agent>>("GET", `${org(orgId)}/agents`, undefined, signal),
   createAgent: (orgId: string, name: string, ranges: string[]) =>
     request<{ agent: Agent; enrolment_code: string }>("POST", `${org(orgId)}/agents`, { name, ranges }),

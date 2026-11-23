@@ -12,6 +12,7 @@ import (
 
 	"github.com/jordyorel/orus-shield/engine/internal/mailer"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/leaks"
+	"github.com/jordyorel/orus-shield/engine/internal/modules/m365"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/vulns"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/zap"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
@@ -32,6 +33,7 @@ type config struct {
 	nuclei    vulns.Config
 	zap       zap.Config
 	leaks     leaks.Config
+	m365      m365.Config
 }
 
 // loadConfig reads the configuration through getenv (os.Getenv in
@@ -65,6 +67,9 @@ type config struct {
 //	ORUS_XON_BASE_URL     XposedOrNot's API (leaks module); default its public
 //	                      https API. Only https, or http on the loopback (tests)
 //	ORUS_XON_API_KEY      an XposedOrNot key for paid tiers; optional (free tier)
+//	ORUS_M365_CLIENT_ID, ORUS_M365_CLIENT_SECRET
+//	                      our multi-tenant Microsoft app (m365 module): both or
+//	                      neither. Unset: connected tenants are not audited
 func loadConfig(getenv func(string) string) (config, error) {
 	var c config
 	c.databaseURL = getenv("ORUS_DATABASE_URL")
@@ -113,6 +118,9 @@ func loadConfig(getenv func(string) string) (config, error) {
 	}
 	if c.dns, err = resolver.FromEnv(getenv); err != nil {
 		return config{}, fmt.Errorf("ORUS_DNS_SERVER: %w", err)
+	}
+	if c.m365, err = m365.ConfigFromEnv(getenv); err != nil {
+		return config{}, err
 	}
 	if c.leaks, err = leaksConfig(getenv); err != nil {
 		return config{}, err

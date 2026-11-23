@@ -64,6 +64,7 @@ func (s *Server) orgRoutes(mux *http.ServeMux) {
 	read("/subscription", s.subscription)
 	read("/settings", s.getSettings)
 	read("/agents", s.listAgents)
+	read("/identities", s.listIdentities)
 	read("/activity", s.activity)
 	read("/scans", s.recentScans)
 	read("/targets", s.listTargets)

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../../api/client";
-import type { Agent, Instructions, Target } from "../../api/types";
+import type { Agent, IdentityList, Instructions, Target } from "../../api/types";
 import { Search, Tick } from "../icons";
 import { G, Ico } from "../glyphs";
 import { CATS, DOMAIN_RE, RANK, SEV, catState, evaluatedCats, serviceIP, servicePort, worst } from "../model";
@@ -601,9 +601,220 @@ export function ActifsPage() {
       )}
 
       <div className="section">
+        <Identities />
+      </div>
+
+      <div className="section">
         <InternalNetworks />
       </div>
     </>
+  );
+}
+
+/** What each read-only permission lets us read, shown before the consent. */
+function permissionText(p: string): string {
+  switch (p) {
+    case "AuditLog.Read.All":
+      return tr("les inscriptions à la double authentification et les dates de dernière connexion", "multi-factor registrations and last sign-in dates");
+    case "MailboxSettings.Read":
+      return tr("les réglages des boîtes aux lettres, dont les règles de transfert (jamais les e-mails)", "mailbox settings, including forwarding rules (never the emails)");
+    case "Organization.Read.All":
+      return tr("les informations de l’organisation, dont ses domaines vérifiés", "the organization’s details, including its verified domains");
+    case "Policy.Read.All":
+      return tr("les stratégies de sécurité : paramètres par défaut, accès conditionnel, consentement", "security policies: security defaults, conditional access, consent");
+    case "RoleManagement.Read.Directory":
+      return tr("qui a un rôle d’administrateur", "who holds an administrator role");
+    case "User.Read.All":
+      return tr("la liste des comptes et leur état", "the list of accounts and their state");
+    case "UserAuthenticationMethod.Read.All":
+      return tr("les méthodes de double authentification enregistrées (pas leurs secrets)", "the registered multi-factor methods (not their secrets)");
+  }
+  return p;
+}
+
+/** The dashboard's answer to Microsoft's return (?m365= set by the API). */
+function consentOutcome(code: string): [string, "ok" | "warn"] | null {
+  switch (code) {
+    case "":
+      return null;
+    case "ok":
+      return [tr("Microsoft 365 est connecté : le premier audit est en cours.", "Microsoft 365 is connected: the first audit is running."), "ok"];
+    case "refused":
+      return [tr("La connexion a été refusée sur la page de Microsoft : rien n’a été enregistré.", "The connection was declined on Microsoft’s page: nothing was recorded."), "warn"];
+    case "not_bound":
+      return [
+        tr("Ce compte Microsoft ne gère pas ce domaine. Connectez-vous avec un administrateur du tenant où le domaine est vérifié.", "This Microsoft account does not manage this domain. Sign in with an administrator of the tenant where the domain is verified."),
+        "warn",
+      ];
+    case "permissions":
+      return [
+        tr("Les autorisations accordées ne sont pas exactement la lecture seule attendue. Réessayez dans une minute ; si cela persiste, écrivez-nous.", "The permissions granted are not exactly the read-only set expected. Try again in a minute; if it persists, write to us."),
+        "warn",
+      ];
+    case "in_use":
+      return [tr("Ce tenant est déjà connecté à un autre de vos domaines.", "This tenant is already connected to another of your domains."), "warn"];
+    case "plan":
+      return [tr("L’audit Microsoft 365 est inclus à partir de l’offre Essentiel.", "The Microsoft 365 audit is included from the Essential plan."), "warn"];
+  }
+  return [tr("La connexion n’a pas abouti. Réessayez.", "The connection did not go through. Try again."), "warn"];
+}
+
+/** Identities connects Microsoft 365 tenants to the verified domains
+ * (step K): read-only, through Microsoft's admin consent. */
+function Identities() {
+  const { org, data, issues, isAdmin, reload } = useOrg();
+  const { toast } = useUI();
+  const [list, setList] = useState<IdentityList | null>(null);
+  const [outcome] = useState(() => {
+    const code = new URLSearchParams(window.location.search).get("m365") ?? "";
+    if (code) window.history.replaceState(null, "", window.location.pathname);
+    return consentOutcome(code);
+  });
+  const [showPerms, setShowPerms] = useState(false);
+  const included = data?.subscription.plan.identities ?? false;
+
+  const load = () =>
+    api.identities(org.org_id).then(
+      (r) => setList(r),
+      () => setList(null),
+    );
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [org.org_id]);
+
+  const connect = async (t: Target) => {
+    try {
+      const { url } = await api.connectM365(org.org_id, t.id);
+      window.location.assign(url);
+    } catch (e) {
+      toast(
+        e instanceof ApiError && e.code === "plan_limit"
+          ? tr("L’audit Microsoft 365 est inclus à partir de l’offre Essentiel", "The Microsoft 365 audit is included from the Essential plan")
+          : tr("Connexion impossible pour le moment", "The connection is not possible right now"),
+      );
+    }
+  };
+  const disconnect = async (t: Target, tenant: string) => {
+    if (
+      !window.confirm(
+        tr(
+          `Déconnecter ${tenant} de ${t.domain} ? Nous n’y lirons plus rien. Pour retirer aussi notre application chez Microsoft : centre d’administration Microsoft Entra, Applications d’entreprise, Orus Shield, Supprimer.`,
+          `Disconnect ${tenant} from ${t.domain}? We will no longer read anything there. To remove our app on Microsoft’s side too: Microsoft Entra admin center, Enterprise applications, Orus Shield, Delete.`,
+        ),
+      )
+    )
+      return;
+    try {
+      await api.disconnectM365(org.org_id, t.id);
+      toast(tr("Microsoft 365 déconnecté", "Microsoft 365 disconnected"));
+      void load();
+      void reload();
+    } catch {
+      toast(tr("Déconnexion impossible pour le moment", "Disconnection is not possible right now"));
+    }
+  };
+
+  if (!data) return null;
+  const domains = data.targets.filter((t) => !t.internal && t.verified);
+  const perms = list?.permissions ?? [];
+
+  return (
+    <div className="rpanel addpanel">
+      <h2>
+        {tr("Identités", "Identities")}
+        {!included && <span className="soon">{tr("Offre Essentiel", "Essential plan")}</span>}
+      </h2>
+      <p className="sub">
+        {tr(
+          "Connectez Microsoft 365 pour vérifier vos comptes : double authentification, administrateurs, transferts de courrier vers l’extérieur, comptes oubliés. Lecture seule : nous ne lisons ni vos e-mails ni vos fichiers, et ne modifions rien.",
+          "Connect Microsoft 365 to check your accounts: multi-factor authentication, administrators, mail forwarded outside, forgotten accounts. Read only: we read neither your emails nor your files, and change nothing.",
+        )}
+      </p>
+      {outcome && (
+        <p className={"idnote " + (outcome[1] === "ok" ? "c-ok" : "c-warn")} role="status">
+          {outcome[0]}
+        </p>
+      )}
+      <ul className="sess">
+        {domains.map((t) => {
+          const c = list?.items.find((x) => x.target_id === t.id && x.provider === "m365");
+          const open = issues.filter((i) => i.targetId === t.id && i.moduleId === "m365" && !i.fixed).length;
+          return (
+            <li key={t.id}>
+              <span className="mico" aria-hidden="true">
+                M
+              </span>
+              <div>
+                <p className="mt">
+                  Microsoft 365 · <span className="mono">{t.domain}</span>
+                </p>
+                <p className="md">
+                  {c ? (
+                    <>
+                      <span className="sev s-ok">
+                        <i />
+                        {tr("Connecté", "Connected")}
+                      </span>
+                      {" · "}
+                      <span className="mono">{c.tenant_name}</span>
+                      {tr(
+                        ` · depuis le ${new Date(c.connected_at).toLocaleDateString(locale())} · ${open} problème${open > 1 ? "s" : ""} ouvert${open > 1 ? "s" : ""}`,
+                        ` · since ${new Date(c.connected_at).toLocaleDateString(locale())} · ${open} open problem${open > 1 ? "s" : ""}`,
+                      )}
+                    </>
+                  ) : (
+                    tr("Non connecté", "Not connected")
+                  )}
+                </p>
+              </div>
+              {isAdmin ? (
+                c ? (
+                  <button className="link" type="button" onClick={() => void disconnect(t, c.tenant_name)}>
+                    {tr("Déconnecter", "Disconnect")}
+                  </button>
+                ) : included && list?.available ? (
+                  <button className="link" type="button" onClick={() => void connect(t)}>
+                    {tr("Connecter", "Connect")}
+                  </button>
+                ) : (
+                  <span className="soon">{included ? tr("Bientôt", "Soon") : tr("Offre Essentiel", "Essential plan")}</span>
+                )
+              ) : (
+                <span />
+              )}
+            </li>
+          );
+        })}
+        <li aria-disabled="true" style={{ opacity: 0.55 }}>
+          <span className="mico" aria-hidden="true">
+            G
+          </span>
+          <div>
+            <p className="mt">Google Workspace</p>
+            <p className="md">{tr("Comptes, double authentification, partages publics", "Accounts, multi-factor authentication, public shares")}</p>
+          </div>
+          <span className="soon">{tr("Bientôt", "Soon")}</span>
+        </li>
+      </ul>
+      {!domains.length && <p className="hint">{tr("Vérifiez d’abord un domaine : le tenant doit le gérer.", "Verify a domain first: the tenant must manage it.")}</p>}
+      {perms.length > 0 && (
+        <div className="actions">
+          <button className="link" type="button" aria-expanded={showPerms} onClick={() => setShowPerms((v) => !v)}>
+            {showPerms ? tr("Masquer ce que nous lisons", "Hide what we read") : tr("Ce que nous lisons, exactement", "What we read, exactly")}
+          </button>
+        </div>
+      )}
+      {showPerms && (
+        <ul className="permlist">
+          {perms.map((p) => (
+            <li key={p}>
+              <span className="mono">{p}</span> : {permissionText(p)}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

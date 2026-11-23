@@ -26,6 +26,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/account"
 	"github.com/jordyorel/orus-shield/engine/internal/mailer"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
+	"github.com/jordyorel/orus-shield/engine/internal/modules/m365"
 	"github.com/jordyorel/orus-shield/engine/internal/paddle"
 	"github.com/jordyorel/orus-shield/engine/internal/quicktest"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
@@ -79,6 +80,13 @@ type Config struct {
 	// quicktest); nil means the real passive modules. Tests replace it
 	// (rule 6: never scan real third-party systems in tests).
 	QuickTest func(ctx context.Context, domain string) (quicktest.Report, error)
+	// M365 is our multi-tenant Microsoft app (ORUS_M365_CLIENT_ID and
+	// ORUS_M365_CLIENT_SECRET), used to check a tenant after its admin
+	// consent. Without ClientID, Microsoft 365 cannot be connected.
+	M365 m365.Config
+	// M365Retry spaces the checks of a tenant just after its consent;
+	// zero: 3 seconds.
+	M365Retry time.Duration
 }
 
 const (
@@ -114,6 +122,12 @@ type Server struct {
 	// keyLimit bounds each key's requests.
 	keys     *store.Auth
 	keyLimit keyLimiter
+	// m365 checks Microsoft 365 tenants (nil: not configured). states
+	// seals the consent round trip's state with the MFA key, bound to that
+	// use (consentOwner): unlike a random per-process key, it survives a
+	// restart during a consent.
+	m365   *m365.Module
+	states *seal.Key
 }
 
 // New returns the API server on st. It keeps only st's authentication
@@ -140,6 +154,16 @@ func New(st *store.Store, cfg Config, log *slog.Logger) (*Server, error) {
 	}
 	srv := &Server{acct: acct, org: st.Org, cfg: cfg, log: log, agents: st.Agents(), billing: st.Billing(), unsub: st.Auth(),
 		public: st.Public(), quickSlots: make(chan struct{}, quickSlots), keys: st.Auth()}
+	if cfg.M365Retry == 0 {
+		cfg.M365Retry = 3 * time.Second
+	}
+	srv.cfg.M365Retry = cfg.M365Retry
+	if cfg.M365.ClientID != "" {
+		srv.m365 = m365.New(cfg.M365)
+	}
+	if srv.states, err = seal.NewKey(cfg.MFAKey); err != nil {
+		return nil, fmt.Errorf("api: mfa key: %w", err)
+	}
 	if len(cfg.CredentialsKey) > 0 {
 		if srv.creds, err = seal.NewKey(cfg.CredentialsKey); err != nil {
 			return nil, fmt.Errorf("api: credentials key: %w", err)
@@ -166,6 +190,7 @@ func (s *Server) Handler() (http.Handler, error) {
 }
 
 func (s *Server) routes(mux *http.ServeMux) {
+	mux.HandleFunc("GET "+m365Callback, s.m365Callback)
 	mux.HandleFunc("POST /api/v1/auth/login", s.login)
 	mux.HandleFunc("POST /api/v1/auth/logout", s.withSession(s.logout))
 	mux.HandleFunc("GET /api/v1/auth/me", s.withSession(s.me))

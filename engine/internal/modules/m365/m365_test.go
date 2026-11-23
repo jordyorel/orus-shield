@@ -2,6 +2,7 @@ package m365
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -27,13 +28,25 @@ var now = time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC)
 type fakeTenant struct {
 	routes    map[string]any
 	forbidden map[string]bool
-	throttle  string // path answered 429
+	throttle  string   // path answered 429
+	roles     []string // granted permissions; nil: exactly Permissions
+}
+
+// fakeJWT is an unsigned token carrying roles, as the module reads it.
+func fakeJWT(roles []string) string {
+	claims, _ := json.Marshal(map[string]any{"roles": roles})
+	return "eyJhbGciOiJub25lIn0." + base64.RawURLEncoding.EncodeToString(claims) + ".sig"
 }
 
 func (ft fakeTenant) serve(t *testing.T) (*httptest.Server, *atomic.Int32) {
 	t.Helper()
 	var calls atomic.Int32
 	var srv *httptest.Server
+	roles := ft.roles
+	if roles == nil {
+		roles = Permissions
+	}
+	token := fakeJWT(roles)
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
 		if r.URL.Path == "/"+tenant+"/oauth2/v2.0/token" {
@@ -42,10 +55,10 @@ func (ft fakeTenant) serve(t *testing.T) (*httptest.Server, *atomic.Int32) {
 				_, _ = w.Write([]byte(`{"error":"invalid_client"}`))
 				return
 			}
-			_, _ = w.Write([]byte(`{"token_type":"Bearer","expires_in":3599,"access_token":"tok"}`))
+			_ = json.NewEncoder(w).Encode(map[string]any{"token_type": "Bearer", "expires_in": 3599, "access_token": token})
 			return
 		}
-		if r.Header.Get("Authorization") != "Bearer tok" {
+		if r.Header.Get("Authorization") != "Bearer "+token {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
@@ -164,14 +177,14 @@ func TestRun(t *testing.T) {
 	}
 	want := []string{
 		CheckAdminMFA + " admin@example.com",
-		CheckAppRegistration + " contoso.onmicrosoft.com",
+		CheckAppRegistration + " example.com",
 		CheckForward + " alice@example.com",
-		CheckGuestInvites + " contoso.onmicrosoft.com",
+		CheckGuestInvites + " example.com",
 		CheckInactive + " alice@example.com",
-		CheckLegacyAuth + " contoso.onmicrosoft.com",
-		CheckBaseline + " contoso.onmicrosoft.com",
-		CheckSingleAdmin + " contoso.onmicrosoft.com", // the service principal is not counted
-		CheckUserConsent + " contoso.onmicrosoft.com",
+		CheckLegacyAuth + " example.com",
+		CheckBaseline + " example.com",
+		CheckSingleAdmin + " example.com", // the service principal is not counted
+		CheckUserConsent + " example.com",
 		CheckUserMFA + " alice@example.com",
 	}
 	slices.Sort(want)
@@ -408,5 +421,46 @@ func TestCatalog(t *testing.T) {
 		if c.titleFR == "" || c.findingFR == "" || c.descFR == "" || len(c.steps) == 0 || len(c.steps) != len(c.stepsFR) {
 			t.Errorf("%s: French text incomplete or steps differ (%d en, %d fr)", id, len(c.steps), len(c.stepsFR))
 		}
+	}
+}
+
+func TestPermissions(t *testing.T) {
+	for name, roles := range map[string][]string{
+		"one missing":     Permissions[1:],
+		"a write one too": append(slices.Clone(Permissions), "User.ReadWrite.All"),
+		"none":            {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ft := contoso()
+			ft.roles = roles
+			srv, calls := ft.serve(t)
+			_, err := run(newModule(srv), "example.com", connected)
+			if !errors.Is(err, ErrPermissions) {
+				t.Fatalf("Run() = %v, want ErrPermissions", err)
+			}
+			// Refused before reading anything: only the token was asked.
+			if calls.Load() != 1 {
+				t.Errorf("calls = %d, want 1 (the token)", calls.Load())
+			}
+		})
+	}
+}
+
+func TestInspect(t *testing.T) {
+	srv, _ := contoso().serve(t)
+	m := newModule(srv)
+	got, err := m.Inspect(context.Background(), strings.ToUpper(tenant), "Example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != tenant || got.Name != "contoso.onmicrosoft.com" || strings.Join(got.Domains, ",") != "contoso.onmicrosoft.com,example.com" ||
+		strings.Join(got.Roles, ",") != strings.Join(Permissions, ",") {
+		t.Errorf("Inspect = %+v", got)
+	}
+	if _, err := m.Inspect(context.Background(), tenant, "other.org"); !errors.Is(err, ErrNotBound) {
+		t.Errorf("unbound: %v", err)
+	}
+	if _, err := m.Inspect(context.Background(), "not-a-guid", "example.com"); err == nil {
+		t.Error("bad tenant accepted")
 	}
 }

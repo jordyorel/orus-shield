@@ -24,6 +24,7 @@ package m365
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -135,6 +136,111 @@ func (m *Module) Info() module.Info {
 // verified domains.
 var ErrNotBound = errors.New("the tenant does not manage this domain")
 
+// ErrPermissions: the permissions granted to our app in the tenant are not
+// exactly the read-only ones it needs (one missing, or one more).
+var ErrPermissions = errors.New("the permissions granted do not match the read-only set")
+
+// Permissions are the application permissions the module needs, all read
+// only. The admin consents to exactly these; the token's roles must be
+// these and nothing else.
+var Permissions = []string{
+	"AuditLog.Read.All",
+	"MailboxSettings.Read",
+	"Organization.Read.All",
+	"Policy.Read.All",
+	"RoleManagement.Read.Directory",
+	"User.Read.All",
+	"UserAuthenticationMethod.Read.All",
+}
+
+// Tenant is what a connection check learns about a tenant.
+type Tenant struct {
+	ID      string
+	Name    string   // the initial domain, e.g. contoso.onmicrosoft.com
+	Domains []string // verified domains, lowercased
+	Roles   []string // the permissions granted to our app
+}
+
+// Inspect checks a tenant before it is connected to domain: our app gets a
+// token there with exactly the read-only permissions, and the tenant lists
+// domain (or a parent of it) among its verified domains. The API calls it
+// after the admin consent; Run makes the same checks at every scan.
+func (m *Module) Inspect(ctx context.Context, tenant, domain string) (Tenant, error) {
+	tenant = strings.ToLower(tenant)
+	if !isGUID(tenant) {
+		return Tenant{}, fmt.Errorf("m365: tenant ID %q is not a GUID", clip(tenant, 40))
+	}
+	domain, err := module.NormalizeDomain(domain)
+	if err != nil {
+		return Tenant{}, fmt.Errorf("m365: %w", err)
+	}
+	g, err := m.open(ctx, tenant)
+	if err != nil {
+		return Tenant{}, fmt.Errorf("m365: %w", err)
+	}
+	t := &tenantData{}
+	if err := readOrganization(ctx, g, t, tenant, domain); err != nil {
+		return Tenant{}, fmt.Errorf("m365: %w", err)
+	}
+	return Tenant{ID: tenant, Name: t.name, Domains: t.domains, Roles: g.roles}, nil
+}
+
+// open gets a token in tenant and checks the permissions it carries.
+func (m *Module) open(ctx context.Context, tenant string) (*graph, error) {
+	if m.cfg.ClientID == "" || m.cfg.ClientSecret == "" {
+		return nil, errors.New("app credentials not configured (ORUS_M365_CLIENT_ID, ORUS_M365_CLIENT_SECRET)")
+	}
+	token, err := fetchToken(ctx, m.cfg.HTTP, m.cfg.LoginURL, tenant, m.cfg.ClientID, m.cfg.ClientSecret)
+	if err != nil {
+		return nil, err
+	}
+	roles, err := tokenRoles(token)
+	if err != nil {
+		return nil, err
+	}
+	if missing, extra := diff(Permissions, roles); len(missing)+len(extra) > 0 {
+		return nil, fmt.Errorf("%w: missing %v, unexpected %v", ErrPermissions, missing, extra)
+	}
+	return &graph{http: m.cfg.HTTP, base: m.cfg.GraphURL, token: token, pace: m.cfg.Pace, roles: roles}, nil
+}
+
+// tokenRoles reads the application permissions ("roles") of an access
+// token. The token came straight from Microsoft over TLS, so its signature
+// is not checked here: we only read what Microsoft granted us.
+func tokenRoles(token string) ([]string, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return nil, errors.New("token: not a JWT")
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, fmt.Errorf("token: payload: %w", err)
+	}
+	var claims struct {
+		Roles []string `json:"roles"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return nil, fmt.Errorf("token: claims: %w", err)
+	}
+	slices.Sort(claims.Roles)
+	return slices.Compact(claims.Roles), nil
+}
+
+// diff returns what want lacks in got, and what got has beyond want.
+func diff(want, got []string) (missing, extra []string) {
+	for _, w := range want {
+		if !slices.Contains(got, w) {
+			missing = append(missing, w)
+		}
+	}
+	for _, g := range got {
+		if !slices.Contains(want, g) {
+			extra = append(extra, clip(g, 80))
+		}
+	}
+	return missing, extra
+}
+
 // Run implements module.Module.
 func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, error) {
 	domain, err := module.NormalizeDomain(req.Target.Domain)
@@ -155,14 +261,10 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 	if !isGUID(tenant) {
 		return module.Result{}, fmt.Errorf("m365: tenant ID %q is not a GUID", clip(tenant, 40))
 	}
-	if m.cfg.ClientID == "" || m.cfg.ClientSecret == "" {
-		return module.Result{}, errors.New("m365: app credentials not configured (ORUS_M365_CLIENT_ID, ORUS_M365_CLIENT_SECRET)")
-	}
-	token, err := fetchToken(ctx, m.cfg.HTTP, m.cfg.LoginURL, tenant, m.cfg.ClientID, m.cfg.ClientSecret)
+	g, err := m.open(ctx, tenant)
 	if err != nil {
 		return module.Result{}, fmt.Errorf("m365: %w", err)
 	}
-	g := &graph{http: m.cfg.HTTP, base: m.cfg.GraphURL, token: token, pace: m.cfg.Pace}
 	t, err := m.collect(ctx, g, tenant, domain)
 	if err != nil {
 		return module.Result{}, fmt.Errorf("m365: %w", err)
@@ -172,7 +274,7 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 
 // tenantData is what one run read. A nil field was not readable.
 type tenantData struct {
-	name      string   // the tenant's initial domain (contoso.onmicrosoft.com): the asset of tenant-wide findings
+	name      string   // the tenant's initial domain (contoso.onmicrosoft.com), in evidence
 	domains   []string // verified domains, lowercased
 	users     []user
 	truncated bool
@@ -229,36 +331,11 @@ type authzPolicy struct {
 func (m *Module) collect(ctx context.Context, g *graph, tenant, domain string) (*tenantData, error) {
 	t := &tenantData{}
 
-	orgs, _, err := list[struct {
-		ID       string `json:"id"`
-		Verified []struct {
-			Name      string `json:"name"`
-			IsInitial bool   `json:"isInitial"`
-		} `json:"verifiedDomains"`
-	}](ctx, g, "/organization?$select=id,verifiedDomains", 1)
-	if err != nil {
-		return nil, fmt.Errorf("organization: %w", err)
-	}
-	if len(orgs) != 1 || !strings.EqualFold(orgs[0].ID, tenant) {
-		return nil, fmt.Errorf("organization: %w", ErrNotBound)
-	}
-	for _, d := range orgs[0].Verified {
-		n, err := module.NormalizeDomain(d.Name)
-		if err != nil {
-			continue
-		}
-		t.domains = append(t.domains, n)
-		if d.IsInitial {
-			t.name = n
-		}
-	}
-	if !t.manages(domain) {
-		return nil, ErrNotBound
-	}
-	if t.name == "" {
-		t.name = domain
+	if err := readOrganization(ctx, g, t, tenant, domain); err != nil {
+		return nil, err
 	}
 
+	var err error
 	if t.users, t.truncated, err = list[user](ctx, g, "/users?$select=id,userPrincipalName,accountEnabled,userType,createdDateTime&$top=999", MaxUsers); err != nil {
 		return nil, fmt.Errorf("users: %w", err)
 	}
@@ -324,6 +401,41 @@ func (m *Module) collect(ctx context.Context, g *graph, tenant, domain string) (
 		return nil, err
 	}
 	return t, nil
+}
+
+// readOrganization reads the tenant's verified domains and checks that it
+// manages domain.
+func readOrganization(ctx context.Context, g *graph, t *tenantData, tenant, domain string) error {
+	orgs, _, err := list[struct {
+		ID       string `json:"id"`
+		Verified []struct {
+			Name      string `json:"name"`
+			IsInitial bool   `json:"isInitial"`
+		} `json:"verifiedDomains"`
+	}](ctx, g, "/organization?$select=id,verifiedDomains", 1)
+	if err != nil {
+		return fmt.Errorf("organization: %w", err)
+	}
+	if len(orgs) != 1 || !strings.EqualFold(orgs[0].ID, tenant) {
+		return fmt.Errorf("organization: %w", ErrNotBound)
+	}
+	for _, d := range orgs[0].Verified {
+		n, err := module.NormalizeDomain(d.Name)
+		if err != nil {
+			continue
+		}
+		t.domains = append(t.domains, n)
+		if d.IsInitial {
+			t.name = n
+		}
+	}
+	if !t.manages(domain) {
+		return ErrNotBound
+	}
+	if t.name == "" {
+		t.name = domain
+	}
+	return nil
 }
 
 // readMFA uses the registration report, else each member's methods.
@@ -459,8 +571,11 @@ func (t *tenantData) evaluate(domain string, now time.Time) module.Result {
 	var res module.Result
 	evaluated := func(ids ...string) { res.Evaluated = append(res.Evaluated, ids...) }
 	add := func(check, asset string, sev finding.Severity, evidence string, args ...any) {
-		res.Findings = append(res.Findings, build(domain, check, asset, sev, evidence, args...))
+		res.Findings = append(res.Findings, build(domain, check, asset, sev, "Tenant: "+t.name+"\n"+evidence, args...))
 	}
+	// Tenant-wide findings are about the domain the tenant is connected
+	// to; the tenant's own name is in their evidence.
+	tenantAsset := domain
 	note := ""
 	if t.truncated {
 		note = fmt.Sprintf("\nOnly the first %d accounts were read.", MaxUsers)
@@ -478,9 +593,9 @@ func (t *tenantData) evaluate(domain string, now time.Time) module.Result {
 		ev := "Global administrators: " + strings.Join(names, ", ")
 		switch n := len(t.admins); {
 		case n > maxAdmins:
-			add(CheckTooManyAdmins, t.name, catalog[CheckTooManyAdmins].severity, ev, n)
+			add(CheckTooManyAdmins, tenantAsset, catalog[CheckTooManyAdmins].severity, ev, n)
 		case n == 1:
-			add(CheckSingleAdmin, t.name, catalog[CheckSingleAdmin].severity, ev)
+			add(CheckSingleAdmin, tenantAsset, catalog[CheckSingleAdmin].severity, ev)
 		}
 	}
 
@@ -509,11 +624,11 @@ func (t *tenantData) evaluate(domain string, now time.Time) module.Result {
 		evaluated(CheckBaseline, CheckLegacyAuth)
 		if !*t.defaults {
 			if !slices.ContainsFunc(t.policies, requiresMFAForAll) {
-				add(CheckBaseline, t.name, catalog[CheckBaseline].severity,
+				add(CheckBaseline, tenantAsset, catalog[CheckBaseline].severity,
 					fmt.Sprintf("Security defaults: off\nConditional access policies: %d, none enabled that requires MFA for all users", len(t.policies)))
 			}
 			if !slices.ContainsFunc(t.policies, blocksLegacy) {
-				add(CheckLegacyAuth, t.name, catalog[CheckLegacyAuth].severity,
+				add(CheckLegacyAuth, tenantAsset, catalog[CheckLegacyAuth].severity,
 					"Security defaults: off\nNo enabled conditional access policy blocks legacy authentication (Exchange ActiveSync, other clients) for all users")
 			}
 		}
@@ -523,14 +638,14 @@ func (t *tenantData) evaluate(domain string, now time.Time) module.Result {
 	if a := t.authz; a != nil {
 		evaluated(CheckUserConsent, CheckGuestInvites, CheckAppRegistration)
 		if slices.Contains(a.Defaults.Grants, "ManagePermissionGrantsForSelf.microsoft-user-default-legacy") {
-			add(CheckUserConsent, t.name, catalog[CheckUserConsent].severity,
+			add(CheckUserConsent, tenantAsset, catalog[CheckUserConsent].severity,
 				"permissionGrantPoliciesAssigned: ManagePermissionGrantsForSelf.microsoft-user-default-legacy")
 		}
 		if strings.EqualFold(a.AllowInvitesFrom, "everyone") {
-			add(CheckGuestInvites, t.name, catalog[CheckGuestInvites].severity, "allowInvitesFrom: everyone")
+			add(CheckGuestInvites, tenantAsset, catalog[CheckGuestInvites].severity, "allowInvitesFrom: everyone")
 		}
 		if a.Defaults.CreateApps {
-			add(CheckAppRegistration, t.name, catalog[CheckAppRegistration].severity, "defaultUserRolePermissions.allowedToCreateApps: true")
+			add(CheckAppRegistration, tenantAsset, catalog[CheckAppRegistration].severity, "defaultUserRolePermissions.allowedToCreateApps: true")
 		}
 	}
 
@@ -618,4 +733,18 @@ func isGUID(s string) bool {
 		}
 	}
 	return true
+}
+
+// ConfigFromEnv reads our app's credentials, ORUS_M365_CLIENT_ID and
+// ORUS_M365_CLIENT_SECRET: both or neither. Neither: Microsoft 365 cannot
+// be connected, and the module refuses to run.
+func ConfigFromEnv(getenv func(string) string) (Config, error) {
+	c := Config{ClientID: strings.TrimSpace(getenv("ORUS_M365_CLIENT_ID")), ClientSecret: getenv("ORUS_M365_CLIENT_SECRET")}
+	if (c.ClientID == "") != (c.ClientSecret == "") {
+		return Config{}, errors.New("ORUS_M365_CLIENT_ID and ORUS_M365_CLIENT_SECRET: set both or neither")
+	}
+	if c.ClientID != "" && !isGUID(strings.ToLower(c.ClientID)) {
+		return Config{}, fmt.Errorf("ORUS_M365_CLIENT_ID=%q: want the app's client ID (a GUID)", clip(c.ClientID, 40))
+	}
+	return c, nil
 }

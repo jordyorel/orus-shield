@@ -47,9 +47,9 @@ const me: Me = {
 };
 
 const plans: Plan[] = [
-  { id: "discovery", name: "Gratuit", domains: 1, hosts_per_scan: 5, members: 1, active_modules: false, monitoring: false, max_frequency: "", alerts: false, reports: false, threats: false, deep_scans: false, deep_scans_per_month: 0, api_scans: false, public_api: false, auth_scans: false, agents: false, usd_monthly: 0, usd_yearly: 0, on_quote: false },
-  { id: "sme", name: "Essentiel", domains: 3, hosts_per_scan: 25, members: 3, active_modules: true, monitoring: true, max_frequency: "weekly", alerts: true, reports: true, threats: true, deep_scans: false, deep_scans_per_month: 0, api_scans: false, public_api: false, auth_scans: false, agents: false, usd_monthly: 35, usd_yearly: 29, on_quote: false },
-  { id: "pro", name: "Pro", domains: 15, hosts_per_scan: 25, members: 10, active_modules: true, monitoring: true, max_frequency: "daily", alerts: true, reports: true, threats: true, deep_scans: true, deep_scans_per_month: 4, api_scans: true, public_api: true, auth_scans: true, agents: false, usd_monthly: 99, usd_yearly: 79, on_quote: false },
+  { id: "discovery", name: "Gratuit", domains: 1, hosts_per_scan: 5, members: 1, active_modules: false, monitoring: false, max_frequency: "", alerts: false, reports: false, threats: false, deep_scans: false, deep_scans_per_month: 0, api_scans: false, public_api: false, auth_scans: false, identities: false, agents: false, usd_monthly: 0, usd_yearly: 0, on_quote: false },
+  { id: "sme", name: "Essentiel", domains: 3, hosts_per_scan: 25, members: 3, active_modules: true, monitoring: true, max_frequency: "weekly", alerts: true, reports: true, threats: true, deep_scans: false, deep_scans_per_month: 0, api_scans: false, public_api: false, auth_scans: false, identities: true, agents: false, usd_monthly: 35, usd_yearly: 29, on_quote: false },
+  { id: "pro", name: "Pro", domains: 15, hosts_per_scan: 25, members: 10, active_modules: true, monitoring: true, max_frequency: "daily", alerts: true, reports: true, threats: true, deep_scans: true, deep_scans_per_month: 4, api_scans: true, public_api: true, auth_scans: true, identities: true, agents: false, usd_monthly: 99, usd_yearly: 79, on_quote: false },
 ];
 
 const overview: Overview = {

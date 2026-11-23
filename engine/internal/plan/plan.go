@@ -65,6 +65,9 @@ type Plan struct {
 	// AuthScans: a test account lets the deep web scan and the API scan
 	// reach what is behind the login.
 	AuthScans bool
+	// Identities: a Microsoft 365 tenant connected to a domain is audited
+	// (step K).
+	Identities bool
 	// Agents: internal networks scanned by agents installed by the
 	// customer (step J).
 	Agents bool
@@ -83,13 +86,13 @@ var Plans = []Plan{
 	// first scan is offered, everything after it needs an offer.
 	{ID: Discovery, Name: "Gratuit", Domains: 1, HostsPerScan: 5, Members: 1},
 	{ID: SME, Name: "Essentiel", Domains: 3, HostsPerScan: 25, Members: 3, ActiveModules: true, Monitoring: true,
-		MaxFrequency: Weekly, Alerts: true, Reports: true, Threats: true,
+		MaxFrequency: Weekly, Alerts: true, Reports: true, Threats: true, Identities: true,
 		USDMonthly: 35, USDYearly: 29},
 	{ID: Pro, Name: "Pro", Domains: 15, HostsPerScan: 25, Members: 10, ActiveModules: true, Monitoring: true,
-		MaxFrequency: Daily, Alerts: true, Reports: true, Threats: true, DeepScans: true, DeepScansPerMonth: 4, APIScans: true, AuthScans: true, PublicAPI: true,
+		MaxFrequency: Daily, Alerts: true, Reports: true, Threats: true, DeepScans: true, DeepScansPerMonth: 4, APIScans: true, AuthScans: true, Identities: true, PublicAPI: true,
 		USDMonthly: 99, USDYearly: 79},
 	{ID: Enterprise, Name: "Sur devis", HostsPerScan: 25, ActiveModules: true, Monitoring: true,
-		MaxFrequency: Daily, Alerts: true, Reports: true, Threats: true, DeepScans: true, APIScans: true, AuthScans: true, PublicAPI: true, Agents: true, OnQuote: true},
+		MaxFrequency: Daily, Alerts: true, Reports: true, Threats: true, DeepScans: true, APIScans: true, AuthScans: true, Identities: true, PublicAPI: true, Agents: true, OnQuote: true},
 }
 
 // Get returns the plan with id.

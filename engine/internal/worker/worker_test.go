@@ -39,6 +39,7 @@ type fakeStore struct {
 	deepMarks []string // scans marked deep
 	apis      []store.API
 	emails    []string
+	identity  *store.IdentityConnection
 	cred      *store.Credential
 	sealed    []byte
 	audit     []store.AuditEntry
@@ -138,6 +139,12 @@ func (f *fakeStore) LeakEmails(ctx context.Context, targetID string) ([]string, 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.emails, nil
+}
+
+func (f *fakeStore) TargetIdentity(ctx context.Context, targetID, provider string) (*store.IdentityConnection, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.identity, nil
 }
 
 func (f *fakeStore) TargetCredential(ctx context.Context, targetID string) (*store.Credential, []byte, error) {
@@ -1075,6 +1082,68 @@ func TestEmailsReachOnlyLeakModulesOfAVerifiedDomain(t *testing.T) {
 		if strings.Contains(other, "alice@example.com") {
 			t.Errorf("other module got the addresses: %s", other)
 		}
+	}
+}
+
+// The connected tenant reaches only the identity modules of a verified
+// domain, on an offer that includes them. Without a connection the module
+// is not run at all: an empty run would mark its findings fixed.
+func TestIdentityReachesOnlyIdentityModules(t *testing.T) {
+	soon := time.Now().Add(time.Hour)
+	conn := &store.IdentityConnection{Provider: store.ProviderM365, TenantID: "0b1c2d3e-4f50-6172-8394-a5b6c7d8e9f0"}
+	for _, tt := range []struct {
+		name      string
+		verified  bool
+		conn      *store.IdentityConnection
+		sub       *plan.Subscription
+		wantRun   bool
+		wantState string // "succeeded", "failed" or "" (not run)
+	}{
+		{"connected", true, conn, nil, true, "succeeded"},
+		{"not connected", true, nil, nil, false, ""},
+		{"domain not verified", false, conn, nil, false, ""},
+		{"Gratuit", true, conn, &plan.Subscription{Plan: plan.Discovery}, false, "failed"},
+		{"Essentiel", true, conn, &plan.Subscription{Plan: plan.SME, Status: plan.Trialing, TrialEndsAt: &soon}, true, "succeeded"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var got, other string
+			ran := false
+			idm := &fakeModule{info: module.Info{ID: "m365", Name: "M365", Kind: module.KindPassive, UsesIdentity: true}, run: func(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+				ran, got = true, string(req.Config)
+				return nil, nil
+			}}
+			plain := &fakeModule{info: module.Info{ID: "plain", Name: "Plain", Kind: module.KindPassive}, run: func(ctx context.Context, req module.Request) ([]finding.Finding, error) {
+				other = string(req.Config)
+				return nil, nil
+			}}
+			w, st := setup(t, tt.verified, "{}", idm, plain)
+			st.identity, st.sub = tt.conn, tt.sub
+			if _, err := w.RunOnce(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			if ran != tt.wantRun {
+				t.Fatalf("module ran = %v, want %v", ran, tt.wantRun)
+			}
+			if ran && !strings.Contains(got, conn.TenantID) {
+				t.Errorf("identity module config = %s, want the tenant", got)
+			}
+			if strings.Contains(other, "tenant") {
+				t.Errorf("other module got the tenant: %s", other)
+			}
+			if len(st.finished) != 1 {
+				t.Fatalf("finished = %d", len(st.finished))
+			}
+			res := st.finished[0]
+			state := ""
+			if slices.Contains(res.Succeeded, "m365") {
+				state = "succeeded"
+			} else if _, ok := res.Failed["m365"]; ok {
+				state = "failed"
+			}
+			if state != tt.wantState {
+				t.Errorf("m365 state = %q, want %q", state, tt.wantState)
+			}
+		})
 	}
 }
 

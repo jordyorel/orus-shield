@@ -42,6 +42,8 @@ func (s *Server) writeRoutes(mux *http.ServeMux) {
 	write("DELETE "+base+"/targets/{target}/apis/{api}", s.targetOnly(s.deleteAPI))
 	write("POST "+base+"/targets/{target}/leak-addresses", s.targetOnly(s.addLeakAddress))
 	write("DELETE "+base+"/targets/{target}/leak-addresses/{address}", s.targetOnly(s.removeLeakAddress))
+	write("POST "+base+"/targets/{target}/identities/m365", s.targetOnly(s.connectM365))
+	write("DELETE "+base+"/targets/{target}/identities/m365", s.targetOnly(s.disconnectM365))
 	// Test accounts: admins only, reads included (the username is theirs).
 	write("GET "+base+"/targets/{target}/credential", s.targetOnly(s.getCredential))
 	write("PUT "+base+"/targets/{target}/credential", s.targetOnly(s.setCredential))

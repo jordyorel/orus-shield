@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Check, Finding, OrgAsset, Target } from "../api/types";
-import { catState, device, evaluatedCats, feedDay, hostOf, initials, money, pwScore, progressOf, progressText, scoreVerdict, strongChecks, toAssets, toIssues, weakChecks, weekly, worst } from "./model";
+import { catState, device, evaluatedCats, families, feedDay, hostOf, initials, money, pwScore, progressOf, progressText, scoreVerdict, strongChecks, toAssets, toIssues, weakChecks, weekly, worst } from "./model";
 
 const asset = (kind: OrgAsset["kind"], value: string, details: Record<string, string> = {}, domain = "example.cg"): OrgAsset => ({
   target_id: "t1",
@@ -239,5 +239,18 @@ describe("progress", () => {
   it("shows nothing before any score", () => {
     expect(progressOf([], [{ at: "2026-11-10T00:00:00Z", score: null }], null, now)).toBeNull();
     expect(progressOf([], [], 70, now)).toBeNull();
+  });
+});
+
+describe("families", () => {
+  const check = (module: string, id: string, status: Check["status"]): Check => ({
+    id, title: id, module, category: "identity", severity: "high", status, findings: status === "failed" ? 1 : 0, evaluated_at: "2026-11-23T10:00:00Z",
+  });
+  it("shows identities only once a tenant was audited", () => {
+    const base = [check("email", "spf-missing", "passed")];
+    expect(families(base).map(([n]) => n)).not.toContain("Identités");
+    expect(families([...base, check("m365", "m365-user-without-mfa", "not_applicable")]).map(([n]) => n)).not.toContain("Identités");
+    const audited = families([...base, check("m365", "m365-user-without-mfa", "failed"), check("m365", "m365-no-mfa-policy", "passed")]);
+    expect(audited.find(([n]) => n === "Identités")).toEqual(["Identités", 1, 2]);
   });
 });

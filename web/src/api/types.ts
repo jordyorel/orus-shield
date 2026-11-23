@@ -311,6 +311,8 @@ export interface Plan {
   public_api: boolean;
   /** Scans can log in with a test account (step I). */
   auth_scans: boolean;
+  /** A connected Microsoft 365 tenant is audited (step K). */
+  identities: boolean;
   /** Internal networks scanned by agents (step J). */
   agents: boolean;
   usd_monthly: number;
@@ -417,6 +419,28 @@ export interface TestAccount {
 }
 
 /** agentJSON */
+/** IdentityConnection is a Microsoft 365 tenant connected to a domain
+ * (step K). It holds no secret. */
+export interface IdentityConnection {
+  target_id: string;
+  domain: string;
+  provider: "m365";
+  tenant_id: string;
+  /** The tenant's initial domain, e.g. contoso.onmicrosoft.com. */
+  tenant_name: string;
+  permissions: string[];
+  connected_at: string;
+  connected_by: string;
+}
+
+export interface IdentityList {
+  items: IdentityConnection[];
+  /** Whether this server can connect a tenant (our Microsoft app is configured). */
+  available: boolean;
+  /** The read-only permissions the admin consents to. */
+  permissions: string[];
+}
+
 export interface Agent {
   id: string;
   /** Its internal network (a target). */

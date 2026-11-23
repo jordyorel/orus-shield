@@ -275,5 +275,5 @@ Design points to settle before code:
 | H | API security: declared APIs (OpenAPI, GraphQL), discovery, active API scan with ZAP | done 2026-11-12 (module api; Pro and Sur devis); discovery of undeclared API docs later |
 | I | Authenticated web and API scans with a customer's test account | done 2026-11-12 (header or login form, sealed with ORUS_CREDENTIALS_KEY; Pro and Sur devis) |
 | J | Internal scanning with agents | done 2026-11-12 for Linux and Windows (ports module; TLS and vulns on agents later); unsigned binaries with SHA-256 until a code signing certificate; automatic updates later |
-| K | Identities: Microsoft 365 and Google Workspace, read-only, native Go modules | approve the permission list; a Microsoft partner account (publisher verification); check Google's app verification cost |
+| K | Identities: Microsoft 365 and Google Workspace, read-only, native Go modules | Microsoft 365 done 2026-11-23 (module m365, admin consent, Actifs > Identités; identity assets later); before customers: our Entra app registered, publisher verification (Microsoft partner account); Google Workspace: check its app verification cost |
 | L | Cloud accounts: AWS, Azure, Google Cloud through Prowler behind gateproxy | approve Prowler after its licence check; our own AWS account; offers and account counts |

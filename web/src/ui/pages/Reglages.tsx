@@ -58,6 +58,7 @@ export function limitRows(plans: Plan[]): [string, ...string[]][] {
     [tr("Analyse des API", "API testing"), ...col((p) => (p.api_scans ? yes : no))],
     [tr("API publique (clés d’accès)", "Public API (access keys)"), ...col((p) => (p.public_api ? yes : no))],
     [tr("Scan authentifié (compte de test)", "Authenticated scan (test account)"), ...col((p) => (p.auth_scans ? yes : no))],
+    [tr("Audit Microsoft 365", "Microsoft 365 audit"), ...col((p) => (p.identities ? yes : no))],
     [tr("Réseaux internes (agents)", "Internal networks (agents)"), ...col((p) => (p.agents ? yes : tr("Sur devis", "Custom plan")))],
     [tr("Fuites de données", "Data leaks"), yes, yes, yes],
     [tr("Menaces émergentes", "Emerging threats"), ...col((p) => (p.threats ? yes : no))],

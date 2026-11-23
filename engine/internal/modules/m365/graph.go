@@ -36,6 +36,7 @@ type graph struct {
 	http  *http.Client
 	base  string // e.g. https://graph.microsoft.com/v1.0, no trailing slash
 	token string
+	roles []string // the permissions the token carries
 	pace  time.Duration
 	calls int
 }

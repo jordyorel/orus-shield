@@ -159,6 +159,27 @@ paid key, worker only. We stay on the free tier for now (2026-11-22): the featur
 taken. Step 2, whole-domain monitoring, is in that same plan (10 domains). The privacy texts name
 XON as a sub-processor (lawyer to confirm, with the DPA).
 
+Microsoft 365 audits (2026-11-23, roadmap K, `docs/features.md` 17; Essentiel and above, `plan.Identities`): an
+admin connects a verified domain's tenant from Actifs > Identités. `POST /orgs/{org}/targets/{target}/identities/m365`
+returns Microsoft's admin consent URL with a state sealed under the MFA key (organization, domain, admin, 15
+minutes); Microsoft returns to `GET /api/v1/identities/m365/callback`, which checks the tenant (`m365.Inspect`: it
+lists the domain or a parent among its verified domains, and our app's token carries exactly the seven read-only
+application permissions of `m365.Permissions`, none more), records it (migration 0034 `identity_connections`:
+tenant ID and name only, no secret; one tenant per organization on one domain) and queues an `m365` scan, then
+redirects to Actifs with `?m365=ok|refused|not_bound|permissions|in_use|plan|error`. Our multi-tenant app's
+`ORUS_M365_CLIENT_ID` and `ORUS_M365_CLIENT_SECRET` (API and worker, both or neither) get app-only tokens (client
+credentials); the worker passes the tenant as `module.RunConfig.Identity` to modules with `Info.UsesIdentity`, for a
+verified domain only, and does not run them at all without a connection (an empty run would mark their findings
+fixed; a disconnected tenant's findings keep their state). The `m365` module re-checks the permissions and the
+binding at every scan, never follows a redirect or a next link outside Graph, and evaluates eleven checks (admins
+and accounts without MFA, no MFA policy, legacy authentication, inbox rules forwarding outside, global admin
+counts, user consent, guest invitations, app registration, inactive accounts); what a missing licence hides
+(sign-in activity needs Entra ID P1, conditional access) stays not applicable. It reads settings, never mail or
+files. Tenant-wide findings use the domain as asset (the tenant's name is in their evidence). Before a real test:
+register the app in a Microsoft tenant of ours, with those permissions and the callback as redirect URI; publisher
+verification (Microsoft partner account) before customers see the consent page. Not yet: identity assets in the
+inventory, Google Workspace (Bientôt on the page).
+
 ## How to work on this repo
 
 - The maintainer (Jordy) writes in French. Reply to him in French; write code, comments,
@@ -209,7 +230,7 @@ engine/
   internal/totp/     TOTP codes (RFC 6238), stdlib only
   internal/seal/     AES-256-GCM sealing of TOTP secrets (key from ORUS_MFA_KEY)
   internal/module/   the Module interface and the registry
-  internal/modules/  one package per check (email, tls, ports, cdn, web, discovery, vulns, zap, ...)
+  internal/modules/  one package per check (email, tls, ports, cdn, web, discovery, vulns, zap, leaks, m365, ...)
   internal/finding/  finding schema and validation
   internal/asset/    asset schema (hostname, ip, service, certificate) and validation
   internal/dnsname/  DNS name normalization, shared by module and asset

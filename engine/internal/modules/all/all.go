@@ -11,6 +11,7 @@ import (
 	"github.com/jordyorel/orus-shield/engine/internal/modules/discovery"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/email"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/leaks"
+	"github.com/jordyorel/orus-shield/engine/internal/modules/m365"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/ports"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/tlscheck"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/vulns"
@@ -26,6 +27,7 @@ type Options struct {
 	Nuclei vulns.Config // vulns module (ORUS_NUCLEI_BIN, ORUS_NUCLEI_TEMPLATES)
 	ZAP    zap.Config   // zap module, deep profile (ORUS_ZAP_IMAGE...)
 	Leaks  leaks.Config // leaks module (ORUS_XON_BASE_URL, ORUS_XON_API_KEY)
+	M365   m365.Config  // m365 module (ORUS_M365_CLIENT_ID, ORUS_M365_CLIENT_SECRET)
 }
 
 // Registry returns a registry with every module, using dns (see
@@ -43,6 +45,7 @@ func Registry(dns resolver.Resolver, opts Options) (*module.Registry, error) {
 		zap.New(dns, dialer.NewSystem(), opts.ZAP),
 		zap.NewAPI(dns, dialer.NewSystem(), opts.ZAP),
 		leaks.New(opts.Leaks),
+		m365.New(opts.M365),
 	} {
 		if err := reg.Register(m); err != nil {
 			return nil, err
