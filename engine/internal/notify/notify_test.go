@@ -27,6 +27,8 @@ type fakeStore struct {
 	unwanted bool
 	// langs: each recipient's language, as users.lang.
 	langs map[string]string
+	// sweeps counts the QueueTrialEndings calls.
+	sweeps int
 }
 
 func (f *fakeStore) RecipientLang(_ context.Context, email string) (string, error) {
@@ -34,6 +36,17 @@ func (f *fakeStore) RecipientLang(_ context.Context, email string) (string, erro
 }
 
 func (f *fakeStore) TrialNudgeWanted(context.Context, string, string, time.Time) (bool, error) {
+	return !f.unwanted, nil
+}
+
+func (f *fakeStore) QueueTrialEndings(context.Context, time.Time) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sweeps++
+	return 0, nil
+}
+
+func (f *fakeStore) TrialEndingWanted(context.Context, string, time.Time, time.Time) (bool, error) {
 	return !f.unwanted, nil
 }
 
@@ -243,5 +256,64 @@ func TestDeliversTrialReminders(t *testing.T) {
 	}
 	if st.abandoned["n2"] != "no longer relevant" {
 		t.Errorf("unwanted reminder: %q, want dropped", st.abandoned["n2"])
+	}
+}
+
+func trialEnding(t *testing.T, id string, open int) store.Notification {
+	t.Helper()
+	payload, err := json.Marshal(store.TrialEnding{OrgID: "org-1", OrgName: "Acme", Plan: "pro",
+		TrialEndsAt: time.Date(2026, 12, 2, 8, 32, 0, 0, time.UTC), Scans: 6, Fixed: 4, Open: open, Urgent: 2, Domains: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store.Notification{ID: id, OrgID: "org-1", Kind: store.NotifyTrialEnding, Recipient: "admin@acme.example",
+		Payload: payload, CreatedAt: now.Add(-time.Minute), Attempts: 1}
+}
+
+func TestDeliversTrialEndings(t *testing.T) {
+	st := &fakeStore{due: []store.Notification{trialEnding(t, "e1", 7)}, retried: map[string]time.Time{}, abandoned: map[string]string{},
+		langs: map[string]string{}}
+	m := &fakeMail{}
+	if sent, err := newNotifier(st, m).RunOnce(context.Background()); err != nil || sent != 1 {
+		t.Fatalf("sent %d, err %v", sent, err)
+	}
+	if st.sweeps != 1 {
+		t.Errorf("QueueTrialEndings called %d times, want once per pass", st.sweeps)
+	}
+	msg := m.sent[0]
+	if msg.Subject != "Orus Shield : votre essai Pro se termine le 2 décembre 2026" {
+		t.Errorf("subject = %q", msg.Subject)
+	}
+	if msg.Unsubscribe != "" {
+		t.Errorf("a service email has no unsubscribe link: %q", msg.Unsubscribe)
+	}
+	for _, want := range []string{"Scans effectués : 6", "Problèmes corrigés : 4", "Problèmes encore ouverts : 7, dont 2 urgents",
+		"Domaines surveillés : 1", "annulez avant le 2 décembre 2026", "https://app.example/orgs/org-1/reglages?s=abonnement",
+		"https://app.example/orgs/org-1/aujourdhui", "Paddle"} {
+		if !strings.Contains(msg.Text, want) {
+			t.Errorf("body misses %q:\n%s", want, msg.Text)
+		}
+	}
+
+	// In English for an English account.
+	st = &fakeStore{due: []store.Notification{trialEnding(t, "e2", 0)}, retried: map[string]time.Time{}, abandoned: map[string]string{},
+		langs: map[string]string{"admin@acme.example": "en"}}
+	m = &fakeMail{}
+	if _, err := newNotifier(st, m).RunOnce(context.Background()); err != nil || len(m.sent) != 1 {
+		t.Fatalf("english: %v, %d sent", err, len(m.sent))
+	}
+	if msg := m.sent[0]; msg.Subject != "Orus Shield: your Pro trial ends on December 2, 2026" ||
+		!strings.Contains(msg.Text, "Problems still open: none") || strings.Contains(msg.Text, "fix more") {
+		t.Errorf("english email:\n%s\n%s", msg.Subject, msg.Text)
+	}
+
+	// Canceled or moved since: dropped.
+	st = &fakeStore{due: []store.Notification{trialEnding(t, "e3", 7)}, retried: map[string]time.Time{}, abandoned: map[string]string{}, unwanted: true}
+	m = &fakeMail{}
+	if sent, err := newNotifier(st, m).RunOnce(context.Background()); err != nil || sent != 0 || len(m.sent) != 0 {
+		t.Fatalf("unwanted: sent %d, err %v", sent, err)
+	}
+	if st.abandoned["e3"] != "no longer relevant" {
+		t.Errorf("unwanted: %q, want dropped", st.abandoned["e3"])
 	}
 }

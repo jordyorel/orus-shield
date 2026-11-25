@@ -1,7 +1,8 @@
 // Package notify delivers the email notifications that scans leave in the
 // outbox (store table notifications): alerts about new critical and high
 // findings and about emerging threats (package threats), first scan
-// summaries, and the trial reminders after the free audit.
+// summaries, the trial reminders after the free audit, and the email before
+// a paid trial ends.
 //
 // It runs in the worker process. Each pass claims due notifications with a
 // lease, sends them, and records the outcome: sent, retried later with a
@@ -29,6 +30,10 @@ type Store interface {
 	AbandonNotification(ctx context.Context, id, reason string, at time.Time) error
 	// TrialNudgeWanted: a trial reminder still makes sense (store).
 	TrialNudgeWanted(ctx context.Context, orgID, recipient string, now time.Time) (bool, error)
+	// QueueTrialEndings queues the emails of trials near their end (store).
+	QueueTrialEndings(ctx context.Context, now time.Time) (int, error)
+	// TrialEndingWanted: the trial still runs and still ends then (store).
+	TrialEndingWanted(ctx context.Context, orgID string, endsAt, now time.Time) (bool, error)
 	// RecipientLang: the recipient account's language, "" if none (store).
 	RecipientLang(ctx context.Context, email string) (string, error)
 }
@@ -81,6 +86,11 @@ func (n *Notifier) Run(ctx context.Context, interval time.Duration) {
 // RunOnce makes one pass and returns the number of emails sent.
 func (n *Notifier) RunOnce(ctx context.Context) (int, error) {
 	now := n.now()
+	// Trials near their end have no scan to queue their email: each pass
+	// looks for them first, so their email goes out in this same pass.
+	if _, err := n.store.QueueTrialEndings(ctx, now); err != nil {
+		return 0, err
+	}
 	due, err := n.store.ClaimNotifications(ctx, now, lease, batch)
 	if err != nil {
 		return 0, err
@@ -108,6 +118,22 @@ func (n *Notifier) RunOnce(ctx context.Context) (int, error) {
 					return sent, err
 				}
 				continue
+			}
+		}
+		// A trial canceled, converted early or moved since gets nothing.
+		if nt.Kind == store.NotifyTrialEnding {
+			var t store.TrialEnding
+			wanted := json.Unmarshal(nt.Payload, &t) == nil // an unreadable payload fails in message
+			if wanted {
+				if wanted, err = n.store.TrialEndingWanted(ctx, nt.OrgID, t.TrialEndsAt, now); err != nil {
+					return sent, err
+				}
+				if !wanted {
+					if err := n.store.AbandonNotification(ctx, nt.ID, "no longer relevant", now); err != nil {
+						return sent, err
+					}
+					continue
+				}
 			}
 		}
 		// The language is read now, not when the scan queued the email: a
@@ -200,6 +226,15 @@ func (n *Notifier) message(nt store.Notification, lang mailer.Lang) (mailer.Mess
 		return mailer.TrialReminder(lang, nt.Recipient, a.OrgName, a.Domain,
 			mailer.TrialNudge{Day: a.Day, Critical: a.Critical, High: a.High, Open: a.Open, Top: a.Top},
 			mailer.OfferLink(n.publicURL, a.OrgID), mailer.UnsubscribeLink(n.publicURL, a.Unsubscribe)), nil
+	case store.NotifyTrialEnding:
+		var a store.TrialEnding
+		if err := json.Unmarshal(nt.Payload, &a); err != nil {
+			return mailer.Message{}, fmt.Errorf("read payload: %w", err)
+		}
+		f := mailer.TrialEndingFigures{Plan: string(a.Plan), EndsAt: a.TrialEndsAt, Scans: a.Scans,
+			Fixed: a.Fixed, Open: a.Open, Urgent: a.Urgent, Domains: a.Domains}
+		return mailer.TrialEnding(lang, nt.Recipient, a.OrgName, f,
+			mailer.TodayLink(n.publicURL, a.OrgID), mailer.BillingLink(n.publicURL, a.OrgID)), nil
 	}
 	return mailer.Message{}, fmt.Errorf("unknown notification kind %q", nt.Kind)
 }

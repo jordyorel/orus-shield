@@ -565,7 +565,11 @@ a scheduled cancel or canceled becomes Canceled, trialing stays a trial.
 The 14-day trial needs a card (decided 2026-11-13, migration 0023): a new organization starts on
 Gratuit; its first checkout uses the trial prices (`ORUS_PADDLE_TRIAL_PRICE_*`, Paddle charges at
 the trial's end), later ones the normal prices (one trial per organization: never had a Paddle
-customer). The return page (`/paiement?statut=ok&org=&txn=`) calls `POST /orgs/{org}/billing/sync`, which
+customer). Paddle sends the legal reminder before it charges; ours (`trial_ending`, migration 0036)
+goes three days before the end of a provider-run trial: the notifier's pass queues it
+(`Store.QueueTrialEndings`, once per trial end, per activated admin; not for manual trials), with the trial's
+scans, problem lines fixed and still open, and how to cancel before the date (Réglages > Abonnement); no
+amount (Paddle's email has it, with the taxes); dropped at delivery if the trial was canceled or moved. The return page (`/paiement?statut=ok&org=&txn=`) calls `POST /orgs/{org}/billing/sync`, which
 reads the transaction from Paddle (transaction read permission only) and records its subscription
 at once (trial or first period, `billing_period` monthly or yearly, migration 0026), in case the
 webhook is late or lost; it never overwrites a subscription a webhook already recorded
