@@ -20,6 +20,7 @@ stay in the modules' English (decided 2026-11-10).
 | Sign up | Email + organization name, confirmation link | done |
 | Sign in, MFA, password reset, setup password | | done |
 | Legal pages | Terms, privacy, scanning authorization (customer confirms they own the assets) | F |
+| Delete the account / organization | Refused while a Paddle subscription is trialing or active: "cancel your subscription first", with the link to Paddle's customer portal (Paddle charges the card, not us; deleting here would leave it running and charging). The database enforces it too (migration 0035). audit_log is append-only and keeps audited organizations: the deletion must decide what happens to it (keep it detached, or anonymize) | later (Bientôt) |
 
 ## 2. Onboarding (first sign-in)
 

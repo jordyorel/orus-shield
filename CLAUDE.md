@@ -577,7 +577,9 @@ When an offer gains monitoring (a webhook or a sync moves the organization off G
 `startMonitoring` queues a full scan of each verified domain with the offer's modules (requested
 by "paddle") and, when no schedule was chosen, sets a weekly one (Saturday, 2:00 in the
 organization's time zone), changeable in Réglages. In development without a tunnel, Paddle's webhooks cannot reach the API:
-replay them from Paddle once it is up. Deleting an organization here cancels nothing at Paddle.
+replay them from Paddle once it is up. Deleting an organization here would cancel nothing at Paddle, so it is refused while its Paddle subscription is
+trialing or active (migration 0035, a trigger on organizations: every path, a hand-typed DELETE included); cancel it
+at Paddle first (the webhook records it canceled). The future account deletion must say so and link the portal.
 A checkout while a Paddle subscription runs is refused (409): it would charge twice;
 changing the offer of a running subscription is not built yet. An offer chosen on Tarifs before
 signup is kept in the browser and opens its payment when the new admin first reaches /app. "Factures et paiement"
