@@ -102,6 +102,9 @@ type Config struct {
 	Templates string // path to the pinned nuclei-templates directory
 	// WorkDir holds the per-run temporary files; empty: the system's.
 	WorkDir string
+	// ProxyPorts is where the scan's gateproxy listens (ORUS_GATEPROXY_PORTS;
+	// zero: any port). The production sandbox lets Nuclei reach only these.
+	ProxyPorts gateproxy.Ports
 }
 
 // ErrNotInstalled is returned when Nuclei is not configured on this worker.
@@ -170,7 +173,7 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 		return module.Result{Unreached: unreached}, nil
 	}
 
-	proxy, err := gateproxy.Start(ctx, gateproxy.Config{Domain: domain, Gate: req.Gate, DNS: m.dns, Dial: m.dial})
+	proxy, err := gateproxy.Start(ctx, gateproxy.Config{Domain: domain, Gate: req.Gate, DNS: m.dns, Dial: m.dial, Ports: m.cfg.ProxyPorts})
 	if err != nil {
 		return module.Result{}, fmt.Errorf("vulns: %w", err)
 	}

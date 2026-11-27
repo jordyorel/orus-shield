@@ -228,6 +228,13 @@ func TestDockerArgs(t *testing.T) {
 	if !strings.Contains(h, "--network host") || strings.Contains(h, "--add-host") {
 		t.Errorf("host network args: %s", h)
 	}
+	if strings.Contains(h, "--user") {
+		t.Errorf("no User, yet --user: %s", h)
+	}
+	u := strings.Join(dockerArgs(Config{Image: "img", ProxyHost: "127.0.0.1", Network: "host", User: "1000:990"}, "/d", "n"), " ")
+	if !strings.Contains(u, "--user 1000:990") || strings.Index(u, "--user") > strings.Index(u, " img ") {
+		t.Errorf("user args (before the image): %s", u)
+	}
 }
 
 func keys(m map[string]finding.Finding) []string {

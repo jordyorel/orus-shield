@@ -83,6 +83,8 @@ type Config struct {
 	// both with Gate.
 	DNS  resolver.Resolver
 	Dial dialer.Dialer
+	// Ports is where it listens (zero: any port, see Ports).
+	Ports Ports
 }
 
 // Stats counts what went through the proxy.
@@ -115,7 +117,7 @@ type Proxy struct {
 	conns map[net.Conn]bool
 }
 
-// Start listens on a random port of 127.0.0.1 and serves until Close or
+// Start listens on 127.0.0.1 (a port of cfg.Ports) and serves until Close or
 // until ctx ends.
 func Start(ctx context.Context, cfg Config) (*Proxy, error) {
 	domain, err := dnsname.Normalize(cfg.Domain)
@@ -130,7 +132,7 @@ func Start(ctx context.Context, cfg Config) (*Proxy, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gateproxy: %w", err)
 	}
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := listen(cfg.Ports)
 	if err != nil {
 		return nil, fmt.Errorf("gateproxy: listen: %w", err)
 	}

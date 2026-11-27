@@ -100,11 +100,24 @@ func (s *Store) migrate(ctx context.Context, last string) error {
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", migrationLockID); err != nil {
 		return fmt.Errorf("lock migrations: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
-		version    text PRIMARY KEY,
-		applied_at timestamptz NOT NULL DEFAULT now()
-	)`); err != nil {
-		return fmt.Errorf("create schema_migrations: %w", err)
+	// Create the table only when it is missing. CREATE TABLE IF NOT EXISTS
+	// would not do: PostgreSQL checks the right to create in the schema
+	// before it sees the table exists, and in production the API connects
+	// as a login role without that right (deploy/prod). With the schema up
+	// to date, the API only needs to read schema_migrations; a migration
+	// still pending fails it with "permission denied", and the worker (the
+	// schema owner) applies it.
+	var exists bool
+	if err := tx.QueryRow(ctx, "SELECT to_regclass('schema_migrations') IS NOT NULL").Scan(&exists); err != nil {
+		return fmt.Errorf("look for schema_migrations: %w", err)
+	}
+	if !exists {
+		if _, err := tx.Exec(ctx, `CREATE TABLE schema_migrations (
+			version    text PRIMARY KEY,
+			applied_at timestamptz NOT NULL DEFAULT now()
+		)`); err != nil {
+			return fmt.Errorf("create schema_migrations: %w", err)
+		}
 	}
 
 	applied := make(map[string]bool)

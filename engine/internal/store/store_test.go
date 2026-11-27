@@ -139,6 +139,66 @@ func TestConcurrentMigrate(t *testing.T) {
 	}
 }
 
+// TestMigrateUpToDateNeedsOnlyRead: in production the API connects as a
+// login role that may read schema_migrations and nothing else of the
+// schema (deploy/prod). Its Migrate must succeed while the schema is up to
+// date, and fail, applying nothing (one transaction), while a migration is
+// pending.
+func TestMigrateUpToDateNeedsOnlyRead(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	var schema string
+	if err := s.pool.QueryRow(ctx, "SELECT current_schema()").Scan(&schema); err != nil {
+		t.Fatal(err)
+	}
+	// Roles are global to the server: a random name, dropped at the end.
+	// Only hex characters: safe to put in SQL as an identifier.
+	role := "test_reader_" + strings.TrimPrefix(schema, "test_")
+	for _, q := range []string{
+		"CREATE ROLE " + role + " NOLOGIN",
+		"GRANT USAGE ON SCHEMA " + schema + " TO " + role,
+		"GRANT SELECT ON schema_migrations TO " + role,
+	} {
+		if _, err := s.pool.Exec(ctx, q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	t.Cleanup(func() {
+		for _, q := range []string{"DROP OWNED BY " + role, "DROP ROLE " + role} {
+			if _, err := s.pool.Exec(ctx, q); err != nil {
+				t.Errorf("%s: %v", q, err)
+			}
+		}
+	})
+
+	u, err := url.Parse(os.Getenv("ORUS_TEST_DATABASE_URL"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := u.Query()
+	q.Set("search_path", schema)
+	q.Set("role", role) // a session setting: the connection runs as role
+	u.RawQuery = q.Encode()
+	reader, err := Open(ctx, u.String())
+	if err != nil {
+		t.Fatalf("Open as %s: %v", role, err)
+	}
+	defer reader.Close()
+
+	if err := reader.Migrate(ctx); err != nil {
+		t.Errorf("Migrate with the schema up to date: %v", err)
+	}
+
+	// The latest migration "pending": the reader must not get further.
+	if _, err := s.pool.Exec(ctx, "DELETE FROM schema_migrations WHERE version = (SELECT max(version) FROM schema_migrations)"); err != nil {
+		t.Fatal(err)
+	}
+	// 42501: insufficient_privilege ("permission denied", "must be owner").
+	if err := reader.Migrate(ctx); err == nil || !strings.Contains(err.Error(), "SQLSTATE 42501") {
+		t.Errorf("Migrate with a migration pending = %v, want SQLSTATE 42501", err)
+	}
+}
+
 func TestCreateAndGetTarget(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

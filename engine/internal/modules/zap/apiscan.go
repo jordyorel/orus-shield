@@ -134,7 +134,7 @@ func (m *APIModule) Run(ctx context.Context, req module.Request) (module.Result,
 		return module.Result{}, errors.New("api: no declared API is under the target's domain")
 	}
 
-	proxy, err := gateproxy.Start(ctx, gateproxy.Config{Domain: domain, Gate: req.Gate, DNS: m.dns, Dial: m.dial})
+	proxy, err := gateproxy.Start(ctx, gateproxy.Config{Domain: domain, Gate: req.Gate, DNS: m.dns, Dial: m.dial, Ports: m.cfg.ProxyPorts})
 	if err != nil {
 		return module.Result{}, fmt.Errorf("api: %w", err)
 	}
@@ -206,7 +206,7 @@ func writeAPIInputs(dir, domain string, apis []module.ScanAPI, up proxyAddr, aut
 			}
 			if a.Spec != "" {
 				name := fmt.Sprintf("schema-%d.graphql", i)
-				if err := os.WriteFile(filepath.Join(dir, name), []byte(a.Spec), 0o644); err != nil { //nolint:gosec // G306: read by the container's user; the customer's own document
+				if err := writeForContainer(filepath.Join(dir, name), []byte(a.Spec)); err != nil { // read by the container's user; the customer's own document
 					return fmt.Errorf("schema: %w", err)
 				}
 				p["schemaFile"] = containerDir + "/" + name
@@ -216,7 +216,7 @@ func writeAPIInputs(dir, domain string, apis []module.ScanAPI, up proxyAddr, aut
 			p := map[string]any{"context": "orus", "targetUrl": a.BaseURL}
 			if a.Spec != "" {
 				name := fmt.Sprintf("spec-%d", i)
-				if err := os.WriteFile(filepath.Join(dir, name), []byte(a.Spec), 0o644); err != nil { //nolint:gosec // G306: as above
+				if err := writeForContainer(filepath.Join(dir, name), []byte(a.Spec)); err != nil { // as above
 					return fmt.Errorf("spec: %w", err)
 				}
 				p["apiFile"] = containerDir + "/" + name
@@ -252,10 +252,10 @@ func writeAPIInputs(dir, domain string, apis []module.ScanAPI, up proxyAddr, aut
 	if err != nil {
 		return fmt.Errorf("plan: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, planFile), b, 0o644); err != nil { //nolint:gosec // G306: read by the container's user
+	if err := writeForContainer(filepath.Join(dir, planFile), b); err != nil { // read by the container's user
 		return fmt.Errorf("plan: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, configFile), []byte(zapConfig(up)), 0o644); err != nil { //nolint:gosec // G306: per-scan proxy credential, see writeInputs
+	if err := writeForContainer(filepath.Join(dir, configFile), []byte(zapConfig(up))); err != nil { // per-scan proxy credential, see writeInputs
 		return fmt.Errorf("config: %w", err)
 	}
 	if err := os.Chmod(dir, 0o733); err != nil { //nolint:gosec // G302: see writeInputs

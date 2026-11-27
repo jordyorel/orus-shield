@@ -150,9 +150,12 @@ func TestLoadConfigZAP(t *testing.T) {
 		return func(k string) string { return m[k] }
 	}
 	pinned := "zaproxy/zap-stable:20261026@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238"
-	c, err := loadConfig(env("ORUS_ZAP_IMAGE", pinned, "ORUS_ZAP_NETWORK", "host", "ORUS_ZAP_PROXY_HOST", "127.0.0.1", "ORUS_ZAP_WORKDIR", "/srv/zap"))
-	if err != nil || c.zap.Image != pinned || c.zap.Network != "host" || c.zap.ProxyHost != "127.0.0.1" || c.zap.WorkDir != "/srv/zap" {
+	c, err := loadConfig(env("ORUS_ZAP_IMAGE", pinned, "ORUS_ZAP_NETWORK", "host", "ORUS_ZAP_PROXY_HOST", "127.0.0.1", "ORUS_ZAP_WORKDIR", "/srv/zap", "ORUS_ZAP_USER", "1000:990"))
+	if err != nil || c.zap.Image != pinned || c.zap.Network != "host" || c.zap.ProxyHost != "127.0.0.1" || c.zap.WorkDir != "/srv/zap" || c.zap.User != "1000:990" {
 		t.Errorf("set: %+v, %v", c.zap, err)
+	}
+	if c, err := loadConfig(env("ORUS_GATEPROXY_PORTS", "61000-61999")); err != nil || c.zap.ProxyPorts.First != 61000 || c.nuclei.ProxyPorts.Last != 61999 {
+		t.Errorf("proxy ports: zap %+v, nuclei %+v, %v", c.zap.ProxyPorts, c.nuclei.ProxyPorts, err)
 	}
 	if c, err := loadConfig(env()); err != nil || c.zap.Image != "" {
 		t.Errorf("unset: %+v, %v", c.zap, err)
@@ -160,6 +163,9 @@ func TestLoadConfigZAP(t *testing.T) {
 	for name, e := range map[string]func(string) string{
 		"tag only":         env("ORUS_ZAP_IMAGE", "zaproxy/zap-stable:latest"),
 		"relative workdir": env("ORUS_ZAP_IMAGE", pinned, "ORUS_ZAP_WORKDIR", "runs"),
+		"user by name":     env("ORUS_ZAP_IMAGE", pinned, "ORUS_ZAP_USER", "zap:orus-scan"),
+		"user with flag":   env("ORUS_ZAP_IMAGE", pinned, "ORUS_ZAP_USER", "1000 --privileged"),
+		"proxy ports":      env("ORUS_GATEPROXY_PORTS", "80-90"),
 	} {
 		if _, err := loadConfig(e); err == nil {
 			t.Errorf("%s: nil error", name)

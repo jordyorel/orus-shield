@@ -41,6 +41,9 @@ func dockerArgs(cfg Config, dir, name string) []string {
 	if _, err := os.Stat(filepath.Join(dir, authEnvFile)); err == nil {
 		args = append(args, "--env-file", filepath.Join(dir, authEnvFile))
 	}
+	if cfg.User != "" {
+		args = append(args, "--user", cfg.User)
+	}
 	if cfg.Network != "" {
 		args = append(args, "--network", cfg.Network)
 	} else if cfg.ProxyHost == "host.docker.internal" {

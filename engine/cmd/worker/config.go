@@ -7,9 +7,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
+	"github.com/jordyorel/orus-shield/engine/internal/gateproxy"
 	"github.com/jordyorel/orus-shield/engine/internal/mailer"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/leaks"
 	"github.com/jordyorel/orus-shield/engine/internal/modules/m365"
@@ -62,6 +64,11 @@ type config struct {
 //	ORUS_ZAP_PROXY_HOST   how the container reaches this host's loopback, where
 //	                      gateproxy listens (default host.docker.internal)
 //	ORUS_ZAP_NETWORK      docker run --network (e.g. host on Linux); optional
+//	ORUS_GATEPROXY_PORTS  FIRST-LAST, the ports the scanners' proxies listen
+//	                      on (production: 61000-61999, see deploy/prod);
+//	                      unset: any port
+//	ORUS_ZAP_USER         docker run --user, numeric uid:gid (production: the
+//	                      scanners' group, see deploy/prod); optional
 //	ORUS_ZAP_WORKDIR      absolute directory for the runs' files, mountable by
 //	                      Docker (Colima: under the home directory); optional
 //	ORUS_XON_BASE_URL     XposedOrNot's API (leaks module); default its public
@@ -131,6 +138,12 @@ func loadConfig(getenv func(string) string) (config, error) {
 	if c.zap, err = zapFromEnv(getenv); err != nil {
 		return config{}, err
 	}
+	// One range for both scanners: the sandbox's firewall allows it.
+	ports, err := gateproxy.ParsePorts(getenv("ORUS_GATEPROXY_PORTS"))
+	if err != nil {
+		return config{}, fmt.Errorf("ORUS_GATEPROXY_PORTS: %w", err)
+	}
+	c.nuclei.ProxyPorts, c.zap.ProxyPorts = ports, ports
 	if raw := strings.TrimSpace(getenv("ORUS_CREDENTIALS_KEY")); raw != "" {
 		key, err := base64.StdEncoding.DecodeString(raw)
 		if err != nil || len(key) != seal.KeyLen {
@@ -161,6 +174,9 @@ func nucleiFromEnv(getenv func(string) string) (vulns.Config, error) {
 	return vulns.Config{Binary: bin, Templates: templates}, nil
 }
 
+// zapUser is the accepted form of ORUS_ZAP_USER: uid, or uid:gid.
+var zapUser = regexp.MustCompile(`^[0-9]+(:[0-9]+)?$`)
+
 // zapFromEnv reads how ZAP runs. The image must be pinned by digest: a tag
 // can be moved to other content.
 func zapFromEnv(getenv func(string) string) (zap.Config, error) {
@@ -171,7 +187,12 @@ func zapFromEnv(getenv func(string) string) (zap.Config, error) {
 	if !strings.Contains(image, "@sha256:") {
 		return zap.Config{}, fmt.Errorf("ORUS_ZAP_IMAGE=%q: pin the image by digest (name@sha256:...), see deploy/zap/install.sh", image)
 	}
-	cfg := zap.Config{Image: image, ProxyHost: getenv("ORUS_ZAP_PROXY_HOST"), Network: getenv("ORUS_ZAP_NETWORK"), WorkDir: getenv("ORUS_ZAP_WORKDIR")}
+	cfg := zap.Config{Image: image, ProxyHost: getenv("ORUS_ZAP_PROXY_HOST"), Network: getenv("ORUS_ZAP_NETWORK"), User: getenv("ORUS_ZAP_USER"), WorkDir: getenv("ORUS_ZAP_WORKDIR")}
+	// Numeric only: a name would be looked up in the image's /etc/passwd,
+	// not the host's, and the host firewall matches the numeric gid.
+	if cfg.User != "" && !zapUser.MatchString(cfg.User) {
+		return zap.Config{}, fmt.Errorf("ORUS_ZAP_USER=%q: want a numeric uid:gid, such as 1000:990", cfg.User)
+	}
 	if cfg.WorkDir != "" && !filepath.IsAbs(cfg.WorkDir) {
 		return zap.Config{}, fmt.Errorf("ORUS_ZAP_WORKDIR=%q: want an absolute path", cfg.WorkDir)
 	}

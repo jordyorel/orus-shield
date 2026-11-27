@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jordyorel/orus-shield/engine/internal/dialer"
+	"github.com/jordyorel/orus-shield/engine/internal/gateproxy"
 )
 
 // TestRealZAP runs the pinned image against a local application with a
@@ -39,7 +40,7 @@ func TestRealZAP(t *testing.T) {
 
 	gate := &allowGate{}
 	m := New(fakeDNS{ips: map[string][]netip.Addr{"example.com": {netip.MustParseAddr("127.0.0.1")}}}, dialer.NewSystem(),
-		Config{Image: image, ProxyHost: os.Getenv("ORUS_ZAP_PROXY_HOST"), Network: os.Getenv("ORUS_ZAP_NETWORK"), WorkDir: os.Getenv("ORUS_ZAP_WORKDIR")})
+		Config{Image: image, ProxyHost: os.Getenv("ORUS_ZAP_PROXY_HOST"), Network: os.Getenv("ORUS_ZAP_NETWORK"), User: os.Getenv("ORUS_ZAP_USER"), ProxyPorts: envPorts(t), WorkDir: os.Getenv("ORUS_ZAP_WORKDIR")})
 	m.urls = func(h string) []string { return []string{"http://" + h + ":" + port} }
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
@@ -73,4 +74,15 @@ func TestRealZAP(t *testing.T) {
 	if paths == 0 {
 		t.Error("the gate saw no HTTP request")
 	}
+}
+
+// envPorts reads ORUS_GATEPROXY_PORTS, so that the integration tests also
+// run inside the production sandbox, whose firewall allows only that range.
+func envPorts(t *testing.T) gateproxy.Ports {
+	t.Helper()
+	p, err := gateproxy.ParsePorts(os.Getenv("ORUS_GATEPROXY_PORTS"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
 }

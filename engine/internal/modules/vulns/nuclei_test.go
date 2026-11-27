@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/jordyorel/orus-shield/engine/internal/gateproxy"
 	"github.com/jordyorel/orus-shield/engine/internal/module"
 	"github.com/jordyorel/orus-shield/engine/internal/resolver"
 )
@@ -123,7 +124,7 @@ func realNuclei(t *testing.T, bin, dir, scheme string) {
 		return nil
 	}}
 	m := New(fakeDNS{hosts: map[string]netip.Addr{labDomain: netip.MustParseAddr("127.0.0.1")}}, &net.Dialer{},
-		Config{Binary: bin, Templates: dir})
+		Config{Binary: bin, Templates: dir, ProxyPorts: envPorts(t)})
 	m.urls = func(host string) []string { return []string{scheme + "://" + host + ":" + u.Port()} }
 
 	res, err := m.Run(context.Background(), module.Request{
@@ -168,4 +169,15 @@ func realNuclei(t *testing.T, bin, dir, scheme string) {
 		t.Errorf("server got %d requests, gate approved %d (and %d probes, want 1)", hits.Load(), approved, probes)
 	}
 	t.Logf("requests: %d, findings: %v, technologies: %s", hits.Load(), found, techs)
+}
+
+// envPorts reads ORUS_GATEPROXY_PORTS, so that the test also runs inside
+// the production sandbox, whose firewall allows only that range.
+func envPorts(t *testing.T) gateproxy.Ports {
+	t.Helper()
+	p, err := gateproxy.ParsePorts(os.Getenv("ORUS_GATEPROXY_PORTS"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
 }

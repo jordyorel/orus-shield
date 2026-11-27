@@ -42,6 +42,16 @@ func upstream(proxyURL, host string) (proxyAddr, error) {
 	return proxyAddr{Host: host, Port: port, User: u.User.Username(), Pass: pass}, nil
 }
 
+// writeForContainer writes a file the container's user must read: mode
+// 0644 whatever the process's umask (the worker's systemd unit sets 0077,
+// which would make it 0600, unreadable by the container's uid).
+func writeForContainer(path string, data []byte) error {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o644) //nolint:gosec // G302: read by the container's own user, in a directory of one run
+}
+
 // writeInputs writes the automation plan and ZAP's configuration. The plan
 // is written as JSON, which is valid YAML: every value is quoted by the
 // encoder, so no name from the scan can change the plan's structure.
@@ -54,10 +64,10 @@ func writeInputs(dir, domain string, urls []string, up proxyAddr, auth *module.S
 	if err != nil {
 		return fmt.Errorf("plan: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, planFile), plan, 0o644); err != nil { //nolint:gosec // G306: read by the container's own user; holds no secret
+	if err := writeForContainer(filepath.Join(dir, planFile), plan); err != nil { // read by the container's own user; holds no secret
 		return fmt.Errorf("plan: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, configFile), []byte(zapConfig(up)), 0o644); err != nil { //nolint:gosec // G306: read by the container's user; the proxy credential is per scan and the proxy only reaches the scan's own target
+	if err := writeForContainer(filepath.Join(dir, configFile), []byte(zapConfig(up))); err != nil { // read by the container's user; the proxy credential is per scan and the proxy only reaches the scan's own target
 		return fmt.Errorf("config: %w", err)
 	}
 	// The container runs as its own user: it must be able to write the

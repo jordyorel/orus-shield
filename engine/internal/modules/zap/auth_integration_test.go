@@ -76,7 +76,7 @@ func TestRealAuthenticatedScan(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			m := New(fakeDNS{ips: map[string][]netip.Addr{"example.com": {netip.MustParseAddr("127.0.0.1")}}}, dialer.NewSystem(),
-				Config{Image: image, ProxyHost: os.Getenv("ORUS_ZAP_PROXY_HOST"), Network: os.Getenv("ORUS_ZAP_NETWORK"), WorkDir: os.Getenv("ORUS_ZAP_WORKDIR")})
+				Config{Image: image, ProxyHost: os.Getenv("ORUS_ZAP_PROXY_HOST"), Network: os.Getenv("ORUS_ZAP_NETWORK"), User: os.Getenv("ORUS_ZAP_USER"), ProxyPorts: envPorts(t), WorkDir: os.Getenv("ORUS_ZAP_WORKDIR")})
 			m.urls = func(h string) []string { return []string{"http://" + h + ":" + port} }
 			auth := tt.auth
 			cfg, _ := json.Marshal(module.RunConfig{Deep: true, Auth: &auth})

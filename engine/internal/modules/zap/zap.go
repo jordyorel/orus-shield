@@ -87,6 +87,15 @@ type Config struct {
 	ProxyHost string
 	// Network is passed to docker run --network ("" for the default).
 	Network string
+	// User is passed to docker run --user ("" for the image's own user),
+	// as numeric uid:gid (ORUS_ZAP_USER). Production runs ZAP with the
+	// gid of the scanners' group, which the host firewall allows to reach
+	// gateproxy on the loopback and nothing else (deploy/prod).
+	User string
+	// ProxyPorts is where each scan's gateproxy listens
+	// (ORUS_GATEPROXY_PORTS; zero: any port). The production sandbox lets
+	// the container reach only these.
+	ProxyPorts gateproxy.Ports
 	// WorkDir holds the per-run temporary files, mounted into the
 	// container (ORUS_ZAP_WORKDIR); empty: the system's. Docker must be
 	// able to mount it: Colima shares only the home directory.
@@ -152,7 +161,7 @@ func (m *Module) Run(ctx context.Context, req module.Request) (module.Result, er
 		return module.Result{Unreached: unreached}, nil
 	}
 
-	proxy, err := gateproxy.Start(ctx, gateproxy.Config{Domain: domain, Gate: req.Gate, DNS: m.dns, Dial: m.dial})
+	proxy, err := gateproxy.Start(ctx, gateproxy.Config{Domain: domain, Gate: req.Gate, DNS: m.dns, Dial: m.dial, Ports: m.cfg.ProxyPorts})
 	if err != nil {
 		return module.Result{}, fmt.Errorf("zap: %w", err)
 	}
