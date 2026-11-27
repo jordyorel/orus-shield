@@ -1,0 +1,48 @@
+# The scan worker (engine/cmd/worker). Installed by setup.sh.
+[Unit]
+Description=Orus Shield worker
+After=network-online.target postgresql.service unbound.service docker.service orus-firewall.service
+Wants=network-online.target
+Requires=postgresql.service orus-firewall.service
+
+[Service]
+User=orus
+Group=orus
+# ZAP runs in Docker (deep profile): the docker group is root-equivalent on
+# this host, which is why the API runs as another user, outside it.
+SupplementaryGroups=docker
+EnvironmentFile=/etc/orus/shared.env
+EnvironmentFile=/etc/orus/worker.env
+WorkingDirectory=/var/lib/orus
+ExecStart=/opt/orus/current/bin/worker
+Restart=always
+RestartSec=5
+# A scan running at stop is interrupted; once its lease expires
+# (ORUS_WORKER_LEASE), the queue hands it out again (a limited number of
+# attempts).
+TimeoutStopSec=60
+
+# Least privilege, with one deliberate gap: NoNewPrivileges stays off and
+# RestrictSUIDSGID is not set, because Nuclei is a setgid orus-scan binary
+# (that group is what the firewall confines, see firewall.nft) and both
+# settings would drop the setgid.
+ProtectSystem=strict
+ReadWritePaths=/var/lib/orus
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictRealtime=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

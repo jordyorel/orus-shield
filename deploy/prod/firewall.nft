@@ -1,0 +1,39 @@
+#!/usr/sbin/nft -f
+# Host firewall of a production server, loaded by orus-firewall.service.
+#
+# Only our own table: Docker keeps its rules in tables of its own, and a
+# "flush ruleset" here would wipe them. Declaring then deleting the table
+# makes reloading idempotent.
+table inet orus
+delete table inet orus
+
+table inet orus {
+	# Incoming: SSH and the web (Caddy), nothing else. PostgreSQL, the API,
+	# Unbound and every gateproxy listen on the loopback only.
+	chain input {
+		type filter hook input priority filter; policy drop;
+		iif lo accept
+		ct state established,related accept
+		ct state invalid drop
+		meta l4proto icmp accept
+		meta l4proto ipv6-icmp accept
+		tcp dport 22 accept
+		tcp dport { 80, 443 } accept
+		udp dport 443 accept # HTTP/3
+	}
+
+	# The scanners' sandbox (security rules 1 to 3). Nuclei runs with the
+	# group orus-scan (the binary is setgid orus-scan) and ZAP's container
+	# with that gid (ORUS_ZAP_USER). Their only way out must be the scan's
+	# gateproxy, which applies the gate to every request: it listens on
+	# 127.0.0.1, on a port of ORUS_GATEPROXY_PORTS (61000-61999). That range
+	# lies above the kernel's ephemeral ports (32768-60999), so no other
+	# daemon listens there by chance. Everything else they try, DNS
+	# included, is refused.
+	chain output {
+		type filter hook output priority filter; policy accept;
+		meta skgid "orus-scan" ip daddr 127.0.0.1 tcp dport 61000-61999 accept
+		meta skgid "orus-scan" ip6 daddr ::1 tcp dport 61000-61999 accept
+		meta skgid "orus-scan" counter reject
+	}
+}

@@ -1,0 +1,17 @@
+# Loads /etc/orus/firewall.nft (deploy/prod/firewall.nft) before the
+# network comes up. The worker requires it: no scanner runs unconfined.
+[Unit]
+Description=Orus Shield host firewall
+DefaultDependencies=no
+Before=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/orus/firewall.nft
+ExecReload=/usr/sbin/nft -f /etc/orus/firewall.nft
+ExecStop=/usr/sbin/nft delete table inet orus
+
+[Install]
+WantedBy=multi-user.target

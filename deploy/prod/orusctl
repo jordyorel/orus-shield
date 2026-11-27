@@ -1,0 +1,12 @@
+#!/bin/sh
+# orusctl on the server (installed as /usr/local/bin/orusctl by setup.sh):
+# runs the current release's orusctl as the worker's user, with its
+# database (peer authentication) and resolver. Run it as root, e.g.
+#   orusctl user add -role admin you@example.com
+set -eu
+operator=${SUDO_USER:-$(id -un)}
+exec sudo -u orus env \
+  ORUS_DATABASE_URL='postgres://orus@/orus?host=/var/run/postgresql' \
+  ORUS_DNS_SERVER=127.0.0.1:5335 \
+  USER="$operator" \
+  /opt/orus/current/bin/orusctl "$@"

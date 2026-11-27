@@ -253,7 +253,8 @@ engine/
                      technologies, queues vulns rescans (worker process)
   internal/modules/all/  the list of shipped modules
 deploy/              local infrastructure files (PostgreSQL init; lab/setup.sh: the test lab server;
-                     nuclei/install.sh: pinned Nuclei and templates, checksums verified)
+                     nuclei/install.sh: pinned Nuclei and templates, checksums verified;
+                     prod/: the production server, see its README)
 web/                 dashboard (React + TypeScript, Vite)
 docs/
 ```
@@ -642,6 +643,19 @@ network: a mobile hotspot may cache stale DNS answers and intercept ports (21 an
 every IP through one), which skews ownership checks and port results. For TLS test cases,
 badssl.com subdomains are built for that purpose. The test lab domain is deliberately misconfigured: never reuse the
 product's own domain for it.
+
+Production (2026-11-27, `deploy/prod/README.md`): one Ubuntu 24.04 server, prepared by `deploy/prod/deploy.sh
+setup HOST DOMAIN` and updated by `deploy.sh release HOST` (committed code only, built locally, the worker
+restarted first to migrate, then the API; rollback keeps five releases). PostgreSQL 18 by peer authentication
+(no password): `orus` owns the schema with BYPASSRLS (worker, orusctl), `orus_api` owns nothing and only SET ROLEs
+(`postgres-roles.sql` creates the NOLOGIN roles ahead: a migration adding a role must add it there,
+`TestProdRolesListEveryRole`); the API's Migrate therefore only reads `schema_migrations` when nothing is pending.
+The scanners' sandbox: Nuclei is setgid `orus-scan`, ZAP's container runs as `1000:<gid>` (`ORUS_ZAP_USER`), and
+nftables lets that group reach only 127.0.0.1:61000-61999, where gateproxy listens (`ORUS_GATEPROXY_PORTS`, above the
+kernel's ephemeral range). Files the ZAP container reads are made 0644 whatever the umask (the worker's unit
+sets 0077). Unbound on 127.0.0.1:5335, the API on 127.0.0.1:8180 (8080 is ZAP's default), Caddy with deploy/web's
+headers, a nightly `pg_dump` (14 days, off-site copy still to set up). Tested end to end on a fresh VM, including the
+real Nuclei and ZAP under the worker's unit.
 
 ## Roadmap
 

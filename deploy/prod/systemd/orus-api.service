@@ -1,0 +1,46 @@
+# The HTTP API (engine/cmd/api), behind Caddy. Installed by setup.sh.
+[Unit]
+Description=Orus Shield API
+After=network-online.target postgresql.service unbound.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+User=orus-api
+Group=orus-api
+EnvironmentFile=/etc/orus/shared.env
+EnvironmentFile=/etc/orus/api.env
+ExecStart=/opt/orus/current/bin/api
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+
+# Least privilege. The API writes no file, needs no capability and only
+# talks over TCP (clients, Paddle, Microsoft, the public test) and the
+# PostgreSQL socket.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
